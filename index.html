@@ -439,61 +439,51 @@ const DB = {
 // ===== import-excel.js =====
 // =============================================================
 // IMPORT-EXCEL.JS
-// Membaca file .xlsx dengan 3 sheet: Info, Neraca, Laba Rugi
-// dan menormalkannya menjadi objek statement siap simpan ke Firestore.
+//
+// Neraca, Laba Rugi & Arus Kas diimpor LANGSUNG dari file laporan hasil
+// export software akuntansi (Jurnal, Accurate, Zahir, dll) — bukan lagi
+// dari template Excel kustom. Setiap perusahaan bisa punya kode & nama
+// akun yang berbeda-beda; formatnya dikenali dari STRUKTUR laporan,
+// bukan dari daftar nama akun baku.
+//
+// Format yang dikenali (satu sheet = satu laporan):
+//   Baris 1  : Nama Perusahaan
+//   Baris 2  : "Neraca" / "Laba Rugi" / "Arus Kas"
+//   Baris ...: baris "Tanggal" — satu tanggal (mis. Neraca, laporan "per
+//              tanggal") atau rentang "dd/mm/yyyy - dd/mm/yyyy" (Laba
+//              Rugi & Arus Kas, laporan satu periode). Bila laporan
+//              tidak punya baris "Tanggal" tersendiri (mis. beberapa
+//              export Arus Kas), tanggal/rentang di baris ke-3 (persis
+//              di bawah baris jenis laporan) dipakai sebagai cadangan.
+//   Baris akun: kolom A = kode akun, kolom B = nama akun, kolom C = nilai
+//
+// Tiga jenis baris akun dikenali dari kolom A:
+//   1. Baris TEBAL tanpa kode & tanpa nilai      -> judul seksi
+//      (mis. "Aset Lancar", "Aktivitas Operasional").
+//   2. Baris berlabel diawali "Total" (atau "Laba Kotor" / "Laba
+//      Operasional" / "Laba (Rugi)" / "Saldo kas awal" / "Kas bersih
+//      yang diperoleh dari Aktivitas ...", dst) -> baris total/metrik
+//      kunci yang dipetakan lewat pola kata kunci (lihat TOTAL_MATCHERS).
+//   3. Baris kode akun yang TIDAK menjorok ke kanan, diikuti satu atau
+//      lebih baris kode akun yang MENJOROK ke kanan -> baris pertama
+//      adalah akun HEADER (nilainya sudah berupa akumulasi dari
+//      akun-akun di bawahnya / sub-akun), baris menjorok di bawahnya
+//      adalah SUB-AKUN (akun rincian yang sungguhan punya transaksi).
+//      Kode akun yang tidak diikuti baris menjorok = akun berdiri
+//      sendiri (bukan header). Pola ini dipakai pada Neraca; pada Arus
+//      Kas setiap baris akun sudah rincian (tidak berjenjang) sehingga
+//      cukup dibaca apa adanya per kategori.
+// Karena nilai akun header sudah merupakan akumulasi sub-akunnya,
+// sub-akun TIDAK dijumlahkan ulang — supaya tidak dobel hitung.
 // =============================================================
-
-// Kunci akun standar yang dikenali sistem (nama akun di Excel dicocokkan
-// tanpa memandang huruf besar/kecil & spasi berlebih)
-const AKUN_NERACA = {
-  'kas dan setara kas': 'kasSetaraKas',
-  'piutang usaha': 'piutangUsaha',
-  'persediaan': 'persediaan',
-  'aset lancar lainnya': 'asetLancarLainnya',
-  'total aset lancar': 'totalAsetLancar',
-  'aset tetap': 'asetTetap',
-  'aset tidak lancar lainnya': 'asetTidakLancarLainnya',
-  'total aset tidak lancar': 'totalAsetTidakLancar',
-  'total aset': 'totalAset',
-  'utang usaha': 'utangUsaha',
-  'utang jangka pendek lainnya': 'utangJangkaPendekLainnya',
-  'total kewajiban lancar': 'totalKewajibanLancar',
-  'utang jangka panjang': 'utangJangkaPanjang',
-  'total kewajiban jangka panjang': 'totalKewajibanJangkaPanjang',
-  'total kewajiban': 'totalKewajiban',
-  'modal saham': 'modalSaham',
-  'laba ditahan': 'labaDitahan',
-  'total ekuitas': 'totalEkuitas'
-};
-
-const AKUN_LABA_RUGI = {
-  'pendapatan': 'pendapatan',
-  'harga pokok penjualan': 'hpp',
-  'laba kotor': 'labaKotor',
-  'beban operasional': 'bebanOperasional',
-  'laba operasional': 'labaOperasional',
-  'pendapatan lainnya': 'pendapatanLainnya',
-  'beban lainnya': 'bebanLainnya',
-  'laba sebelum pajak': 'labaSebelumPajak',
-  'pajak penghasilan': 'pajakPenghasilan',
-  'laba bersih': 'labaBersih'
-};
-
-// Arus Kas: sheet opsional, memakai daftar akun baku (sama seperti
-// Neraca & Laba Rugi) agar nilainya bisa dibaca terstruktur.
-const AKUN_ARUS_KAS = {
-  'kas awal periode': 'kasAwal',
-  'arus kas dari aktivitas operasi': 'arusKasOperasi',
-  'arus kas dari aktivitas investasi': 'arusKasInvestasi',
-  'arus kas dari aktivitas pendanaan': 'arusKasPendanaan',
-  'kenaikan (penurunan) kas bersih': 'kenaikanKasBersih',
-  'kas akhir periode': 'kasAkhir'
-};
 
 function normalizeKey(s) {
   return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+// Dipertahankan untuk kompatibilitas: dipakai bila suatu saat ada jenis
+// data impor lain yang formatnya label,nilai dua kolom sederhana (bukan
+// laporan berjenjang akun seperti Neraca/Laba Rugi/Arus Kas).
 function sheetToKeyValue(sheet, dictionary) {
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
   const out = {};
@@ -567,6 +557,197 @@ function inferPeriodIndex(periodType, periodLabel) {
   return 1;
 }
 
+// ---------- Parser baru: laporan hasil export software akuntansi ----------
+
+const BULAN_ID = ['januari', 'februari', 'maret', 'april', 'mei', 'juni', 'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
+
+function cap(s) { return s ? s.replace(/\b\w/g, c => c.toUpperCase()) : s; }
+
+function toNumberOrNull(v) {
+  if (v === '' || v === null || v === undefined) return null;
+  const n = Number(String(v).replace(/[^0-9.-]/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+// Menghitung lebar indentasi (jumlah spasi/nbsp) di depan teks kolom A —
+// inilah penanda apakah sebuah baris akun adalah sub-akun (menjorok) atau
+// bukan.
+function leadingIndentWidth(raw) {
+  const m = String(raw || '').match(/^[ \t\u00A0]+/);
+  return m ? m[0].length : 0;
+}
+
+function parseIndoDate(str) {
+  const m = String(str || '').trim().match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (!m) return null;
+  let day = parseInt(m[1], 10), month = parseInt(m[2], 10), year = parseInt(m[3], 10);
+  if (year < 100) year += 2000;
+  if (month < 1 || month > 12) return null;
+  return { day, month, year };
+}
+
+function isLastDayOfMonth(d) {
+  return d.day === new Date(d.year, d.month, 0).getDate();
+}
+
+// Menentukan year/periodType/periodIndex/periodLabel dari teks tanggal
+// pada laporan: satu tanggal ("per tanggal", umum pada Neraca) atau
+// rentang "dd/mm/yyyy - dd/mm/yyyy" (umum pada Laba Rugi).
+function derivePeriodFromDateText(dateText) {
+  const parts = String(dateText || '').split(/\s*-\s*/).filter(Boolean);
+  const start = parseIndoDate(parts[0]);
+  const end = parts.length > 1 ? parseIndoDate(parts[1]) : start;
+  if (!start || !end) return null;
+
+  const monthSpan = (end.year - start.year) * 12 + (end.month - start.month) + 1;
+  const isFullMonthsRange = start.day === 1 && isLastDayOfMonth(end);
+
+  if (isFullMonthsRange && start.month === 1 && end.month === 12 && end.year === start.year) {
+    return { year: start.year, periodType: 'tahunan', periodIndex: 1, periodLabel: `Tahun ${start.year}` };
+  }
+  if (isFullMonthsRange && monthSpan === 1) {
+    return { year: start.year, periodType: 'bulanan', periodIndex: start.month, periodLabel: `${cap(BULAN_ID[start.month - 1])} ${start.year}` };
+  }
+  if (isFullMonthsRange && monthSpan === 3 && start.month % 3 === 1) {
+    const q = Math.ceil(start.month / 3);
+    return { year: start.year, periodType: 'triwulan', periodIndex: q, periodLabel: `Triwulan ${['I', 'II', 'III', 'IV'][q - 1]} ${start.year}` };
+  }
+  if (isFullMonthsRange && monthSpan === 6 && (start.month === 1 || start.month === 7)) {
+    const s = start.month === 1 ? 1 : 2;
+    return { year: start.year, periodType: 'semester', periodIndex: s, periodLabel: `Semester ${s === 1 ? 'I' : 'II'} ${start.year}` };
+  }
+  // Titik waktu tunggal (mis. Neraca "per tanggal X") -> dianggap mewakili
+  // bulan berjalan pada tanggal tersebut.
+  return { year: end.year, periodType: 'bulanan', periodIndex: end.month, periodLabel: `${cap(BULAN_ID[end.month - 1])} ${end.year}` };
+}
+
+// Kata kunci yang dipakai mengenali baris TOTAL / metrik kunci pada
+// laporan, supaya tetap terbaca meski nama & kode akun berbeda-beda
+// antar perusahaan / software akuntansi.
+const TOTAL_MATCHERS = {
+  neraca: {
+    totalAsetLancar: l => /^total\b.*aset lancar$/.test(l),
+    totalAset: l => l === 'total aset',
+    totalKewajibanLancar: l => /^total\b.*(kewajiban|liabilitas) jangka pendek$/.test(l) || /^total\b.*(kewajiban|liabilitas) lancar$/.test(l),
+    totalKewajiban: l => l === 'total kewajiban' || l === 'total liabilitas',
+    totalEkuitas: l => /^total\b.*(ekuitas|modal)/.test(l) && !/jangka/.test(l)
+  },
+  labaRugi: {
+    pendapatan: l => l === 'total dari pendapatan' || l === 'total pendapatan',
+    labaKotor: l => l === 'laba kotor',
+    labaOperasional: l => l === 'laba operasional' || l === 'laba usaha',
+    labaBersih: l => l === 'laba (rugi)' || l === 'laba bersih' || l === 'laba/rugi bersih'
+  },
+  arusKas: {
+    kasAwal: l => /^saldo kas awal\b/.test(l) || l === 'kas awal periode',
+    arusKasOperasi: l => /kas bersih/.test(l) && /aktivitas operasional/.test(l),
+    arusKasInvestasi: l => /kas bersih/.test(l) && /aktivitas investasi/.test(l),
+    arusKasPendanaan: l => /kas bersih/.test(l) && /aktivitas pendanaan/.test(l),
+    kenaikanKasBersih: l => /^kenaikan\b.*kas/.test(l),
+    kasAkhir: l => /^saldo kas akhir\b/.test(l) || l === 'kas akhir periode'
+  }
+};
+
+// Label baris "jenis laporan" (baris ke-2) yang dikenali per statementKey.
+const REPORT_TYPE_LABELS = { neraca: 'neraca', labaRugi: 'laba rugi', arusKas: 'arus kas' };
+
+const CASH_NAME_RE = /\b(kas|bank|cash)\b/i;
+const INVENTORY_NAME_RE = /\b(persediaan|inventory|stok|stock)\b/i;
+
+/**
+ * Membaca satu sheet laporan (Neraca atau Laba Rugi) hasil export
+ * software akuntansi: mengenali nama perusahaan, tanggal/periode, judul
+ * seksi, akun header/sub-akun (dari indentasi kolom A), dan baris total —
+ * lalu memetakannya ke field standar yang dipakai perhitungan rasio.
+ */
+function parseAccountingReportSheet(sheet, statementKey) {
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  const expected = REPORT_TYPE_LABELS[statementKey] || statementKey;
+  const knownLabels = Object.values(REPORT_TYPE_LABELS);
+
+  let companyName = '';
+  let reportTypeText = '';
+  let dateText = '';
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const label = normalizeKey(rows[i][0]);
+    if (i === 0 && rows[i][0]) companyName = String(rows[i][0]).trim();
+    if (!reportTypeText && knownLabels.includes(label)) reportTypeText = label;
+    if (label === 'tanggal') {
+      const vals = rows[i].slice(1).filter(v => v !== '' && v !== null && v !== undefined);
+      if (vals.length) dateText = String(vals[vals.length - 1]).trim();
+    }
+  }
+  // Sebagian laporan (mis. Arus Kas) tidak punya baris berlabel "Tanggal"
+  // — tanggal/rentangnya tertulis langsung di baris ke-3 (persis di bawah
+  // baris jenis laporan). Dipakai sebagai cadangan bila baris "Tanggal"
+  // tidak ditemukan.
+  if (!dateText && rows[2] && rows[2][0] && parseIndoDate(String(rows[2][0]).split(/\s*-\s*/)[0])) {
+    dateText = String(rows[2][0]).trim();
+  }
+  if (reportTypeText && reportTypeText !== expected) {
+    throw new Error(`File ini terbaca sebagai laporan "${cap(reportTypeText)}", bukan "${cap(expected)}". Pastikan Anda mengunggah laporan yang sesuai jenis data yang dipilih.`);
+  }
+  if (!dateText) {
+    throw new Error('Tidak menemukan tanggal/periode pada laporan. Pastikan file adalah hasil export laporan apa adanya (strukturnya tidak diubah).');
+  }
+  const period = derivePeriodFromDateText(dateText);
+  if (!period) {
+    throw new Error(`Format tanggal "${dateText}" pada laporan tidak dikenali.`);
+  }
+
+  // Bangun daftar baris akun rata (flat) beserta level indentasinya.
+  const entries = [];
+  rows.forEach(row => {
+    const rawCode = row[0];
+    const name = row[1] !== undefined ? String(row[1]).trim() : '';
+    const label = normalizeKey(rawCode);
+    if (!label && !name) return;
+    if (label === 'tanggal' || label === '(dalam idr)' || label === expected) return;
+    entries.push({
+      label,
+      name,
+      value: toNumberOrNull(row[2]),
+      indent: leadingIndentWidth(rawCode),
+      hasCode: /[0-9]/.test(label) && !!name
+    });
+  });
+
+  // Tandai akun header: indent 0, diikuti baris akun dengan indent > 0.
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    if (!e.hasCode || e.indent > 0) continue;
+    const next = entries[i + 1];
+    e.isHeaderAccount = !!(next && next.hasCode && next.indent > e.indent);
+  }
+
+  const data = {};
+  const matchers = TOTAL_MATCHERS[statementKey] || {};
+  entries.forEach(e => {
+    if (e.value === null) return;
+    for (const field of Object.keys(matchers)) {
+      if (!(field in data) && matchers[field](e.label)) data[field] = e.value;
+    }
+    // Kas/Bank & Persediaan (Neraca): hanya akun tingkat atas (indent 0)
+    // yang diambil — bila akun itu adalah akun header, sub-akun di
+    // bawahnya sudah termasuk di dalam nilainya (tidak dijumlah lagi).
+    if (statementKey === 'neraca' && e.hasCode && e.indent === 0) {
+      if (CASH_NAME_RE.test(e.name)) data.kasSetaraKas = (data.kasSetaraKas || 0) + e.value;
+      else if (INVENTORY_NAME_RE.test(e.name) && !('persediaan' in data)) data.persediaan = e.value;
+    }
+  });
+
+  const warnings = [];
+  const missingTotals = Object.keys(matchers).filter(f => !(f in data));
+  if (missingTotals.length) {
+    warnings.push(`Baris berikut tidak ditemukan pada laporan sehingga sebagian rasio mungkin tidak akurat: ${missingTotals.join(', ')}.`);
+  }
+  if (statementKey === 'neraca' && !('kasSetaraKas' in data)) {
+    warnings.push('Tidak menemukan akun kas/bank pada Aset Lancar — Cash Ratio mungkin tidak akurat.');
+  }
+
+  return { companyName, period, data, warnings };
+}
+
 // Registri jenis data yang bisa diimpor. Setiap jenis punya file Excel
 // SENDIRI (bukan lagi digabung satu file banyak sheet) — jadi Anda bisa
 // mengimpor Neraca hari ini, lalu Laba Rugi menyusul di lain waktu, untuk
@@ -575,29 +756,20 @@ const IMPORT_TYPES = {
   neraca: {
     label: 'Neraca',
     badge: 'teal',
-    sheetMatch: n => n.includes('neraca'),
-    dictionary: AKUN_NERACA,
     statementKey: 'neraca',
-    mode: 'keyvalue',
-    templateFile: 'template/Template_Import_Neraca.xlsx'
+    mode: 'accountingReport'
   },
   labaRugi: {
     label: 'Laba Rugi',
     badge: 'gold',
-    sheetMatch: n => n.includes('laba'),
-    dictionary: AKUN_LABA_RUGI,
     statementKey: 'labaRugi',
-    mode: 'keyvalue',
-    templateFile: 'template/Template_Import_LabaRugi.xlsx'
+    mode: 'accountingReport'
   },
   arusKas: {
     label: 'Arus Kas',
     badge: 'blue',
-    sheetMatch: n => n.includes('arus'),
-    dictionary: AKUN_ARUS_KAS,
     statementKey: 'arusKas',
-    mode: 'keyvalue',
-    templateFile: 'template/Template_Import_ArusKas.xlsx'
+    mode: 'accountingReport'
   },
   bukuBesar: {
     label: 'Buku Besar',
@@ -620,8 +792,32 @@ function parseSingleTypeExcel(arrayBuffer, typeKey) {
   if (!type) throw new Error('Jenis data impor tidak dikenali.');
 
   const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-  const sheetNames = workbook.SheetNames.map(n => n.toLowerCase());
 
+  // ---- Neraca & Laba Rugi: laporan hasil export software akuntansi ----
+  if (type.mode === 'accountingReport') {
+    let lastError = null;
+    for (const sheetName of workbook.SheetNames) {
+      try {
+        const parsed = parseAccountingReportSheet(workbook.Sheets[sheetName], type.statementKey);
+        return {
+          typeKey,
+          typeLabel: type.label,
+          badge: type.badge,
+          statementKey: type.statementKey,
+          companyName: parsed.companyName,
+          period: parsed.period,
+          data: parsed.data,
+          warnings: parsed.warnings
+        };
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error(`File tidak dapat dibaca sebagai laporan ${type.label}.`);
+  }
+
+  // ---- Arus Kas & Buku Besar: masih memakai template Info + sheet khusus ----
+  const sheetNames = workbook.SheetNames.map(n => n.toLowerCase());
   const infoName = workbook.SheetNames[sheetNames.findIndex(n => n.includes('info'))];
   const dataName = workbook.SheetNames[sheetNames.findIndex(n => type.sheetMatch(n))];
 
@@ -1235,7 +1431,7 @@ function renderImport() {
         <div class="dropzone" id="dropzone">
           ${icon('upload')}
           <div>Seret file .xlsx <strong id="dropzone-type-label"></strong> ke sini, atau klik untuk memilih</div>
-          <div style="font-size:11.5px;margin-top:6px;">File harus berisi sheet "Info" dan sheet data sesuai jenis yang dipilih di atas</div>
+          <div style="font-size:11.5px;margin-top:6px;" id="dropzone-hint"></div>
         </div>
         <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none;">
         <a href="#" download class="btn ghost" id="download-template-btn" style="margin-top:14px;width:100%;justify-content:center;"></a>
@@ -1283,10 +1479,18 @@ function updateDropzoneAndTemplate() {
   const type = IMPORT_TYPES[state.importType];
   const label = document.getElementById('dropzone-type-label');
   if (label) label.textContent = type.label;
+  const hint = document.getElementById('dropzone-hint');
   const templateBtn = document.getElementById('download-template-btn');
-  if (templateBtn) {
-    templateBtn.href = type.templateFile;
-    templateBtn.textContent = `Unduh Template ${type.label}`;
+  if (type.mode === 'accountingReport') {
+    if (hint) hint.textContent = `Unggah laporan ${type.label} apa adanya, hasil export langsung dari software akuntansi Anda — kode & nama akun boleh berbeda-beda per perusahaan, sistem membacanya dari struktur laporan (akun header, sub-akun, dan baris total).`;
+    if (templateBtn) templateBtn.style.display = 'none';
+  } else {
+    if (hint) hint.textContent = `File harus berisi sheet "Info" dan sheet data sesuai jenis yang dipilih di atas`;
+    if (templateBtn) {
+      templateBtn.style.display = '';
+      templateBtn.href = type.templateFile;
+      templateBtn.textContent = `Unduh Template ${type.label}`;
+    }
   }
 }
 
