@@ -1,0 +1,472 @@
+:root{
+  --bg:#1c1512;
+  --bg-soft:#f6f7f9;
+  --panel:#ffffff;
+  --ink:#111827;
+  --ink-soft:#6b7280;
+  --accent:#0f2748;
+  --accent-hover:#173a68;
+  --accent-soft:#eaeff5;
+  --border:#e5e7eb;
+  --danger:#dc2626;
+  --success:#15803d;
+  --radius:10px;
+  --shadow-sm:0 1px 2px rgba(16,24,40,.05);
+  --shadow-md:0 2px 6px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.05);
+
+  /* Sidebar palette (terracotta / dark warm) */
+  --sb-bg:#1c1512;
+  --sb-bg-soft:#241b17;
+  --sb-card:#2a201b;
+  --sb-border:#3a2c25;
+  --sb-orange:#e2763f;
+  --sb-orange-soft:#f0925f;
+  --sb-text-muted:#9a8b81;
+  --sb-text-faint:#6d5f56;
+
+  /* Report / printed-document palette (cover, lampiran divider, slip) */
+  --rp-navy:#0f2748;
+  --rp-navy-2:#173a68;
+  --rp-gold:#b8912f;
+  --rp-gold-soft:#e9d9a6;
+  --rp-paper:#ffffff;
+  --rp-ink:#1c2333;
+  --rp-muted:#68707f;
+  --rp-line:#dfe3ea;
+  --rp-tint:#f6f8fb;
+
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg-soft);color:var(--ink);-webkit-font-smoothing:antialiased;}
+button{font-family:inherit;cursor:pointer;}
+input,select{font-family:inherit;}
+
+.app-shell{display:flex;min-height:100vh;}
+
+/* SIDEBAR */
+.sidebar{
+  width:250px;background:var(--sb-bg);color:#e7ded8;display:flex;flex-direction:column;
+  padding:18px 14px 14px;position:fixed;top:0;bottom:0;left:0;z-index:50;transition:width .2s ease, transform .25s ease;
+  border-right:1px solid var(--sb-border);overflow-y:auto;overflow-x:hidden;
+}
+.brand{display:flex;align-items:center;padding:2px 6px 10px;}
+.brand-mark{
+  width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#3a2c25,#241b17);
+  border:1px solid var(--sb-border);display:flex;align-items:center;justify-content:center;font-size:17px;
+}
+.brand-title{display:flex;flex-direction:column;padding:0 6px 16px;line-height:1.25;}
+.brand-title strong{font-size:15px;letter-spacing:.5px;color:#f2ece7;}
+.brand-title strong span{color:var(--sb-orange);font-weight:800;}
+.brand-sub{font-size:10px;letter-spacing:1px;color:var(--sb-text-faint);margin-top:2px;}
+
+.account-box{
+  background:var(--sb-card);border:1px solid var(--sb-border);border-radius:12px;
+  padding:10px 12px;margin:0 4px 18px;
+}
+.account-label{font-size:10px;letter-spacing:.6px;color:var(--sb-text-faint);margin-bottom:6px;}
+.account-row{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#f2ece7;min-width:0;}
+.account-row .account-icon{font-size:14px;flex-shrink:0;}
+.account-row span:not(.account-icon):not(.account-caret){overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.account-row .account-caret{margin-left:auto;color:var(--sb-text-faint);font-size:12px;flex-shrink:0;}
+
+.nav{display:flex;flex-direction:column;gap:2px;flex:1;padding:0 2px;}
+.nav-group-label{
+  font-size:10px;letter-spacing:1px;color:var(--sb-text-faint);text-transform:uppercase;
+  margin:14px 10px 6px;font-weight:700;
+}
+.nav-group-label:first-child{margin-top:2px;}
+.nav-item{
+  display:flex;align-items:center;gap:10px;background:none;border:none;color:var(--sb-orange);
+  text-align:left;padding:9px 10px;border-radius:9px;font-size:13.5px;font-weight:600;white-space:nowrap;
+}
+.nav-item .nav-icon{
+  width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:13px;
+  color:var(--sb-orange-soft);flex-shrink:0;
+}
+.nav-item:hover{background:var(--sb-card);}
+.nav-item.active{background:var(--sb-card);color:#f6ac82;box-shadow:inset 0 0 0 1px var(--sb-border);}
+
+.user-row{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 2px 6px;}
+.user-email{font-size:11px;color:var(--sb-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sync-indicator{font-size:10px;white-space:nowrap;color:var(--sb-text-faint);}
+.sync-indicator.online{color:#5fbf7a;}
+.sync-indicator.offline{color:#e2a53f;}
+
+.sidebar-footer{display:flex;flex-direction:column;gap:8px;padding-top:14px;margin-top:10px;border-top:1px solid var(--sb-border);}
+.sidebar-footer .btn-ghost.small{
+  background:var(--sb-card);color:#e7ded8;border:1px solid var(--sb-border);
+}
+.sidebar-footer .btn-ghost.small:hover{background:#33261f;}
+.collapse-btn{
+  align-self:center;margin-top:4px;width:30px;height:30px;border-radius:50%;background:var(--sb-card);
+  border:1px solid var(--sb-border);color:var(--sb-text-muted);font-size:12px;display:flex;
+  align-items:center;justify-content:center;
+}
+.collapse-btn:hover{color:#f2ece7;}
+
+/* Collapsed state (desktop only) */
+.sidebar.collapsed{width:72px;}
+.sidebar.collapsed .brand-title,
+.sidebar.collapsed .account-box,
+.sidebar.collapsed .nav-group-label,
+.sidebar.collapsed .nav-item span:not(.nav-icon),
+.sidebar.collapsed .sidebar-footer .btn-ghost.small{display:none;}
+.sidebar.collapsed .nav-item{justify-content:center;padding:9px 0;}
+.sidebar.collapsed .collapse-btn{transform:rotate(180deg);}
+.sidebar.collapsed ~ .content{margin-left:72px;}
+
+.topbar{
+  display:none;position:sticky;top:0;background:var(--sb-bg);color:#fff;padding:12px 16px;
+  align-items:center;gap:12px;z-index:40;
+}
+.topbar #pageTitleMobile{flex:1;font-weight:600;font-size:15px;}
+.icon-btn{background:none;border:none;color:#fff;font-size:20px;}
+.topbar .sync-indicator{font-size:10px;}
+.sync-btn{font-size:16px;line-height:1;padding:2px;}
+.sync-btn.spinning{animation:sync-spin .6s linear infinite;}
+@keyframes sync-spin{to{transform:rotate(360deg);}}
+
+.content{margin-left:250px;flex:1;padding:28px 32px;max-width:1200px;transition:margin-left .2s ease;}
+
+.page{display:none;}
+.page.active{display:block;animation:fadeIn .2s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+
+.page-head{margin-bottom:22px;}
+.page-head h1{margin:0 0 4px;font-size:22px;font-weight:700;letter-spacing:-.2px;}
+.page-head p{margin:0 0 12px;color:var(--ink-soft);font-size:14px;}
+
+.panel{background:var(--panel);border-radius:var(--radius);padding:22px 24px;margin-bottom:18px;box-shadow:var(--shadow-sm);border:1px solid var(--border);}
+.panel h2{font-size:15.5px;margin:0 0 12px;font-weight:700;letter-spacing:-.1px;}
+
+.btn-primary{background:var(--accent);color:#fff;border:none;padding:10px 18px;border-radius:8px;font-size:13.5px;font-weight:600;letter-spacing:.1px;box-shadow:var(--shadow-sm);transition:background .15s ease, box-shadow .15s ease;}
+.btn-primary:hover{background:var(--accent-hover);box-shadow:var(--shadow-md);}
+.btn-primary:active{background:var(--rp-navy);}
+.btn-ghost{background:#fff;color:var(--ink);border:1px solid var(--border);padding:10px 16px;border-radius:8px;font-size:13.5px;font-weight:600;transition:background .15s ease,border-color .15s ease;}
+.btn-ghost:hover{background:#f8fafc;border-color:#d5d9e0;}
+.btn-ghost.small{padding:7px 10px;font-size:12px;}
+.btn-danger{background:#fee2e2;color:var(--danger);border:none;padding:6px 10px;border-radius:7px;font-size:12px;}
+.btn-icon{background:var(--accent-soft);color:var(--accent);border:none;padding:6px 10px;border-radius:7px;font-size:12px;margin-right:4px;}
+.btn-icon:disabled{opacity:.35;cursor:not-allowed;}
+.riwayat-actions .btn-icon{padding:6px 9px;}
+
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:20px;}
+.card{background:var(--panel);border-radius:var(--radius);padding:18px;border:1px solid var(--border);box-shadow:var(--shadow-sm);}
+.card .num{font-size:24px;font-weight:700;letter-spacing:-.3px;}
+.card .label{color:var(--ink-soft);font-size:12.5px;margin-top:4px;font-weight:500;}
+
+.table-wrap{overflow-x:auto;}
+.data-table{width:100%;border-collapse:collapse;font-size:13px;}
+.data-table th{text-align:left;background:var(--bg-soft);color:var(--ink-soft);font-weight:700;font-size:11.5px;letter-spacing:.3px;text-transform:uppercase;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;}
+.data-table td{padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;}
+.data-table tr:hover td{background:#fafbfc;}
+
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+.form-grid.two{grid-template-columns:1fr 1fr;}
+.form-grid.three{grid-template-columns:1fr 1fr 1fr;}
+.form-grid label{display:flex;flex-direction:column;font-size:12.5px;color:var(--ink-soft);gap:6px;font-weight:600;}
+.form-grid label .hint{font-weight:400;color:#9aa2b1;font-size:11.5px;text-transform:none;}
+.form-grid input,.form-grid select{
+  padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;color:var(--ink);
+  background:#fff;transition:border-color .15s ease,box-shadow .15s ease;
+}
+.form-grid input:focus,.form-grid select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);}
+.form-grid input::placeholder{color:#b0b7c3;}
+
+.checkbox-inline{
+  display:flex;align-items:flex-start;gap:9px;font-size:13px;font-weight:500;color:var(--ink);
+  margin-bottom:16px;cursor:pointer;background:var(--bg-soft);border:1px solid var(--border);
+  border-radius:8px;padding:10px 12px;
+}
+.checkbox-inline input[type="checkbox"]{width:16px;height:16px;flex-shrink:0;accent-color:var(--accent);cursor:pointer;margin-top:1px;}
+.checkbox-inline em{color:var(--ink-soft);font-style:normal;}
+
+/* SLIP GAJI — step wizard */
+.slip-step-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border);}
+.slip-step-num{
+  flex-shrink:0;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:13.5px;font-weight:700;
+}
+.slip-step-copy h2{margin:0 0 3px;font-size:15.5px;}
+.slip-step-copy p{margin:0;font-size:12.5px;color:var(--ink-soft);}
+.slip-subhead{
+  font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--ink-soft);
+  margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);
+}
+.slip-subhead:first-of-type{margin-top:0;}
+
+.preview-box{margin-top:14px;font-size:13px;}
+.calc-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:6px;}
+.calc-item{background:var(--bg-soft);border:1px solid var(--border);border-radius:9px;padding:11px 13px;font-size:12.5px;color:var(--ink-soft);font-weight:500;}
+.calc-item b{display:block;font-size:16px;margin-top:3px;color:var(--ink);font-weight:700;letter-spacing:-.2px;}
+.calc-item-clickable{cursor:pointer;transition:background .15s ease, border-color .15s ease, transform .1s ease;}
+.calc-item-clickable:hover{background:var(--accent-soft);border-color:var(--accent);}
+.calc-item-clickable:active{transform:scale(.98);}
+
+.split-preview{background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px;padding:12px;font-size:13px;margin-bottom:10px;}
+
+/* MODAL */
+.modal-overlay{
+  display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:100;
+  align-items:center;justify-content:center;padding:20px;
+}
+.modal-overlay.active{display:flex;}
+.modal{background:#fff;border-radius:14px;padding:24px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;}
+.modal h2{margin-top:0;}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:14px;}
+
+/* SLIP */
+.slip-actions{display:flex;gap:10px;margin-bottom:18px;}
+.slip-actions .btn-primary,.slip-actions .btn-ghost{display:inline-flex;align-items:center;gap:8px;}
+.slip-sheet{
+  background:#fff;border:1px solid var(--rp-line);padding:24px 32px;max-width:820px;margin:0 auto;
+  font-size:12px;color:var(--rp-ink);position:relative;
+}
+.slip-sheet::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:5px;
+  background:linear-gradient(90deg,var(--rp-navy),var(--rp-navy-2) 55%,var(--rp-gold));
+}
+.slip-header{display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding-bottom:10px;margin-bottom:4px;border-bottom:2px solid var(--rp-navy);}
+.slip-header .slip-header-brand{display:flex;align-items:center;gap:12px;}
+.slip-logo{max-width:50px;max-height:50px;object-fit:contain;display:block;margin:0;}
+.slip-header .company{font-weight:800;font-size:14px;color:var(--rp-navy);letter-spacing:.2px;}
+.slip-header .addr{color:var(--rp-muted);font-size:10.5px;line-height:1.35;margin-top:2px;}
+.slip-header .slip-doc-tag{
+  text-align:right;font-size:10px;letter-spacing:1.5px;color:var(--rp-gold);font-weight:700;
+  text-transform:uppercase;white-space:nowrap;
+}
+.slip-title{
+  text-align:center;font-weight:700;letter-spacing:1.5px;color:var(--rp-navy);
+  background:var(--rp-tint);padding:6px;margin:10px 0 12px;border-radius:6px;
+  border:1px solid var(--rp-line);font-size:12.5px;text-transform:uppercase;
+}
+.slip-tag-tanpa-absensi{color:var(--rp-muted);font-weight:600;letter-spacing:.3px;text-transform:none;font-size:10.5px;}
+.slip-cols{display:grid;grid-template-columns:1fr 1fr;gap:18px 28px;margin-bottom:10px;}
+.slip-row{display:grid;grid-template-columns:132px 10px 1fr;padding:2px 0;line-height:1.3;border-bottom:1px dotted var(--rp-line);}
+.slip-row span:first-child{color:var(--rp-muted);}
+.slip-row span:last-child{font-weight:600;}
+.slip-section-title{
+  font-weight:700;color:var(--rp-navy);padding:4px 0 4px 10px;margin:10px 0 6px;
+  border-left:3px solid var(--rp-gold);background:var(--rp-tint);letter-spacing:.5px;
+  font-size:11px;text-transform:uppercase;border-radius:0 4px 4px 0;
+}
+.slip-money-row{display:grid;grid-template-columns:1fr 10px auto;padding:2.5px 0;line-height:1.3;gap:6px;border-bottom:1px dotted var(--rp-line);}
+.slip-money-row span:last-child{font-variant-numeric:tabular-nums;text-align:right;}
+.slip-total{font-weight:800;border-top:1.5px solid var(--rp-navy);border-bottom:none;margin-top:4px;padding-top:5px;color:var(--rp-navy);}
+.slip-thp{
+  background:linear-gradient(90deg,var(--rp-navy),var(--rp-navy-2));color:#fff;padding:9px 16px;
+  border-radius:8px;margin-top:12px;display:flex;justify-content:space-between;align-items:center;
+  font-weight:700;font-size:14px;box-shadow:0 2px 6px rgba(15,39,72,.25);
+}
+.slip-thp span:first-child{font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:600;opacity:.85;}
+.slip-sign{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:30px;text-align:center;font-size:12px;}
+.slip-sign .line{margin-top:36px;border-top:1px solid var(--rp-ink);padding-top:4px;font-weight:600;}
+.slip-foot-note{margin-top:14px;padding-top:6px;border-top:1px solid var(--rp-line);
+  font-size:9px;color:var(--rp-muted);text-align:center;letter-spacing:.3px;}
+
+@media screen and (max-width: 900px){
+  .sidebar{transform:translateX(-100%);}
+  .sidebar.open{transform:translateX(0);}
+  .collapse-btn{display:none;}
+  .topbar{display:flex;}
+  .content{margin-left:0;padding:18px;}
+  .form-grid,.form-grid.two,.form-grid.three{grid-template-columns:1fr;}
+  .slip-cols{grid-template-columns:1fr;}
+  .slip-sign{grid-template-columns:1fr;}
+  .slip-step-head{gap:10px;}
+}
+
+/* ===========================================================
+   PAPER PAGE — preview di layar dibuat identik ukurannya dengan
+   halaman A4 yang benar-benar tercetak, supaya "Cetak / Simpan PDF"
+   hasilnya sama persis dengan pre-review (tidak meluber / berubah
+   format). Untuk cetak, margin diserahkan ke @page (bukan padding
+   .cetak-page) supaya SETIAP halaman fisik — termasuk halaman
+   lanjutan saat sebuah tabel panjang terpotong ke halaman
+   berikutnya — tetap mendapat margin yang sama di semua sisi.
+   =========================================================== */
+@page{ size:A4 portrait; margin:12mm; }
+
+.report-canvas{background:#dde2eb;padding:26px 14px;overflow-x:auto;}
+.cetak-page{
+  background:#fff;width:210mm;min-height:297mm;padding:12mm;box-sizing:border-box;
+  margin:0 auto 22px;box-shadow:0 4px 18px rgba(15,23,42,.18);position:relative;
+}
+.cetak-page:last-child{margin-bottom:0;}
+/* Halaman "cover-style" (sampul & pembatas lampiran) selalu tepat 1 halaman penuh */
+.cetak-page.rp-cover{height:297mm;min-height:0;overflow:hidden;}
+
+@media print{
+  .sidebar,.topbar,.slip-actions,.page-head,.panel .btn-primary,.no-print{display:none !important;}
+  .content{margin:0;padding:0;}
+  .panel{border:none;box-shadow:none;padding:0;}
+  .report-canvas{background:#fff;padding:0;overflow:visible;}
+  /* @page sudah memberi margin 12mm di semua sisi & semua halaman fisik,
+     jadi .cetak-page tidak lagi perlu meniru ukuran kertas + padding sendiri
+     (itu yang sebelumnya membuat halaman lanjutan tabel panjang tidak
+     bermargin di bagian atas). */
+  .cetak-page{width:auto;min-height:0;padding:0;box-shadow:none;margin:0;}
+  .cetak-page.rp-cover{height:273mm;} /* 297mm - (12mm x 2) supaya sampul tetap tepat 1 halaman */
+  body{background:#fff;}
+  #slipPreviewPanel{border:none;}
+  #laporanPreviewPanel{border:none;}
+
+  /* Pastikan warna latar (navy/gold) ikut tercetak, bukan dihilangkan browser */
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
+
+  /* Setiap .cetak-page = satu halaman, mulai di halaman baru & tidak digabung dgn halaman lain.
+     (Tidak diberi page-break-inside:avoid di sini — beberapa lampiran/tabel bisa lebih panjang
+     dari satu halaman, dan itu wajar; yang penting tiap halaman fisik tetap bermargin seragam.) */
+  .cetak-page{page-break-after:always;break-after:page;}
+  .cetak-page:last-child{page-break-after:auto;break-after:auto;}
+
+  /* Blok dokumen inti: jangan sampai terpotong di tengah, dorong ke halaman berikutnya jika perlu */
+  .slip-sheet,.lampiran-sheet,.lampiran-head{page-break-inside:avoid;break-inside:avoid;}
+
+  /* Baris/unit kecil: jangan pernah terpotong menjadi dua bagian di batas halaman */
+  .slip-row,.slip-money-row,.rp-cover-meta-row,.cover-info-table tr,
+  .lampiran-table tr,.rp-table tr,.data-table tr,
+  .lampiran-foto-card,.calc-item,.lampiran-section-title{
+    page-break-inside:avoid;break-inside:avoid;
+  }
+  /* Judul seksi tidak boleh jadi baris terakhir sendirian di halaman (harus nempel dgn kontennya) */
+  .lampiran-section-title,.lampiran-subtitle,.rp-page-head{page-break-after:avoid;break-after:avoid;}
+
+  /* Kalau tabel terpaksa lanjut ke halaman berikutnya, ulangi header & footer-nya */
+  .lampiran-table thead,.rp-table thead,.data-table thead,.cover-info-table thead{display:table-header-group;}
+  .rp-table tfoot{display:table-footer-group;}
+}
+
+/* ===========================================================
+   LAPORAN PERIODE (cover + ringkasan + slip semua staff + lampiran) — PDF
+   =========================================================== */
+
+/* Shared decorative top/bottom accent bars used on cover & lampiran divider */
+.rp-topbar{height:8px;background:linear-gradient(90deg,var(--rp-navy) 0%,var(--rp-navy-2) 55%,var(--rp-gold) 100%);}
+.rp-bottombar{height:8px;background:linear-gradient(90deg,var(--rp-gold) 0%,var(--rp-navy-2) 45%,var(--rp-navy) 100%);}
+
+.rp-cover{
+  height:100%;display:flex;flex-direction:column;padding:0;background:var(--rp-paper);
+  position:relative;
+}
+.rp-cover-inner{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:40px 48px;
+}
+.rp-cover-head{display:flex;align-items:center;gap:14px;position:absolute;top:34px;left:44px;right:44px;
+  justify-content:flex-start;text-align:left;}
+.rp-cover-head .cover-logo{max-width:70px;max-height:70px;object-fit:contain;}
+.rp-cover-head-text .cover-company{font-size:14px;font-weight:800;color:var(--rp-navy);letter-spacing:.3px;}
+.rp-cover-head-text .cover-addr{font-size:10.5px;color:var(--rp-muted);line-height:1.5;margin-top:2px;}
+
+.rp-cover-titleblock{margin-top:26px;margin-bottom:34px;}
+.rp-cover-eyebrow{font-size:11px;letter-spacing:4px;color:var(--rp-gold);font-weight:700;margin-bottom:10px;text-transform:uppercase;}
+.rp-cover-title{font-size:36px;font-weight:800;letter-spacing:3px;color:var(--rp-navy);margin-bottom:14px;}
+.rp-cover-periode{
+  display:inline-block;font-size:14px;font-weight:700;background:var(--rp-navy);color:var(--rp-gold-soft);
+  padding:9px 26px;border-radius:999px;letter-spacing:2px;
+}
+
+.rp-cover-meta{width:100%;max-width:420px;margin:0 auto;border-top:1px solid var(--rp-line);}
+.rp-cover-meta-row{
+  display:flex;justify-content:space-between;padding:11px 4px;border-bottom:1px solid var(--rp-line);
+  font-size:13px;
+}
+.rp-cover-meta-row span:first-child{color:var(--rp-muted);}
+.rp-cover-meta-row span:last-child{font-weight:700;color:var(--rp-ink);}
+
+.rp-cover-foot{text-align:center;padding:18px 40px 26px;font-size:10px;color:var(--rp-muted);letter-spacing:.3px;}
+
+/* RINGKASAN PERIODE (rekap seluruh staff) */
+.rp-page{padding:20px 28px 30px;max-width:820px;margin:0 auto;}
+.rp-page-head{border-bottom:2px solid var(--rp-navy);padding-bottom:12px;margin-bottom:18px;
+  display:flex;justify-content:space-between;align-items:flex-end;gap:16px;}
+.rp-page-head-title{font-size:18px;font-weight:800;color:var(--rp-navy);letter-spacing:.3px;}
+.rp-page-head-sub{font-size:11.5px;color:var(--rp-muted);text-align:right;line-height:1.5;}
+
+.rp-table{width:100%;border-collapse:collapse;font-size:12px;}
+.rp-table thead th{
+  text-align:left;background:var(--rp-navy);color:#fff;padding:9px 10px;font-weight:700;
+  letter-spacing:.3px;font-size:11px;text-transform:uppercase;
+}
+.rp-table thead th.num{text-align:right;}
+.rp-table tbody td{padding:8px 10px;border-bottom:1px solid var(--rp-line);}
+.rp-table tbody tr:nth-child(even){background:var(--rp-tint);}
+.rp-table td.num{text-align:right;font-variant-numeric:tabular-nums;}
+.rp-table tfoot td{
+  padding:10px;border-top:2px solid var(--rp-navy);font-weight:800;color:var(--rp-navy);
+  font-size:12.5px;
+}
+.rp-table tfoot td.num{text-align:right;}
+
+/* LAMPIRAN — halaman per staff */
+.lampiran-sheet{max-width:820px;margin:0 auto;font-size:12.5px;padding:20px 28px;color:var(--rp-ink);}
+.lampiran-head{padding-bottom:14px;margin-bottom:16px;border-bottom:2px solid var(--rp-navy);}
+.lampiran-head .tag{
+  display:inline-block;background:var(--rp-navy);color:var(--rp-gold-soft);font-size:10px;font-weight:700;
+  letter-spacing:1.5px;padding:5px 12px;border-radius:5px;margin-bottom:10px;text-transform:uppercase;
+}
+.lampiran-head .nama{font-size:17px;font-weight:800;color:var(--rp-navy);}
+.lampiran-head .sub{font-size:12px;color:var(--rp-muted);margin-top:2px;}
+.lampiran-section-title{
+  font-weight:700;color:var(--rp-navy);padding:5px 0 5px 10px;border-left:3px solid var(--rp-gold);
+  background:var(--rp-tint);margin:18px 0 8px;font-size:12px;letter-spacing:.3px;
+  text-transform:uppercase;border-radius:0 4px 4px 0;
+}
+.lampiran-empty{color:var(--rp-muted);font-size:11.5px;padding:4px 2px 10px;font-style:italic;}
+.lampiran-subtitle{font-weight:700;font-size:10.5px;color:var(--rp-muted);letter-spacing:.4px;text-transform:uppercase;margin:2px 0 6px;}
+.lampiran-fallback-note{background:#fff7e6;border:1px solid #f0d999;color:#8a6a1f;font-size:10px;line-height:1.5;
+  padding:6px 9px;border-radius:6px;margin:0 0 8px;}
+.lampiran-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:6px;}
+.lampiran-table th{text-align:left;background:var(--rp-tint);padding:6px 8px;border-bottom:2px solid var(--rp-line);color:var(--rp-navy);font-weight:700;}
+.lampiran-table td{padding:6px 8px;border-bottom:1px solid var(--rp-line);}
+.lampiran-foto-row{display:flex;flex-direction:column;align-items:center;gap:18px;margin:12px 0 16px;}
+.lampiran-foto-card{width:100%;max-width:420px;text-align:center;}
+.lampiran-foto-caption{font-size:11.5px;font-weight:700;color:var(--rp-navy);margin-bottom:8px;}
+.lampiran-foto-card img{display:block;width:100%;max-height:480px;object-fit:contain;border-radius:8px;
+  border:1px solid var(--rp-line);background:#fff;margin:0 auto;}
+
+/* LOGIN OVERLAY */
+.login-overlay{
+  position:fixed;inset:0;z-index:200;background:var(--sb-bg);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+}
+.login-box{
+  width:100%;max-width:360px;background:var(--sb-card);border:1px solid var(--sb-border);
+  border-radius:16px;padding:32px 28px;display:flex;flex-direction:column;gap:12px;
+  box-shadow:0 20px 60px rgba(0,0,0,.35);
+}
+.login-brand{font-size:18px;font-weight:800;letter-spacing:.5px;color:#f2ece7;text-align:center;}
+.login-brand span{color:var(--sb-orange);}
+.login-sub{margin:0 0 8px;font-size:13px;color:var(--sb-text-muted);text-align:center;}
+.login-box label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--sb-text-muted);}
+.login-box input{
+  padding:10px 12px;border-radius:8px;border:1px solid var(--sb-border);
+  background:var(--sb-bg-soft);color:#f2ece7;font-size:14px;
+}
+.login-box input:focus{outline:none;border-color:var(--sb-orange);}
+.login-box .btn-primary{margin-top:6px;}
+.login-box .btn-ghost.small{align-self:center;color:var(--sb-text-muted);}
+.login-hint{margin:8px 0 0;font-size:11px;color:var(--sb-text-faint);text-align:center;}
+.login-message{font-size:12px;padding:8px 10px;border-radius:8px;}
+.login-message.error{background:#3a1f1f;color:#f3a5a5;}
+.login-message.success{background:#1f3a25;color:#8fe0a5;}
+
+/* FOTO SURAT SAKIT */
+#fSakitFotoPreviewWrap{display:flex;align-items:center;gap:10px;margin-top:-6px;}
+#fSakitFotoPreview{max-width:120px;max-height:120px;border-radius:8px;border:1px solid var(--border);object-fit:cover;}
+.sakit-thumb{width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;}
+.sakit-thumb:hover{opacity:.85;}
+.modal-foto{max-width:min(90vw,700px);background:#111;padding:16px;position:relative;text-align:center;}
+.modal-foto img{max-width:100%;max-height:80vh;border-radius:8px;}
+.modal-foto-close{position:absolute;top:10px;right:10px;}
+
+/* LOGO PERUSAHAAN (Pengaturan) */
+#cfgLogoPreviewWrap{display:flex;align-items:center;gap:10px;margin:10px 0 14px;}
+#cfgLogoPreview{max-width:140px;max-height:100px;border-radius:8px;border:1px solid var(--border);object-fit:contain;background:#fff;padding:6px;}
+
+/* LOGO DI SLIP GAJI */
+.slip-header{position:relative;}
+.slip-logo{max-width:110px;max-height:80px;object-fit:contain;display:block;margin:0 auto 8px;}
