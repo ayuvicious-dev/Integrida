@@ -204,7 +204,7 @@ tbody tr:hover{background:#fafcfb;}
 .chart-box canvas{max-height:280px;}
 
 .ratio-note{font-size:12px;color:var(--slate);background:#fafbfb;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:10px;line-height:1.5;}
-.bb-akun-row:hover td{background:var(--teal-light);}
+.bb-akun-row:hover{background:var(--teal-light);}
 .bb-ledger-row:hover{background:var(--teal-light);}
 .ledger-group summary::-webkit-details-marker{display:none;}
 .ledger-group summary{list-style:none;}
@@ -677,15 +677,18 @@ const INVENTORY_NAME_RE = /\b(persediaan|inventory|stok|stock)\b/i;
 // MUTASI periode (saldo akhir - saldo awal) supaya hanya aktivitas
 // periode berjalan yang terhitung (bukan akumulasi sejak akun dibuka).
 // Kategori akun (Aset/Kewajiban/Ekuitas/Pendapatan/Beban) dikenali dari
-// digit pertama KODE AKUN sebelum tanda "-" (1=Aset, 2=Kewajiban,
-// 3=Ekuitas, 4=Pendapatan, 5 ke atas=Beban) — asumsi konvensi penomoran
-// akun yang umum dipakai; bisa disesuaikan bila konvensi perusahaan Anda
-// berbeda. Kata kunci pada nama akun mempertajam sub-kategori (mis.
-// "tetap"/"penyusutan" -> aset tidak lancar, "jangka panjang" -> kewajiban
-// jangka panjang, "hpp"/"pokok penjualan" -> harga pokok penjualan,
-// "pajak" -> pajak penghasilan, "bunga"/"lain-lain" -> beban/pendapatan
-// di luar operasional utama). Akun dengan kode non-angka di luar 1-9
-// dilewati & dilaporkan sebagai peringatan.
+// digit pertama KODE AKUN sebelum tanda "-": 1=Aset, 2=Kewajiban,
+// 3=Ekuitas, 4=Pendapatan, 5=HPP, 6=Beban Operasional, 7=Pendapatan
+// Lainnya, 8=Beban Lainnya, 9=Beban Pajak (Pajak Penghasilan) — asumsi
+// konvensi penomoran akun yang umum dipakai; bisa disesuaikan bila
+// konvensi perusahaan Anda berbeda. Untuk akun Aset (kode 1), kata kunci
+// pada nama akun mempertajam sub-kategori (mis. "tetap"/"penyusutan" ->
+// aset tidak lancar, nama mengandung "kas"/"bank" -> Kas & Setara Kas,
+// "persediaan" -> Persediaan); untuk akun Kewajiban (kode 2), "jangka
+// panjang" -> kewajiban jangka panjang. Sub-kategori Pendapatan & Beban
+// (kode 4-9) murni dari digit kode akun, tidak lagi bergantung nama akun.
+// Akun dengan kode non-angka di luar 1-9 dilewati & dilaporkan sebagai
+// peringatan.
 
 function parseLedgerAccountLabel(raw) {
   const text = String(raw || '').trim();
@@ -711,25 +714,17 @@ function classifyLedgerAccount(code, name) {
     return { group: 'kewajiban', bucket: nonCurrent ? 'jangkaPanjang' : 'lancar', field: null };
   }
   if (prefix === 3) return { group: 'ekuitas', bucket: null, field: null };
-  if (prefix === 4) {
-    const lainnya = /(bunga|lain[- ]?lain|lainnya)/.test(n);
-    return { group: 'pendapatan', bucket: lainnya ? 'lainnya' : 'inti', field: null };
-  }
-  if (prefix >= 5) {
-    // Semua kode akun 5 ke atas dianggap Beban — sub-kategori (HPP, Pajak,
-    // Beban Lain-lain di luar operasional, atau Beban Operasional) dikenali
-    // dari kata kunci pada nama akun, bukan dari nilai digit prefix-nya,
-    // supaya tetap cocok walau perusahaan memakai kode 5/6/7/8/9/... untuk
-    // kelompok beban yang berbeda-beda.
-    const hpp = /(hpp|harga pokok penjualan)/.test(n);
-    const pajak = /pajak/.test(n);
-    const nonOperating = /(bunga|lain[- ]?lain|lainnya)/.test(n);
-    let bucket = 'operasional';
-    if (hpp) bucket = 'hpp';
-    else if (pajak) bucket = 'pajak';
-    else if (nonOperating) bucket = 'lainnya';
-    return { group: 'beban', bucket, field: null };
-  }
+  // Laba Rugi: klasifikasi murni dari digit pertama kode akun, bukan dari
+  // kata kunci nama akun — supaya hasilnya konsisten & dapat diprediksi:
+  //   4 = Pendapatan          7 = Pendapatan Lainnya
+  //   5 = HPP                 8 = Beban Lainnya
+  //   6 = Beban Operasional   9 = Beban Pajak (Pajak Penghasilan)
+  if (prefix === 4) return { group: 'pendapatan', bucket: 'inti', field: null };
+  if (prefix === 5) return { group: 'beban', bucket: 'hpp', field: null };
+  if (prefix === 6) return { group: 'beban', bucket: 'operasional', field: null };
+  if (prefix === 7) return { group: 'pendapatan', bucket: 'lainnya', field: null };
+  if (prefix === 8) return { group: 'beban', bucket: 'lainnya', field: null };
+  if (prefix === 9) return { group: 'beban', bucket: 'pajak', field: null };
   return { group: null, bucket: null, field: null };
 }
 
@@ -807,9 +802,10 @@ function deriveStatementsFromLedgerAccounts(accounts) {
     totalEkuitas: 0
   };
   const labaRugi = {
-    pendapatan: 0, pendapatanLainnya: 0, hpp: 0, labaKotor: 0,
-    bebanOperasional: 0, labaOperasional: 0, bebanLainnya: 0,
-    labaSebelumPajak: 0, pajakPenghasilan: 0, labaBersih: 0
+    pendapatan: 0, hpp: 0, labaKotor: 0,
+    bebanOperasional: 0, labaOperasional: 0,
+    pendapatanLainnya: 0, bebanLainnya: 0, pajakPenghasilan: 0,
+    labaBersih: 0
   };
   // Melacak akun-akun buku besar mana saja yang menyusun tiap baris
   // Neraca/Laba Rugi di atas — dipakai di pratinjau impor supaya pengguna
@@ -862,12 +858,11 @@ function deriveStatementsFromLedgerAccounts(accounts) {
 
   labaRugi.labaKotor = labaRugi.pendapatan - labaRugi.hpp;
   labaRugi.labaOperasional = labaRugi.labaKotor - labaRugi.bebanOperasional;
-  labaRugi.labaSebelumPajak = labaRugi.labaOperasional + labaRugi.pendapatanLainnya - labaRugi.bebanLainnya;
-  labaRugi.labaBersih = labaRugi.labaSebelumPajak - labaRugi.pajakPenghasilan;
+  labaRugi.labaBersih = labaRugi.labaOperasional + labaRugi.pendapatanLainnya - labaRugi.bebanLainnya - labaRugi.pajakPenghasilan;
 
   const warnings = [];
   if (unrecognized.length) {
-    warnings.push(`Kode akun berikut tidak dikenali kategorinya sehingga dilewati dari Neraca/Laba Rugi (kode akun harus diawali 1-8): ${unrecognized.join(', ')}.`);
+    warnings.push(`Kode akun berikut tidak dikenali kategorinya sehingga dilewati dari Neraca/Laba Rugi (kode akun harus diawali 1-9): ${unrecognized.join(', ')}.`);
   }
 
   return { neraca, labaRugi, warnings, contributions };
@@ -1829,7 +1824,7 @@ function ledgerTable(accounts) {
       ${groups.map(g => {
         const total = g.accounts.reduce((sum, a) => sum + (a.saldoAkhir || 0), 0);
         return `
-        <details class="ledger-group" open style="border-bottom:1px solid var(--border);">
+        <details class="ledger-group" style="border-bottom:1px solid var(--border);">
           <summary style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 2px;cursor:pointer;font-weight:600;font-size:13.5px;">
             <span>${g.label}<span style="font-weight:400;color:var(--slate-light);margin-left:6px;">(${g.accounts.length} akun)</span></span>
             <span class="num" style="font-family:var(--font-mono);">${formatIDR(total)}</span>
@@ -1855,8 +1850,7 @@ const NERACA_FORMULAS = {
 const LABA_RUGI_FORMULAS = {
   labaKotor: (l) => `Pendapatan (${formatIDR(l.pendapatan)}) − HPP (${formatIDR(l.hpp)})`,
   labaOperasional: (l) => `Laba Kotor (${formatIDR(l.labaKotor)}) − Beban Operasional (${formatIDR(l.bebanOperasional)})`,
-  labaSebelumPajak: (l) => `Laba Operasional (${formatIDR(l.labaOperasional)}) + Pendapatan Lainnya (${formatIDR(l.pendapatanLainnya)}) − Beban Lainnya (${formatIDR(l.bebanLainnya)})`,
-  labaBersih: (l) => `Laba Sebelum Pajak (${formatIDR(l.labaSebelumPajak)}) − Pajak Penghasilan (${formatIDR(l.pajakPenghasilan)})`
+  labaBersih: (l) => `Laba Operasional (${formatIDR(l.labaOperasional)}) + Pendapatan Lainnya (${formatIDR(l.pendapatanLainnya)}) − Beban Lainnya (${formatIDR(l.bebanLainnya)}) − Beban Pajak (${formatIDR(l.pajakPenghasilan)})`
 };
 
 // Data klasifikasi/akun yang sedang tampil di layar (pratinjau impor ATAU
@@ -1912,17 +1906,21 @@ document.addEventListener('click', (e) => {
   }
 });
 
-function derivedFieldRow(key, value, contributions, formulaFn, formulaData) {
+function derivedFieldRow(key, value, contributions, formulaFn, formulaData, labelOverride) {
   const list = contributions && contributions[key];
   let body;
   if (list && list.length) {
-    body = `
-      <div class="table-wrap" style="margin-top:4px;">
-        <table>
-          <thead><tr><th>Kode</th><th>Nama Akun</th><th class="num">Saldo Awal</th><th class="num">Saldo Akhir</th><th class="num">Kontribusi</th></tr></thead>
-          <tbody>${list.map((c, i) => `<tr class="bb-akun-row" data-field="${key}" data-idx="${i}" title="Klik untuk melihat rincian transaksi"><td>${c.code || '–'}</td><td>${c.name || '–'}</td><td class="num">${formatIDR(c.saldoAwal)}</td><td class="num">${formatIDR(c.saldoAkhir)}</td><td class="num">${formatIDR(c.amount)}</td></tr>`).join('')}</tbody>
-        </table>
-      </div>`;
+    body = list.map((c, i) => {
+      const codeTag = c.code
+        ? `<span style="font-family:var(--font-mono);font-size:11px;color:var(--slate-light);margin-right:7px;">${c.code}</span>`
+        : '';
+      return `
+        <div class="bb-akun-row" data-field="${key}" data-idx="${i}" title="Klik untuk melihat rincian transaksi"
+             style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;">
+          <span style="color:var(--ink);">${codeTag}${c.name || '(tanpa nama)'}</span>
+          <span class="num" style="font-family:var(--font-mono);flex-shrink:0;">${formatIDR(c.amount)}</span>
+        </div>`;
+    }).join('');
   } else if (formulaFn) {
     body = `<div class="ratio-note" style="margin-top:4px;">${formulaFn(formulaData)}</div>`;
   } else {
@@ -1931,17 +1929,24 @@ function derivedFieldRow(key, value, contributions, formulaFn, formulaData) {
   return `
     <details style="border-bottom:1px solid var(--border);">
       <summary style="display:flex;justify-content:space-between;align-items:center;padding:7px 2px;cursor:pointer;">
-        <span>${humanizeKey(key)}</span><span class="num" style="font-family:var(--font-mono);">${formatIDR(value)}</span>
+        <span>${labelOverride || humanizeKey(key)}</span><span class="num" style="font-family:var(--font-mono);">${formatIDR(value)}</span>
       </summary>
       <div style="padding:2px 2px 12px 12px;">${body}</div>
     </details>`;
 }
 
-function derivedSectionDetails(obj, contributions, formulas) {
+// Label khusus Laba Rugi hasil turunan Buku Besar — dipakai untuk
+// menimpa label bawaan (dari nama field) saat istilahnya perlu berbeda
+// dari nama field internal (mis. field "pajakPenghasilan" ditampilkan
+// sebagai "Beban Pajak" agar konsisten dengan susunan Pendapatan/HPP/
+// Beban Operasional/Pendapatan Lainnya/Beban Lainnya/Beban Pajak).
+const LABA_RUGI_LABELS = { pajakPenghasilan: 'Beban Pajak' };
+
+function derivedSectionDetails(obj, contributions, formulas, labels) {
   activeContributions = contributions;
   const entries = Object.entries(obj || {});
   if (entries.length === 0) return `<div style="color:var(--slate-light);font-size:13px;">Tidak ada data.</div>`;
-  return entries.map(([k, v]) => derivedFieldRow(k, v, contributions, formulas[k], obj)).join('');
+  return entries.map(([k, v]) => derivedFieldRow(k, v, contributions, formulas[k], obj, labels && labels[k])).join('');
 }
 
 // Pengelompokan khusus untuk pratinjau Neraca hasil turunan Buku Besar —
@@ -2048,18 +2053,11 @@ function paintCompanyDetail(statements) {
           <span class="badge gold">Laba Rugi</span>
           ${bbContribs ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik baris untuk rincian akun</span>' : ''}
         </div>
-        ${bbContribs ? derivedSectionDetails(selected.labaRugi, bbContribs, LABA_RUGI_FORMULAS) : keyValueTable(selected.labaRugi)}
+        ${bbContribs ? derivedSectionDetails(selected.labaRugi, bbContribs, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS) : keyValueTable(selected.labaRugi)}
       </div>
       <div class="card">
         <div class="section-title"><span class="badge blue">Arus Kas</span></div>
         ${keyValueTable(selected.arusKas)}
-      </div>
-      <div class="card">
-        <div class="section-title">
-          <span class="badge purple">Buku Besar</span>
-          ${hasSectionData(selected.bukuBesar) ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik baris untuk rincian transaksi</span>' : ''}
-        </div>
-        ${ledgerTable(selected.bukuBesar)}
       </div>
     </div>
 
@@ -2201,7 +2199,7 @@ function updateDropzoneAndTemplate() {
     if (hint) hint.textContent = `Unggah laporan ${type.label} apa adanya, hasil export langsung dari software akuntansi Anda — kode & nama akun boleh berbeda-beda per perusahaan, sistem membacanya dari struktur laporan (akun header, sub-akun, dan baris total).`;
     if (templateBtn) templateBtn.style.display = 'none';
   } else if (type.mode === 'bukuBesarLedger') {
-    if (hint) hint.textContent = `Unggah Buku Besar apa adanya, hasil export langsung dari software akuntansi Anda (per akun: Saldo Awal, daftar transaksi, Ending Balance). Neraca & Laba Rugi periode ini akan dihitung & diisi otomatis dari kode akun (1=Aset, 2=Kewajiban, 3=Ekuitas, 4=Pendapatan, 5/6=Beban).`;
+    if (hint) hint.textContent = `Unggah Buku Besar apa adanya, hasil export langsung dari software akuntansi Anda (per akun: Saldo Awal, daftar transaksi, Ending Balance). Neraca & Laba Rugi periode ini akan dihitung & diisi otomatis dari kode akun (1=Aset, 2=Kewajiban, 3=Ekuitas, 4=Pendapatan, 5=HPP, 6=Beban Operasional, 7=Pendapatan Lainnya, 8=Beban Lainnya, 9=Beban Pajak).`;
     if (templateBtn) templateBtn.style.display = 'none';
   } else {
     if (hint) hint.textContent = `File harus berisi sheet "Info" dan sheet data sesuai jenis yang dipilih di atas`;
@@ -2281,10 +2279,7 @@ async function handleImportFile(file) {
         <div class="card" style="padding:2px 12px;">${derivedNeracaGrouped(result.data.neraca, result.data.contributions)}</div>
         <div class="section-title" style="margin-top:16px;font-size:14px;">Laba Rugi (diturunkan otomatis — mutasi periode)</div>
         <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu baris untuk melihat akun buku besar yang menyusun angka tersebut.</div>
-        <div class="card" style="padding:2px 12px;">${derivedSectionDetails(result.data.labaRugi, result.data.contributions, LABA_RUGI_FORMULAS)}</div>
-        <div class="section-title" style="margin-top:16px;font-size:14px;">Rincian Akun Buku Besar (${result.data.ledger.length} akun)</div>
-        <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu baris untuk melihat rincian transaksi akun tersebut.</div>
-        ${ledgerTable(result.data.ledger)}
+        <div class="card" style="padding:2px 12px;">${derivedSectionDetails(result.data.labaRugi, result.data.contributions, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS)}</div>
       ` : `
         <table style="margin-top:10px;">
           <tbody>${Object.entries(result.data).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('') || '<tr><td colspan="2">Tidak ada data terbaca</td></tr>'}</tbody>
