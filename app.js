@@ -20,88 +20,6 @@ const PERIOD_LABELS = {
   tahunan: 'Tahunan'
 };
 
-// Struktur pengelompokan Neraca untuk tampilan Pratinjau Data (hanya untuk
-// tampilan; tidak mengubah format file template impor). Setiap grup punya
-// daftar akun rincian lalu baris total di akhir grup.
-const NERACA_STRUCTURE = [
-  {
-    group: 'Aset Lancar',
-    items: [
-      { key: 'piutangUsaha', label: 'Piutang Usaha' },
-      { key: 'piutangLain', label: 'Piutang Lain' },
-      { key: 'biayaDibayarDiMuka', label: 'Biaya Dibayar Di Muka' },
-      { key: 'pajakDibayarDiMuka', label: 'Pajak Dibayar Di Muka' },
-      { key: 'sewaDibayarDiMuka', label: 'Sewa Dibayar Di Muka' }
-    ],
-    total: { key: 'totalAsetLancar', label: 'Total Aset Lancar' }
-  },
-  {
-    group: 'Aset Tidak Lancar',
-    items: [
-      { key: 'asetTetap', label: 'Aset Tetap' },
-      { key: 'asetTakBerwujud', label: 'Aset Tak Berwujud' },
-      { key: 'investasiJangkaPanjang', label: 'Investasi Jangka Panjang' }
-    ],
-    total: { key: 'totalAsetTidakLancar', label: 'Total Aset Tidak Lancar' }
-  },
-  {
-    group: 'Liabilitas',
-    items: [
-      { key: 'hutangUsaha', label: 'Hutang Usaha' },
-      { key: 'hutangPendanaan', label: 'Hutang Pendanaan' },
-      { key: 'hutangDireksi', label: 'Hutang Direksi' },
-      { key: 'hutangAset', label: 'Hutang Aset' }
-    ],
-    total: { key: 'totalKewajiban', label: 'Total Liabilitas' }
-  },
-  {
-    group: 'Ekuitas',
-    items: [
-      { key: 'modal', label: 'Modal' }
-    ],
-    total: { key: 'totalEkuitas', label: 'Total Ekuitas' }
-  }
-];
-
-// Baris "Total Aset" ditampilkan tersendiri setelah kedua grup aset.
-const NERACA_GRAND_TOTAL_AFTER_GROUP = 'Aset Tidak Lancar';
-const NERACA_GRAND_TOTAL = { key: 'totalAset', label: 'Total Aset' };
-
-function renderNeracaPreview(neraca) {
-  const knownKeys = new Set();
-  NERACA_STRUCTURE.forEach(g => {
-    g.items.forEach(it => knownKeys.add(it.key));
-    knownKeys.add(g.total.key);
-  });
-  knownKeys.add(NERACA_GRAND_TOTAL.key);
-
-  let rows = '';
-  NERACA_STRUCTURE.forEach(g => {
-    rows += `<tr><td colspan="2" style="font-weight:600;color:var(--slate);padding-top:12px;">${g.group}</td></tr>`;
-    g.items.forEach(it => {
-      if (neraca[it.key] === undefined) return;
-      rows += `<tr><td>${it.label}</td><td class="num">${formatIDR(neraca[it.key])}</td></tr>`;
-    });
-    if (neraca[g.total.key] !== undefined) {
-      rows += `<tr style="font-weight:600;"><td>${g.total.label}</td><td class="num">${formatIDR(neraca[g.total.key])}</td></tr>`;
-    }
-    if (g.group === NERACA_GRAND_TOTAL_AFTER_GROUP && neraca[NERACA_GRAND_TOTAL.key] !== undefined) {
-      rows += `<tr style="font-weight:700;background:var(--teal-light);"><td>${NERACA_GRAND_TOTAL.label}</td><td class="num">${formatIDR(neraca[NERACA_GRAND_TOTAL.key])}</td></tr>`;
-    }
-  });
-
-  // Akun yang tidak dikenali strukturnya (jaga-jaga) ditampilkan di grup "Lainnya"
-  const leftover = Object.keys(neraca).filter(k => !knownKeys.has(k));
-  if (leftover.length) {
-    rows += `<tr><td colspan="2" style="font-weight:600;color:var(--slate);padding-top:12px;">Lainnya</td></tr>`;
-    leftover.forEach(k => {
-      rows += `<tr><td>${k}</td><td class="num">${formatIDR(neraca[k])}</td></tr>`;
-    });
-  }
-
-  return `<table style="margin-top:8px;">${rows || '<tr><td colspan="2">Tidak ada data terbaca</td></tr>'}</table>`;
-}
-
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid' },
   { id: 'companies', label: 'Perusahaan', icon: 'building' },
@@ -472,7 +390,8 @@ function renderImport() {
             ${state.companies.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
           </select>
         </div>
-        <div class="section-title" style="margin-top:20px;">2. Unggah File Excel</div>
+
+        <div class="section-title" style="margin-top:20px;">2. Unggah File Neraca &amp; Laba Rugi</div>
         <div class="dropzone" id="dropzone">
           ${icon('upload')}
           <div>Seret file .xlsx ke sini, atau klik untuk memilih</div>
@@ -480,6 +399,18 @@ function renderImport() {
         </div>
         <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none;">
         <a href="template/Template_Import_Neraca_LabaRugi.xlsx" download class="btn ghost" style="margin-top:14px;width:100%;justify-content:center;">Unduh Template Excel</a>
+
+        <div class="section-title" style="margin-top:20px;">3. Unggah File Buku Besar <span style="font-weight:400;color:var(--slate-light);font-size:12px;">(opsional)</span></div>
+        <div class="dropzone" id="dropzone-bb">
+          ${icon('upload')}
+          <div>Seret file .xlsx buku besar ke sini, atau klik untuk memilih</div>
+          <div style="font-size:11.5px;margin-top:6px;">Kolom: Klasifikasi, Kode Akun, Nama Akun, Tanggal, Keterangan, Debit, Kredit</div>
+        </div>
+        <input type="file" id="file-input-bb" accept=".xlsx,.xls" style="display:none;">
+        <div style="font-size:11.5px;color:var(--slate);margin-top:8px;line-height:1.5;">
+          Jika diunggah, saldo akhir tiap klasifikasi pada Neraca akan diturunkan otomatis dari
+          rincian akun &amp; transaksi buku besar ini, menimpa nilai yang sama pada file Neraca.
+        </div>
       </div>
       <div class="card" id="preview-panel">
         <div class="section-title">Pratinjau Data</div>
@@ -488,58 +419,180 @@ function renderImport() {
     </div>
   `;
 
-  const dropzone = document.getElementById('dropzone');
-  const fileInput = document.getElementById('file-input');
+  bindDropzone('dropzone', 'file-input', handleImportFile);
+  bindDropzone('dropzone-bb', 'file-input-bb', handleImportBukuBesarFile);
+}
+
+function bindDropzone(zoneId, inputId, handler) {
+  const dropzone = document.getElementById(zoneId);
+  const fileInput = document.getElementById(inputId);
   dropzone.addEventListener('click', () => fileInput.click());
   ['dragenter', 'dragover'].forEach(evt => dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('drag'); }));
   ['dragleave', 'drop'].forEach(evt => dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove('drag'); }));
-  dropzone.addEventListener('drop', (e) => { if (e.dataTransfer.files[0]) handleImportFile(e.dataTransfer.files[0]); });
-  fileInput.addEventListener('change', (e) => { if (e.target.files[0]) handleImportFile(e.target.files[0]); });
+  dropzone.addEventListener('drop', (e) => { if (e.dataTransfer.files[0]) handler(e.dataTransfer.files[0]); });
+  fileInput.addEventListener('change', (e) => { if (e.target.files[0]) handler(e.target.files[0]); });
 }
 
 let pendingImport = null;
+let pendingBukuBesar = null;
 
 async function handleImportFile(file) {
-  const panel = document.getElementById('preview-panel');
   try {
     const buffer = await file.arrayBuffer();
-    const result = parseFinancialExcel(buffer);
-    pendingImport = result;
-
-    const s = result.statement;
-    panel.innerHTML = `
-      <div class="section-title">Pratinjau Data</div>
-      <div style="font-size:13px;margin-bottom:10px;">
-        <strong>${result.companyName || '(nama tidak terbaca dari Info)'}</strong><br>
-        Periode: ${s.periodLabel} &middot; Jenis: ${PERIOD_LABELS[s.periodType]} &middot; Tahun: ${s.year}
-      </div>
-      ${result.warnings.length ? `<div class="ratio-note">${result.warnings.join('<br>')}</div>` : ''}
-      <div class="grid grid-2" style="margin-top:12px;">
-        <div>
-          <div class="badge teal">Neraca</div>
-          ${renderNeracaPreview(s.neraca)}
-        </div>
-        <div>
-          <div class="badge gold">Laba Rugi</div>
-          <table style="margin-top:8px;">
-            ${Object.entries(s.labaRugi).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('') || '<tr><td colspan="2">Tidak ada data terbaca</td></tr>'}
-          </table>
-        </div>
-      </div>
-      <button class="btn primary" id="confirm-import" style="margin-top:16px;width:100%;justify-content:center;">Simpan ke Sistem</button>
-    `;
-    document.getElementById('confirm-import').addEventListener('click', confirmImport);
+    pendingImport = parseFinancialExcel(buffer);
+    toast('File Neraca & Laba Rugi terbaca', 'success');
   } catch (err) {
-    panel.innerHTML = `<div class="section-title">Pratinjau Data</div><div class="auth-error">${err.message}</div>`;
+    pendingImport = null;
+    toast(err.message, 'error');
   }
+  renderImportPreview();
+}
+
+async function handleImportBukuBesarFile(file) {
+  try {
+    const buffer = await file.arrayBuffer();
+    pendingBukuBesar = parseBukuBesarExcel(buffer);
+    toast('File Buku Besar terbaca', 'success');
+  } catch (err) {
+    pendingBukuBesar = null;
+    toast(err.message, 'error');
+  }
+  renderImportPreview();
+}
+
+function renderImportPreview() {
+  const panel = document.getElementById('preview-panel');
+  if (!panel) return;
+
+  if (!pendingImport) {
+    panel.innerHTML = `<div class="section-title">Pratinjau Data</div><div style="color:var(--slate);font-size:13px;">Belum ada file dipilih.</div>`;
+    return;
+  }
+
+  const s = pendingImport.statement;
+  // Jika buku besar diunggah, saldo turunannya menimpa nilai pada Neraca
+  const neracaGabungan = pendingBukuBesar ? { ...s.neraca, ...pendingBukuBesar.neracaTurunan } : s.neraca;
+  const semuaWarning = [...pendingImport.warnings, ...(pendingBukuBesar ? pendingBukuBesar.warnings : [])];
+
+  panel.innerHTML = `
+    <div class="section-title">Pratinjau Data</div>
+    <div style="font-size:13px;margin-bottom:10px;">
+      <strong>${pendingImport.companyName || '(nama tidak terbaca dari Info)'}</strong><br>
+      Periode: ${s.periodLabel} &middot; Jenis: ${PERIOD_LABELS[s.periodType]} &middot; Tahun: ${s.year}
+    </div>
+    ${pendingBukuBesar ? `<div class="badge teal">Buku Besar</div>` : ''}
+    ${semuaWarning.length ? `<div class="ratio-note" style="margin-top:10px;">${semuaWarning.join('<br>')}</div>` : ''}
+
+    <div class="section-block" style="margin-top:16px;">
+      <div class="section-title" style="font-size:14px;margin-bottom:2px;">
+        Neraca ${pendingBukuBesar ? '(diturunkan otomatis &mdash; saldo akhir periode)' : ''}
+      </div>
+      ${pendingBukuBesar
+        ? `<div style="font-size:11.5px;color:var(--slate);margin-bottom:10px;">Klik salah satu baris untuk melihat akun buku besar yang menyusun angka tersebut.</div>
+           <div id="neraca-tree"></div>`
+        : `<table style="margin-top:8px;">
+             ${Object.entries(neracaGabungan).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('') || '<tr><td colspan="2">Tidak ada data terbaca</td></tr>'}
+           </table>`}
+    </div>
+
+    <div class="section-block">
+      <div class="badge gold">Laba Rugi</div>
+      <table style="margin-top:8px;">
+        ${Object.entries(s.labaRugi).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('') || '<tr><td colspan="2">Tidak ada data terbaca</td></tr>'}
+      </table>
+    </div>
+
+    <button class="btn primary" id="confirm-import" style="margin-top:6px;width:100%;justify-content:center;">Simpan ke Sistem</button>
+  `;
+
+  if (pendingBukuBesar) renderNeracaTree(document.getElementById('neraca-tree'), pendingBukuBesar.groups);
+  document.getElementById('confirm-import').addEventListener('click', confirmImport);
+}
+
+// ---------- Pratinjau pohon Buku Besar (Neraca) ----------
+function renderNeracaTree(container, groups) {
+  container.innerHTML = groups.map((g, gi) => `
+    <div class="bb-group">
+      <div class="bb-group-label">${g.group}</div>
+      ${g.klasifikasi.map((k, ki) => `
+        <div class="bb-klasifikasi">
+          <div class="bb-klasifikasi-row" data-g="${gi}" data-k="${ki}">
+            <span>${k.label}</span>
+            <span class="num">${formatIDR(k.totalSaldo)}</span>
+          </div>
+          <div class="bb-akun-list" id="bb-akun-${gi}-${ki}" style="display:none;">
+            ${k.akun.map((a, ai) => `
+              <div class="bb-akun-row" data-g="${gi}" data-k="${ki}" data-a="${ai}">
+                <span>${a.kode ? `<span class="bb-kode">${a.kode}</span> ` : ''}${a.nama}${a.transaksi.length === 0 ? ' <span style="color:var(--slate-light);">(Archived)</span>' : ''}</span>
+                <span class="num">${formatIDR(a.saldo)}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+
+  container.querySelectorAll('.bb-klasifikasi-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const list = document.getElementById(`bb-akun-${row.dataset.g}-${row.dataset.k}`);
+      const open = list.style.display !== 'none';
+      list.style.display = open ? 'none' : 'block';
+      row.classList.toggle('open', !open);
+    });
+  });
+
+  container.querySelectorAll('.bb-akun-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const g = groups[row.dataset.g];
+      const k = g.klasifikasi[row.dataset.k];
+      const a = k.akun[row.dataset.a];
+      openTransaksiModal(k, a);
+    });
+  });
+}
+
+function openTransaksiModal(klasifikasi, akun) {
+  const backdrop = el(`<div class="modal-backdrop">
+    <div class="modal" style="width:560px;">
+      <h3>${akun.kode ? akun.kode + ' &mdash; ' : ''}${akun.nama}</h3>
+      <div class="modal-sub">${klasifikasi.label} &middot; Saldo akhir: <strong>${formatIDR(akun.saldo)}</strong></div>
+      <div class="table-wrap" style="max-height:360px;overflow-y:auto;">
+        <table>
+          <thead><tr><th>Tanggal</th><th>Keterangan</th><th class="num">Debit</th><th class="num">Kredit</th></tr></thead>
+          <tbody>
+            ${akun.transaksi.length
+              ? akun.transaksi.map(t => `<tr>
+                  <td>${t.tanggal || '–'}</td>
+                  <td>${t.keterangan || '–'}</td>
+                  <td class="num">${t.debit ? formatIDR(t.debit) : '–'}</td>
+                  <td class="num">${t.kredit ? formatIDR(t.kredit) : '–'}</td>
+                </tr>`).join('')
+              : `<tr><td colspan="4" style="text-align:center;color:var(--slate);">Tidak ada rincian transaksi untuk akun ini.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-actions"><button class="btn ghost" id="close-modal">Tutup</button></div>
+    </div>
+  </div>`);
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#close-modal').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
 }
 
 async function confirmImport() {
   const companyId = document.getElementById('import-company').value;
   if (!pendingImport) return;
-  await DB.saveStatement(companyId, pendingImport.statement);
+  const statement = { ...pendingImport.statement };
+  if (pendingBukuBesar) {
+    statement.neraca = { ...statement.neraca, ...pendingBukuBesar.neracaTurunan };
+    statement.bukuBesar = pendingBukuBesar.groups;
+  }
+  await DB.saveStatement(companyId, statement);
   toast('Data laporan keuangan berhasil disimpan', 'success');
   pendingImport = null;
+  pendingBukuBesar = null;
   renderImport();
 }
 

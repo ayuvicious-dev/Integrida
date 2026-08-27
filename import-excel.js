@@ -7,27 +7,23 @@
 // Kunci akun standar yang dikenali sistem (nama akun di Excel dicocokkan
 // tanpa memandang huruf besar/kecil & spasi berlebih)
 const AKUN_NERACA = {
-  // Aset Lancar
+  'kas dan setara kas': 'kasSetaraKas',
   'piutang usaha': 'piutangUsaha',
-  'piutang lain': 'piutangLain',
-  'biaya dibayar di muka': 'biayaDibayarDiMuka',
-  'pajak dibayar di muka': 'pajakDibayarDiMuka',
-  'sewa dibayar di muka': 'sewaDibayarDiMuka',
+  'persediaan': 'persediaan',
+  'aset lancar lainnya': 'asetLancarLainnya',
   'total aset lancar': 'totalAsetLancar',
-  // Aset Tidak Lancar
   'aset tetap': 'asetTetap',
-  'aset tak berwujud': 'asetTakBerwujud',
-  'investasi jangka panjang': 'investasiJangkaPanjang',
+  'aset tidak lancar lainnya': 'asetTidakLancarLainnya',
   'total aset tidak lancar': 'totalAsetTidakLancar',
   'total aset': 'totalAset',
-  // Liabilitas (satu kategori, tidak dipisah lancar/jangka panjang)
-  'hutang usaha': 'hutangUsaha',
-  'hutang pendanaan': 'hutangPendanaan',
-  'hutang direksi': 'hutangDireksi',
-  'hutang aset': 'hutangAset',
-  'total liabilitas': 'totalKewajiban',
-  // Ekuitas
-  'modal': 'modal',
+  'utang usaha': 'utangUsaha',
+  'utang jangka pendek lainnya': 'utangJangkaPendekLainnya',
+  'total kewajiban lancar': 'totalKewajibanLancar',
+  'utang jangka panjang': 'utangJangkaPanjang',
+  'total kewajiban jangka panjang': 'totalKewajibanJangkaPanjang',
+  'total kewajiban': 'totalKewajiban',
+  'modal saham': 'modalSaham',
+  'laba ditahan': 'labaDitahan',
   'total ekuitas': 'totalEkuitas'
 };
 
@@ -46,6 +42,190 @@ const AKUN_LABA_RUGI = {
 
 function normalizeKey(s) {
   return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+// =============================================================
+// BUKU BESAR -> label klasifikasi standar (harus cocok dengan nama
+// akun di AKUN_NERACA di atas) & pengelompokan ke bagian Neraca.
+// Label di kolom "Klasifikasi" pada Excel Buku Besar dicocokkan ke
+// sini tanpa memandang huruf besar/kecil & spasi berlebih.
+// =============================================================
+const KLASIFIKASI_LABEL = {
+  kasSetaraKas: 'Kas Setara Kas',
+  piutangUsaha: 'Piutang Usaha',
+  persediaan: 'Persediaan',
+  asetLancarLainnya: 'Aset Lancar Lainnya',
+  asetTetap: 'Aset Tetap',
+  asetTidakLancarLainnya: 'Aset Tidak Lancar Lainnya',
+  utangUsaha: 'Utang Usaha',
+  utangJangkaPendekLainnya: 'Utang Jangka Pendek Lainnya',
+  utangJangkaPanjang: 'Utang Jangka Panjang',
+  modalSaham: 'Modal Saham',
+  labaDitahan: 'Laba Ditahan'
+};
+
+const KLASIFIKASI_KE_GROUP = {
+  kasSetaraKas: 'ASET LANCAR',
+  piutangUsaha: 'ASET LANCAR',
+  persediaan: 'ASET LANCAR',
+  asetLancarLainnya: 'ASET LANCAR',
+  asetTetap: 'ASET TIDAK LANCAR',
+  asetTidakLancarLainnya: 'ASET TIDAK LANCAR',
+  utangUsaha: 'LIABILITAS LANCAR',
+  utangJangkaPendekLainnya: 'LIABILITAS LANCAR',
+  utangJangkaPanjang: 'LIABILITAS JANGKA PANJANG',
+  modalSaham: 'EKUITAS',
+  labaDitahan: 'EKUITAS'
+};
+
+const GROUP_ORDER = ['ASET LANCAR', 'ASET TIDAK LANCAR', 'LIABILITAS LANCAR', 'LIABILITAS JANGKA PANJANG', 'EKUITAS', 'LAINNYA'];
+
+function resolveKlasifikasiKey(label) {
+  const norm = normalizeKey(label);
+  const found = Object.entries(KLASIFIKASI_LABEL).find(([, v]) => normalizeKey(v) === norm);
+  return found ? found[0] : null;
+}
+
+function formatTanggal(v) {
+  if (!v) return '';
+  if (v instanceof Date && !isNaN(v)) return v.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+  return String(v).trim();
+}
+
+function sumGroup(klasifikasiMap, groupName) {
+  return Object.values(klasifikasiMap)
+    .filter(k => k.group === groupName)
+    .reduce((sum, k) => sum + k.totalSaldo, 0);
+}
+
+/**
+ * Parse file Excel Buku Besar (ArrayBuffer) menjadi struktur pohon:
+ * grup (bagian Neraca) -> klasifikasi akun -> sub-akun -> daftar transaksi.
+ * Sheet yang dibaca: sheet pertama yang namanya mengandung "buku besar",
+ * atau sheet pertama jika tidak ditemukan.
+ *
+ * Kolom yang wajib ada di baris header (baris pertama):
+ * Klasifikasi | Kode Akun | Nama Akun | Tanggal | Keterangan | Debit | Kredit
+ */
+function parseBukuBesarExcel(arrayBuffer) {
+  const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+  const sheetNames = workbook.SheetNames.map(n => n.toLowerCase());
+  const bbIdx = sheetNames.findIndex(n => n.includes('buku besar'));
+  const bbName = workbook.SheetNames[bbIdx >= 0 ? bbIdx : 0];
+
+  if (!bbName) {
+    throw new Error('File Excel tidak memiliki sheet yang bisa dibaca sebagai Buku Besar.');
+  }
+
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[bbName], { header: 1, defval: '' });
+  if (rows.length < 2) {
+    throw new Error('Sheet Buku Besar kosong atau tidak memiliki baris data.');
+  }
+
+  const header = rows[0].map(h => normalizeKey(h));
+  const idx = {
+    klasifikasi: header.indexOf('klasifikasi'),
+    kode: header.indexOf('kode akun'),
+    nama: header.indexOf('nama akun'),
+    tanggal: header.indexOf('tanggal'),
+    keterangan: header.indexOf('keterangan'),
+    debit: header.indexOf('debit'),
+    kredit: header.indexOf('kredit')
+  };
+  const wajib = ['klasifikasi', 'kode', 'nama', 'debit', 'kredit'];
+  if (wajib.some(k => idx[k] === -1)) {
+    throw new Error('Sheet Buku Besar harus memiliki kolom: Klasifikasi, Kode Akun, Nama Akun, Tanggal, Keterangan, Debit, Kredit. Gunakan template yang disediakan.');
+  }
+
+  const accounts = {}; // kode|nama -> { kode, nama, klasifikasiKey, klasifikasiLabel, transaksi:[], saldo }
+  const unrecognizedKlasifikasi = new Set();
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.every(c => c === '')) continue;
+
+    const kode = String(row[idx.kode] || '').trim();
+    const nama = String(row[idx.nama] || '').trim();
+    if (!kode && !nama) continue;
+
+    const debit = Number(String(row[idx.debit]).replace(/[^0-9.-]/g, '')) || 0;
+    const kredit = Number(String(row[idx.kredit]).replace(/[^0-9.-]/g, '')) || 0;
+    const tanggal = idx.tanggal >= 0 ? formatTanggal(row[idx.tanggal]) : '';
+    const keterangan = idx.keterangan >= 0 ? String(row[idx.keterangan] || '').trim() : '';
+
+    const klasifikasiRaw = row[idx.klasifikasi];
+    const klasifikasiKey = resolveKlasifikasiKey(klasifikasiRaw);
+    if (!klasifikasiKey && klasifikasiRaw) unrecognizedKlasifikasi.add(String(klasifikasiRaw).trim());
+
+    const accKey = `${kode}||${nama}`;
+    if (!accounts[accKey]) {
+      accounts[accKey] = {
+        kode,
+        nama,
+        klasifikasiKey: klasifikasiKey || 'lainnya',
+        klasifikasiLabel: klasifikasiKey ? KLASIFIKASI_LABEL[klasifikasiKey] : (String(klasifikasiRaw || '').trim() || 'Lainnya'),
+        transaksi: [],
+        saldo: 0
+      };
+    }
+    if (tanggal || keterangan || debit || kredit) {
+      accounts[accKey].transaksi.push({ tanggal, keterangan, debit, kredit });
+    }
+    accounts[accKey].saldo += debit - kredit;
+  }
+
+  // Susun per klasifikasi
+  const klasifikasiMap = {};
+  Object.values(accounts).forEach(acc => {
+    const key = acc.klasifikasiKey;
+    if (!klasifikasiMap[key]) {
+      klasifikasiMap[key] = {
+        key,
+        label: acc.klasifikasiLabel,
+        group: KLASIFIKASI_KE_GROUP[key] || 'LAINNYA',
+        totalSaldo: 0,
+        akun: []
+      };
+    }
+    klasifikasiMap[key].akun.push(acc);
+    klasifikasiMap[key].totalSaldo += acc.saldo;
+  });
+  Object.values(klasifikasiMap).forEach(k => {
+    k.akun.sort((a, b) => a.kode.localeCompare(b.kode, 'id'));
+  });
+
+  // Totals turunan untuk menimpa/melengkapi statement.neraca
+  const neracaTurunan = {};
+  Object.values(klasifikasiMap).forEach(k => {
+    if (k.key !== 'lainnya') neracaTurunan[k.key] = k.totalSaldo;
+  });
+  const totalAsetLancar = sumGroup(klasifikasiMap, 'ASET LANCAR');
+  const totalAsetTidakLancar = sumGroup(klasifikasiMap, 'ASET TIDAK LANCAR');
+  const totalKewajibanLancar = sumGroup(klasifikasiMap, 'LIABILITAS LANCAR');
+  const totalKewajibanJangkaPanjang = sumGroup(klasifikasiMap, 'LIABILITAS JANGKA PANJANG');
+  const totalEkuitas = sumGroup(klasifikasiMap, 'EKUITAS');
+
+  neracaTurunan.totalAsetLancar = totalAsetLancar;
+  neracaTurunan.totalAsetTidakLancar = totalAsetTidakLancar;
+  neracaTurunan.totalAset = totalAsetLancar + totalAsetTidakLancar;
+  neracaTurunan.totalKewajibanLancar = totalKewajibanLancar;
+  neracaTurunan.totalKewajibanJangkaPanjang = totalKewajibanJangkaPanjang;
+  neracaTurunan.totalKewajiban = totalKewajibanLancar + totalKewajibanJangkaPanjang;
+  neracaTurunan.totalEkuitas = totalEkuitas;
+
+  // Kelompokkan per grup, urut sesuai GROUP_ORDER, untuk memudahkan render
+  const groups = GROUP_ORDER
+    .map(g => ({
+      group: g,
+      klasifikasi: Object.values(klasifikasiMap).filter(k => k.group === g)
+    }))
+    .filter(g => g.klasifikasi.length > 0);
+
+  return {
+    groups,          // [{ group, klasifikasi: [{key,label,totalSaldo,akun:[{kode,nama,saldo,transaksi}]}] }]
+    neracaTurunan,
+    warnings: [...unrecognizedKlasifikasi].map(k => `Klasifikasi tidak dikenali dan dikelompokkan sebagai "Lainnya": "${k}"`)
+  };
 }
 
 function sheetToKeyValue(sheet, dictionary) {
