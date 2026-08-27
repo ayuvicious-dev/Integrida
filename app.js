@@ -10,77 +10,8 @@ const state = {
   comparePeriodType: 'tahunan',
   ratioCompanyId: null,
   ratioStatementId: null,
-  chartInstances: {},
-  unsubCompanies: null,   // listener realtime daftar perusahaan (aktif sepanjang sesi)
-  unsubData: null,        // listener realtime data view yang sedang aktif (dashboard/compare/ratios)
-  importCompanyId: null,
-  importType: 'neraca'    // jenis data yang sedang dipilih di halaman Impor Data
+  chartInstances: {}
 };
-
-// =============================================================
-// SYNC — indikator status sinkronisasi lintas perangkat
-// =============================================================
-const SYNC_META = {
-  connecting: { dot: '#9aa3b2', label: 'Menghubungkan…', pulse: true },
-  synced:     { dot: '#1B7A6B', label: 'Tersinkron',      pulse: false },
-  syncing:    { dot: '#C08A3E', label: 'Menyinkronkan…',  pulse: true },
-  offline:    { dot: '#B5453B', label: 'Offline',         pulse: false }
-};
-
-const Sync = {
-  sources: {},          // key -> { pendingWrites, fromCache }
-  status: 'connecting',
-  lastSyncedAt: null,
-
-  report(key, meta) { this.sources[key] = meta; this.recompute(); },
-  clear(key) { delete this.sources[key]; this.recompute(); },
-  reset() { this.sources = {}; this.status = 'connecting'; this.lastSyncedAt = null; renderSyncBadge(); },
-
-  recompute() {
-    const metas = Object.values(this.sources);
-    if (!navigator.onLine) {
-      this.status = 'offline';
-    } else if (metas.some(m => m.pendingWrites)) {
-      this.status = 'syncing';
-    } else if (metas.length > 0 && metas.every(m => m.fromCache)) {
-      // Semua listener masih menyajikan data dari cache lokal
-      // (misal koneksi ke server Firestore belum berhasil).
-      this.status = 'offline';
-    } else if (metas.length > 0) {
-      this.status = 'synced';
-      this.lastSyncedAt = new Date();
-    }
-    renderSyncBadge();
-  }
-};
-
-window.addEventListener('online', () => Sync.recompute());
-window.addEventListener('offline', () => Sync.recompute());
-
-function renderSyncBadge() {
-  const badge = document.getElementById('sync-badge');
-  if (!badge) return;
-  const m = SYNC_META[Sync.status] || SYNC_META.connecting;
-  const timeStr = Sync.lastSyncedAt
-    ? Sync.lastSyncedAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-    : '';
-  badge.className = 'sync-badge' + (m.pulse ? ' pulse' : '');
-  badge.title = Sync.status === 'synced'
-    ? `Semua data tersinkron ke server pukul ${timeStr}. Perangkat lain yang login dengan akun yang sama akan melihat data yang sama.`
-    : Sync.status === 'syncing'
-      ? 'Sedang mengirim perubahan ke server…'
-      : Sync.status === 'offline'
-        ? 'Tidak ada koneksi ke server. Perubahan disimpan secara lokal dan akan disinkronkan otomatis saat koneksi kembali.'
-        : 'Menghubungkan ke server…';
-  badge.innerHTML = `<span class="sync-dot" style="background:${m.dot}"></span><span>${m.label}</span>${Sync.status === 'synced' && timeStr ? `<span class="sync-time">${timeStr}</span>` : ''}`;
-}
-
-// Menghentikan listener realtime data view yang sedang aktif
-// (dipanggil sebelum pindah menu / berganti pilihan perusahaan).
-function teardownActiveDataListener() {
-  if (state.unsubData) { state.unsubData(); state.unsubData = null; }
-  Sync.clear('statements');
-}
 
 const PERIOD_LABELS = {
   bulanan: 'Bulanan',
@@ -88,6 +19,88 @@ const PERIOD_LABELS = {
   semester: 'Semester',
   tahunan: 'Tahunan'
 };
+
+// Struktur pengelompokan Neraca untuk tampilan Pratinjau Data (hanya untuk
+// tampilan; tidak mengubah format file template impor). Setiap grup punya
+// daftar akun rincian lalu baris total di akhir grup.
+const NERACA_STRUCTURE = [
+  {
+    group: 'Aset Lancar',
+    items: [
+      { key: 'piutangUsaha', label: 'Piutang Usaha' },
+      { key: 'piutangLain', label: 'Piutang Lain' },
+      { key: 'biayaDibayarDiMuka', label: 'Biaya Dibayar Di Muka' },
+      { key: 'pajakDibayarDiMuka', label: 'Pajak Dibayar Di Muka' },
+      { key: 'sewaDibayarDiMuka', label: 'Sewa Dibayar Di Muka' }
+    ],
+    total: { key: 'totalAsetLancar', label: 'Total Aset Lancar' }
+  },
+  {
+    group: 'Aset Tidak Lancar',
+    items: [
+      { key: 'asetTetap', label: 'Aset Tetap' },
+      { key: 'asetTakBerwujud', label: 'Aset Tak Berwujud' },
+      { key: 'investasiJangkaPanjang', label: 'Investasi Jangka Panjang' }
+    ],
+    total: { key: 'totalAsetTidakLancar', label: 'Total Aset Tidak Lancar' }
+  },
+  {
+    group: 'Liabilitas',
+    items: [
+      { key: 'hutangUsaha', label: 'Hutang Usaha' },
+      { key: 'hutangPendanaan', label: 'Hutang Pendanaan' },
+      { key: 'hutangDireksi', label: 'Hutang Direksi' },
+      { key: 'hutangAset', label: 'Hutang Aset' }
+    ],
+    total: { key: 'totalKewajiban', label: 'Total Liabilitas' }
+  },
+  {
+    group: 'Ekuitas',
+    items: [
+      { key: 'modal', label: 'Modal' }
+    ],
+    total: { key: 'totalEkuitas', label: 'Total Ekuitas' }
+  }
+];
+
+// Baris "Total Aset" ditampilkan tersendiri setelah kedua grup aset.
+const NERACA_GRAND_TOTAL_AFTER_GROUP = 'Aset Tidak Lancar';
+const NERACA_GRAND_TOTAL = { key: 'totalAset', label: 'Total Aset' };
+
+function renderNeracaPreview(neraca) {
+  const knownKeys = new Set();
+  NERACA_STRUCTURE.forEach(g => {
+    g.items.forEach(it => knownKeys.add(it.key));
+    knownKeys.add(g.total.key);
+  });
+  knownKeys.add(NERACA_GRAND_TOTAL.key);
+
+  let rows = '';
+  NERACA_STRUCTURE.forEach(g => {
+    rows += `<tr><td colspan="2" style="font-weight:600;color:var(--slate);padding-top:12px;">${g.group}</td></tr>`;
+    g.items.forEach(it => {
+      if (neraca[it.key] === undefined) return;
+      rows += `<tr><td>${it.label}</td><td class="num">${formatIDR(neraca[it.key])}</td></tr>`;
+    });
+    if (neraca[g.total.key] !== undefined) {
+      rows += `<tr style="font-weight:600;"><td>${g.total.label}</td><td class="num">${formatIDR(neraca[g.total.key])}</td></tr>`;
+    }
+    if (g.group === NERACA_GRAND_TOTAL_AFTER_GROUP && neraca[NERACA_GRAND_TOTAL.key] !== undefined) {
+      rows += `<tr style="font-weight:700;background:var(--teal-light);"><td>${NERACA_GRAND_TOTAL.label}</td><td class="num">${formatIDR(neraca[NERACA_GRAND_TOTAL.key])}</td></tr>`;
+    }
+  });
+
+  // Akun yang tidak dikenali strukturnya (jaga-jaga) ditampilkan di grup "Lainnya"
+  const leftover = Object.keys(neraca).filter(k => !knownKeys.has(k));
+  if (leftover.length) {
+    rows += `<tr><td colspan="2" style="font-weight:600;color:var(--slate);padding-top:12px;">Lainnya</td></tr>`;
+    leftover.forEach(k => {
+      rows += `<tr><td>${k}</td><td class="num">${formatIDR(neraca[k])}</td></tr>`;
+    });
+  }
+
+  return `<table style="margin-top:8px;">${rows || '<tr><td colspan="2">Tidak ada data terbaca</td></tr>'}</table>`;
+}
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid' },
@@ -227,10 +240,7 @@ function renderShell() {
             <h1 id="topbar-title">Dashboard</h1>
             <div class="sub" id="topbar-sub">Ringkasan seluruh perusahaan</div>
           </div>
-          <div style="display:flex;align-items:center;gap:12px;">
-            <div class="sync-badge" id="sync-badge"></div>
-            <button class="btn ghost" id="refresh-btn">Muat ulang data</button>
-          </div>
+          <button class="btn ghost" id="refresh-btn">Muat ulang data</button>
         </div>
         <div class="content" id="view-root"></div>
       </div>
@@ -250,7 +260,6 @@ function renderShell() {
 }
 
 function setView(viewId) {
-  teardownActiveDataListener();
   state.view = viewId;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === viewId));
   const titles = {
@@ -279,17 +288,12 @@ function renderCurrentView() {
 }
 
 async function reloadCompanies() {
-  // Daftar perusahaan biasanya sudah otomatis ter-update lewat listener
-  // realtime (watchCompanies). Fungsi ini dipakai sebagai jalan pintas
-  // agar tampilan langsung merespon setelah menambah/menghapus perusahaan,
-  // dan sebagai aksi tombol "Muat ulang data".
   state.companies = await DB.getCompanies(state.user.uid);
   renderCurrentView();
 }
 
 // ---------- Dashboard ----------
-function renderDashboard() {
-  teardownActiveDataListener();
+async function renderDashboard() {
   const root = document.getElementById('view-root');
   if (state.companies.length === 0) {
     root.innerHTML = emptyState('Belum ada perusahaan', 'Tambahkan perusahaan lalu impor data laporan keuangan untuk melihat ringkasan di sini.', 'companies', 'Tambah Perusahaan');
@@ -298,17 +302,9 @@ function renderDashboard() {
   }
   root.innerHTML = `<div class="section-block"><div class="section-title">Memuat ringkasan…</div></div>`;
 
-  const companyIds = state.companies.map(c => c.id);
-  // Listener realtime: ringkasan otomatis diperbarui begitu ada data baru
-  // diimpor dari perangkat manapun, tanpa perlu memuat ulang halaman.
-  state.unsubData = DB.watchAllStatements(companyIds, (allStatements, meta) => {
-    Sync.report('statements', meta);
-    if (state.view === 'dashboard') paintDashboard(allStatements);
-  }, (err) => toast('Gagal memuat data laporan: ' + err.message, 'error'));
-}
+  const allStatements = await DB.getAllStatementsForCompanies(state.companies.map(c => c.id));
 
-function paintDashboard(allStatements) {
-  const root = document.getElementById('view-root');
+  const totalAset = allStatements.reduce((sum, s) => Math.max(sum, 0) + 0, 0); // placeholder, recalculated below
   const latestByCompany = {};
   allStatements.forEach(s => {
     const cur = latestByCompany[s.companyId];
@@ -466,10 +462,6 @@ function renderImport() {
     bindEmptyStateNav(root);
     return;
   }
-  if (!state.importCompanyId || !state.companies.find(c => c.id === state.importCompanyId)) {
-    state.importCompanyId = state.companies[0].id;
-  }
-
   root.innerHTML = `
     <div class="grid grid-2" style="align-items:start;">
       <div class="card">
@@ -477,58 +469,24 @@ function renderImport() {
         <div class="field">
           <label>Perusahaan</label>
           <select id="import-company">
-            ${state.companies.map(c => `<option value="${c.id}" ${c.id === state.importCompanyId ? 'selected' : ''}>${c.name}</option>`).join('')}
+            ${state.companies.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
           </select>
         </div>
-
-        <div class="section-title" style="margin-top:20px;">2. Pilih Jenis Data</div>
-        <div class="pill-row" id="import-type-pills">
-          ${Object.entries(IMPORT_TYPES).map(([key, t]) => `<div class="pill ${state.importType === key ? 'active' : ''}" data-type="${key}">${t.label}</div>`).join('')}
-        </div>
-        <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 16px 0;line-height:1.5;">
-          Setiap jenis data diimpor dari file Excel <strong>terpisah</strong> — satu file khusus untuk satu jenis data saja
-          (bukan satu file berisi semua laporan). Anda bisa mengimpor tiap jenis di waktu yang berbeda untuk periode yang sama;
-          data yang sudah tersimpan sebelumnya tidak akan tertimpa.
-        </div>
-
-        <div class="section-title">3. Unggah File Excel</div>
+        <div class="section-title" style="margin-top:20px;">2. Unggah File Excel</div>
         <div class="dropzone" id="dropzone">
           ${icon('upload')}
-          <div>Seret file .xlsx <strong id="dropzone-type-label"></strong> ke sini, atau klik untuk memilih</div>
-          <div style="font-size:11.5px;margin-top:6px;" id="dropzone-hint"></div>
+          <div>Seret file .xlsx ke sini, atau klik untuk memilih</div>
+          <div style="font-size:11.5px;margin-top:6px;">Gunakan template dengan sheet: Info, Neraca, Laba Rugi</div>
         </div>
         <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none;">
-        <a href="#" download class="btn ghost" id="download-template-btn" style="margin-top:14px;width:100%;justify-content:center;"></a>
+        <a href="template/Template_Import_Neraca_LabaRugi.xlsx" download class="btn ghost" style="margin-top:14px;width:100%;justify-content:center;">Unduh Template Excel</a>
       </div>
       <div class="card" id="preview-panel">
         <div class="section-title">Pratinjau Data</div>
         <div style="color:var(--slate);font-size:13px;">Belum ada file dipilih.</div>
       </div>
     </div>
-
-    <div class="section-block" style="margin-top:24px;">
-      <div class="section-title">Status Data per Periode — <span id="import-status-company-name" style="color:var(--slate);font-weight:500;"></span></div>
-      <div id="import-status-table"><div class="card" style="color:var(--slate);">Memuat status…</div></div>
-    </div>
   `;
-
-  updateDropzoneAndTemplate();
-  loadImportStatus();
-
-  document.getElementById('import-company').addEventListener('change', (e) => {
-    state.importCompanyId = e.target.value;
-    resetPreview();
-    loadImportStatus();
-  });
-
-  document.querySelectorAll('#import-type-pills .pill').forEach(p => {
-    p.addEventListener('click', () => {
-      state.importType = p.dataset.type;
-      document.querySelectorAll('#import-type-pills .pill').forEach(x => x.classList.toggle('active', x === p));
-      updateDropzoneAndTemplate();
-      resetPreview();
-    });
-  });
 
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('file-input');
@@ -539,115 +497,34 @@ function renderImport() {
   fileInput.addEventListener('change', (e) => { if (e.target.files[0]) handleImportFile(e.target.files[0]); });
 }
 
-function updateDropzoneAndTemplate() {
-  const type = IMPORT_TYPES[state.importType];
-  const label = document.getElementById('dropzone-type-label');
-  if (label) label.textContent = type.label;
-  const hint = document.getElementById('dropzone-hint');
-  const templateBtn = document.getElementById('download-template-btn');
-  if (type.mode === 'accountingReport') {
-    if (hint) hint.textContent = `Unggah laporan ${type.label} apa adanya, hasil export langsung dari software akuntansi Anda — kode & nama akun boleh berbeda-beda per perusahaan, sistem membacanya dari struktur laporan (akun header, sub-akun, dan baris total).`;
-    if (templateBtn) templateBtn.style.display = 'none';
-  } else if (type.mode === 'bukuBesarLedger') {
-    if (hint) hint.textContent = `Unggah Buku Besar apa adanya, hasil export langsung dari software akuntansi Anda (per akun: Saldo Awal, daftar transaksi, Ending Balance). Neraca & Laba Rugi periode ini akan dihitung & diisi otomatis dari kode akun (1=Aset, 2=Kewajiban, 3=Ekuitas, 4=Pendapatan, 5/6=Beban).`;
-    if (templateBtn) templateBtn.style.display = 'none';
-  } else {
-    if (hint) hint.textContent = `File harus berisi sheet "Info" dan sheet data sesuai jenis yang dipilih di atas`;
-    if (templateBtn) {
-      templateBtn.style.display = '';
-      templateBtn.href = type.templateFile;
-      templateBtn.textContent = `Unduh Template ${type.label}`;
-    }
-  }
-}
-
-function resetPreview() {
-  pendingImport = null;
-  const panel = document.getElementById('preview-panel');
-  if (panel) panel.innerHTML = `<div class="section-title">Pratinjau Data</div><div style="color:var(--slate);font-size:13px;">Belum ada file dipilih.</div>`;
-}
-
-function hasSectionData(v) {
-  if (v === undefined || v === null) return false;
-  if (Array.isArray(v)) return v.length > 0;
-  if (typeof v === 'object') return Object.keys(v).length > 0;
-  return true;
-}
-
-async function loadImportStatus() {
-  const company = state.companies.find(c => c.id === state.importCompanyId);
-  const nameEl = document.getElementById('import-status-company-name');
-  if (nameEl) nameEl.textContent = company ? company.name : '';
-  const tableEl = document.getElementById('import-status-table');
-  if (!tableEl) return;
-  const statements = (await DB.getStatements(state.importCompanyId)).sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex);
-  if (statements.length === 0) {
-    tableEl.innerHTML = `<div class="card" style="color:var(--slate);">Belum ada data yang diimpor untuk perusahaan ini.</div>`;
-    return;
-  }
-  const mark = (ok) => ok ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>';
-  tableEl.innerHTML = `
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Periode</th><th>Neraca</th><th>Laba Rugi</th><th>Arus Kas</th><th>Buku Besar</th></tr></thead>
-        <tbody>
-          ${statements.map(s => `<tr>
-            <td>${s.periodLabel}</td>
-            <td>${mark(hasSectionData(s.neraca))}</td>
-            <td>${mark(hasSectionData(s.labaRugi))}</td>
-            <td>${mark(hasSectionData(s.arusKas))}</td>
-            <td>${mark(hasSectionData(s.bukuBesar))}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
-}
-
 let pendingImport = null;
 
 async function handleImportFile(file) {
   const panel = document.getElementById('preview-panel');
   try {
     const buffer = await file.arrayBuffer();
-    const result = parseSingleTypeExcel(buffer, state.importType);
+    const result = parseFinancialExcel(buffer);
     pendingImport = result;
 
-    const isLedger = result.statementKey === 'bukuBesar';
-
+    const s = result.statement;
     panel.innerHTML = `
       <div class="section-title">Pratinjau Data</div>
       <div style="font-size:13px;margin-bottom:10px;">
-        ${result.companyName ? `<strong>${result.companyName}</strong><br>` : ''}
-        Periode: ${result.period.periodLabel} &middot; Jenis: ${PERIOD_LABELS[result.period.periodType]} &middot; Tahun: ${result.period.year}
+        <strong>${result.companyName || '(nama tidak terbaca dari Info)'}</strong><br>
+        Periode: ${s.periodLabel} &middot; Jenis: ${PERIOD_LABELS[s.periodType]} &middot; Tahun: ${s.year}
       </div>
-      <div class="badge ${result.badge}">${result.typeLabel}</div>
-      ${result.warnings.length ? `<div class="ratio-note" style="margin-top:8px;">${result.warnings.join('<br>')}</div>` : ''}
-      ${isLedger ? `
-        <div class="section-title" style="margin-top:16px;font-size:14px;">Neraca (diturunkan otomatis — saldo akhir periode)</div>
-        <table>
-          <tbody>${Object.entries(result.data.neraca).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('')}</tbody>
-        </table>
-        <div class="section-title" style="margin-top:16px;font-size:14px;">Laba Rugi (diturunkan otomatis — mutasi periode)</div>
-        <table>
-          <tbody>${Object.entries(result.data.labaRugi).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('')}</tbody>
-        </table>
-        <div class="section-title" style="margin-top:16px;font-size:14px;">Rincian Akun Buku Besar (${result.data.ledger.length} akun)</div>
-        <div class="table-wrap" style="max-height:260px;overflow-y:auto;">
-          <table>
-            <thead><tr><th>Kode</th><th>Nama Akun</th><th class="num">Saldo Awal</th><th class="num">Saldo Akhir</th></tr></thead>
-            <tbody>${result.data.ledger.map(r => `<tr><td>${r.code || '–'}</td><td>${r.name}</td><td class="num">${formatIDR(r.saldoAwal)}</td><td class="num">${formatIDR(r.saldoAkhir)}</td></tr>`).join('') || '<tr><td colspan="4">Tidak ada akun terbaca</td></tr>'}</tbody>
+      ${result.warnings.length ? `<div class="ratio-note">${result.warnings.join('<br>')}</div>` : ''}
+      <div class="grid grid-2" style="margin-top:12px;">
+        <div>
+          <div class="badge teal">Neraca</div>
+          ${renderNeracaPreview(s.neraca)}
+        </div>
+        <div>
+          <div class="badge gold">Laba Rugi</div>
+          <table style="margin-top:8px;">
+            ${Object.entries(s.labaRugi).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('') || '<tr><td colspan="2">Tidak ada data terbaca</td></tr>'}
           </table>
         </div>
-      ` : `
-        <table style="margin-top:10px;">
-          <tbody>${Object.entries(result.data).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('') || '<tr><td colspan="2">Tidak ada data terbaca</td></tr>'}</tbody>
-        </table>
-      `}
-      <div class="ratio-note" style="margin-top:12px;">
-        ${isLedger
-          ? `Data ini akan disimpan sebagai <strong>Buku Besar</strong>, dan otomatis mengisi bagian <strong>Neraca</strong> &amp; <strong>Laba Rugi</strong> untuk periode <strong>${result.period.periodLabel}</strong>. Neraca/Laba Rugi periode ini yang sudah pernah diimpor manual sebelumnya (jika ada) akan tertimpa oleh hasil turunan Buku Besar ini.`
-          : `Data ini akan disimpan sebagai bagian <strong>${result.typeLabel}</strong> untuk periode <strong>${result.period.periodLabel}</strong>. Jenis data lain yang sudah pernah diimpor untuk periode yang sama (jika ada) tidak akan tertimpa.`}
       </div>
       <button class="btn primary" id="confirm-import" style="margin-top:16px;width:100%;justify-content:center;">Simpan ke Sistem</button>
     `;
@@ -660,22 +537,14 @@ async function handleImportFile(file) {
 async function confirmImport() {
   const companyId = document.getElementById('import-company').value;
   if (!pendingImport) return;
-  if (pendingImport.statementKey === 'bukuBesar') {
-    await DB.saveStatementSection(companyId, pendingImport.period, 'bukuBesar', pendingImport.data.ledger);
-    await DB.saveStatementSection(companyId, pendingImport.period, 'neraca', pendingImport.data.neraca);
-    await DB.saveStatementSection(companyId, pendingImport.period, 'labaRugi', pendingImport.data.labaRugi);
-    toast(`Buku Besar tersimpan — Neraca & Laba Rugi otomatis diperbarui`, 'success');
-  } else {
-    await DB.saveStatementSection(companyId, pendingImport.period, pendingImport.statementKey, pendingImport.data);
-    toast(`Data ${pendingImport.typeLabel} berhasil disimpan`, 'success');
-  }
+  await DB.saveStatement(companyId, pendingImport.statement);
+  toast('Data laporan keuangan berhasil disimpan', 'success');
   pendingImport = null;
   renderImport();
 }
 
 // ---------- Perbandingan ----------
-function renderCompare() {
-  teardownActiveDataListener();
+async function renderCompare() {
   const root = document.getElementById('view-root');
   if (state.companies.length === 0) {
     root.innerHTML = emptyState('Belum ada perusahaan', 'Tambahkan perusahaan dan data untuk mulai membandingkan.', 'companies', 'Tambah Perusahaan');
@@ -708,20 +577,11 @@ function renderCompare() {
 
   if (state.compareCompanyIds.length === 0) return;
 
-  // Listener realtime untuk kombinasi perusahaan yang dipilih.
-  state.unsubData = DB.watchAllStatements(state.compareCompanyIds, (allStatements, meta) => {
-    Sync.report('statements', meta);
-    if (state.view !== 'compare') return;
-    const statements = allStatements
-      .filter(s => s.periodType === state.comparePeriodType)
-      .sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex);
-    paintCompare(statements);
-  }, (err) => toast('Gagal memuat data laporan: ' + err.message, 'error'));
-}
+  const statements = (await DB.getAllStatementsForCompanies(state.compareCompanyIds))
+    .filter(s => s.periodType === state.comparePeriodType)
+    .sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex);
 
-function paintCompare(statements) {
   const resultEl = document.getElementById('compare-result');
-  if (!resultEl) return;
   if (statements.length === 0) {
     resultEl.innerHTML = `<div class="card" style="color:var(--slate);">Tidak ada data dengan jenis periode "${PERIOD_LABELS[state.comparePeriodType]}" untuk perusahaan terpilih.</div>`;
     return;
@@ -780,8 +640,7 @@ function palette(i) {
 }
 
 // ---------- Rasio ----------
-function renderRatios() {
-  teardownActiveDataListener();
+async function renderRatios() {
   const root = document.getElementById('view-root');
   if (state.companies.length === 0) {
     root.innerHTML = emptyState('Belum ada perusahaan', 'Tambahkan perusahaan dan data untuk melihat analisis rasio.', 'companies', 'Tambah Perusahaan');
@@ -806,19 +665,8 @@ function renderRatios() {
     renderRatios();
   });
 
-  // Listener realtime: analisis rasio otomatis diperbarui saat ada
-  // periode baru yang diimpor dari perangkat manapun.
-  state.unsubData = DB.watchStatements(state.ratioCompanyId, (rawStatements, meta) => {
-    Sync.report('statements', meta);
-    if (state.view !== 'ratios') return;
-    const statements = rawStatements.sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex);
-    paintRatios(statements);
-  }, (err) => toast('Gagal memuat data laporan: ' + err.message, 'error'));
-}
-
-function paintRatios(statements) {
+  const statements = (await DB.getStatements(state.ratioCompanyId)).sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex);
   const content = document.getElementById('ratio-content');
-  if (!content) return;
   if (statements.length === 0) {
     content.innerHTML = `<div class="card" style="color:var(--slate);margin-top:16px;">Belum ada data laporan keuangan untuk perusahaan ini.</div>`;
     return;
@@ -910,28 +758,13 @@ function renderLineChart(canvasId, labels, datasets) {
 
 // ---------- Bootstrap ----------
 auth.onAuthStateChanged(async (user) => {
-  if (state.unsubCompanies) { state.unsubCompanies(); state.unsubCompanies = null; }
-  teardownActiveDataListener();
-  Sync.reset();
-
   if (user) {
     state.user = user;
     renderShell();
-    // Listener realtime: daftar perusahaan otomatis ter-update begitu ada
-    // perubahan — baik dari tab/perangkat ini maupun dari perangkat lain
-    // yang login dengan akun yang sama. Ini juga memberi tahu status
-    // sinkronisasi (badge di topbar).
-    state.unsubCompanies = DB.watchCompanies(user.uid, (companies, meta) => {
-      state.companies = companies;
-      Sync.report('companies', meta);
-      const safeToRerender = ['dashboard', 'companies', 'compare', 'ratios'].includes(state.view)
-        && !document.querySelector('.modal-backdrop');
-      if (safeToRerender) renderCurrentView();
-    }, (err) => toast('Gagal memuat data perusahaan: ' + err.message, 'error'));
+    await reloadCompanies();
     setView('dashboard');
   } else {
     state.user = null;
     renderAuthScreen('login');
   }
 });
-

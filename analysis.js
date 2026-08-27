@@ -14,12 +14,9 @@ function computeRatios(statement) {
   const l = statement.labaRugi || {};
 
   const totalAsetLancar = n.totalAsetLancar || 0;
-  const totalKewajibanLancar = n.totalKewajibanLancar || 0;
-  const persediaan = n.persediaan || 0;
   const totalAset = n.totalAset || 0;
-  const totalKewajiban = n.totalKewajiban || 0;
+  const totalKewajiban = n.totalKewajiban || 0; // Total Liabilitas
   const totalEkuitas = n.totalEkuitas || 0;
-  const kasSetaraKas = n.kasSetaraKas || 0;
 
   const pendapatan = l.pendapatan || 0;
   const labaKotor = l.labaKotor || 0;
@@ -28,9 +25,7 @@ function computeRatios(statement) {
 
   return {
     likuiditas: {
-      currentRatio: safeDiv(totalAsetLancar, totalKewajibanLancar),
-      quickRatio: safeDiv(totalAsetLancar - persediaan, totalKewajibanLancar),
-      cashRatio: safeDiv(kasSetaraKas, totalKewajibanLancar)
+      currentRatio: safeDiv(totalAsetLancar, totalKewajiban)
     },
     solvabilitas: {
       debtToAssetRatio: safeDiv(totalKewajiban, totalAset),
@@ -48,9 +43,7 @@ function computeRatios(statement) {
 }
 
 const RATIO_LABELS = {
-  currentRatio: { label: 'Current Ratio', fmt: 'x', desc: 'Aset lancar dibagi kewajiban lancar. Idealnya > 1.5–2x.' },
-  quickRatio: { label: 'Quick Ratio', fmt: 'x', desc: '(Aset lancar - persediaan) dibagi kewajiban lancar.' },
-  cashRatio: { label: 'Cash Ratio', fmt: 'x', desc: 'Kas & setara kas dibagi kewajiban lancar.' },
+  currentRatio: { label: 'Current Ratio', fmt: 'x', desc: 'Aset lancar dibagi total liabilitas. Idealnya > 1.5–2x.' },
   debtToAssetRatio: { label: 'Debt to Asset Ratio', fmt: '%', desc: 'Proporsi aset yang dibiayai utang. Makin rendah makin aman.' },
   debtToEquityRatio: { label: 'Debt to Equity Ratio', fmt: 'x', desc: 'Total kewajiban dibagi ekuitas.' },
   equityMultiplier: { label: 'Equity Multiplier', fmt: 'x', desc: 'Total aset dibagi ekuitas (tingkat leverage).' },
@@ -66,4 +59,3 @@ function formatRatio(value, fmt) {
   if (fmt === '%') return (value * 100).toFixed(1) + '%';
   return value.toFixed(2) + 'x';
 }
-
