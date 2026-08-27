@@ -204,6 +204,7 @@ tbody tr:hover{background:#fafcfb;}
 .chart-box canvas{max-height:280px;}
 
 .ratio-note{font-size:12px;color:var(--slate);background:#fafbfb;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:10px;line-height:1.5;}
+.bb-akun-row:hover td,.bb-ledger-row:hover td{background:var(--teal-light);}
 
 .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--slate);font-family:var(--font-display);}
 
@@ -755,7 +756,8 @@ function deriveStatementsFromLedgerAccounts(accounts) {
       name: account.name,
       saldoAwal: account.saldoAwal || 0,
       saldoAkhir: account.saldoAkhir || 0,
-      amount
+      amount,
+      transaksi: account.transaksi || []
     });
   };
   const unrecognized = [];
@@ -806,6 +808,18 @@ function deriveStatementsFromLedgerAccounts(accounts) {
 }
 
 /**
+ * Merekonstruksi klasifikasi (contributions) dari daftar akun Buku Besar
+ * yang SUDAH tersimpan di Firestore (statement.bukuBesar) — dipakai di
+ * halaman Detail Perusahaan supaya tampilan klasifikasi + rincian transaksi
+ * yang bisa diklik tetap tersedia setelah data disimpan, bukan cuma sesaat
+ * di layar pratinjau impor.
+ */
+function contributionsFromLedger(accounts) {
+  if (!Array.isArray(accounts) || accounts.length === 0) return null;
+  return deriveStatementsFromLedgerAccounts(accounts).contributions;
+}
+
+/**
  * Membaca satu sheet Buku Besar hasil export software akuntansi (format
  * per akun: baris nama akun, baris "Saldo Awal", baris-baris transaksi,
  * baris "Ending Balance") dan mengembalikan nama perusahaan, periode,
@@ -845,7 +859,7 @@ function parseBukuBesarSheet(sheet) {
     if (!isBlank(a) && isBlank(b) && isBlank(row[2]) && isBlank(d) && isBlank(row[4]) && isBlank(row[5]) && isBlank(g)) {
       // Baris nama akun -> mulai akun baru
       const { code, name } = parseLedgerAccountLabel(a);
-      current = { code, name, saldoAwal: null, saldoAkhir: null };
+      current = { code, name, saldoAwal: null, saldoAkhir: null, transaksi: [] };
       accounts.push(current);
       continue;
     }
@@ -856,6 +870,17 @@ function parseBukuBesarSheet(sheet) {
     }
     if (!isBlank(b) && normalizeKey(b) === 'saldo awal') {
       current.saldoAwal = toNumberOrNull(g) || 0;
+      continue;
+    }
+    // Baris transaksi individual milik akun yang sedang berjalan (current) —
+    // disimpan supaya bisa ditampilkan sebagai rincian saat akun diklik.
+    if (!isBlank(a)) {
+      current.transaksi.push({
+        tanggal: String(a).trim(),
+        keterangan: String(d || b || '').trim(),
+        debit: toNumberOrNull(row[4]) || 0,
+        kredit: toNumberOrNull(row[5]) || 0
+      });
     }
   }
   // Akun tanpa baris "Saldo Awal" eksplisit (baru dibuka periode ini) -> 0.
@@ -1708,11 +1733,12 @@ function keyValueTable(obj) {
 
 function ledgerTable(accounts) {
   if (!Array.isArray(accounts) || accounts.length === 0) return `<div style="color:var(--slate-light);font-size:13px;padding:6px 2px;">Belum ada data.</div>`;
+  activeLedgerAccounts = accounts;
   return `
     <div class="table-wrap" style="max-height:320px;overflow-y:auto;">
       <table>
         <thead><tr><th>Kode</th><th>Nama Akun</th><th class="num">Saldo Awal</th><th class="num">Saldo Akhir</th></tr></thead>
-        <tbody>${accounts.map(a => `<tr><td>${a.code || '–'}</td><td>${a.name || '–'}</td><td class="num">${formatIDR(a.saldoAwal)}</td><td class="num">${formatIDR(a.saldoAkhir)}</td></tr>`).join('')}</tbody>
+        <tbody>${accounts.map((a, i) => `<tr class="bb-ledger-row" data-idx="${i}" title="Klik untuk melihat rincian transaksi"><td>${a.code || '–'}</td><td>${a.name || '–'}</td><td class="num">${formatIDR(a.saldoAwal)}</td><td class="num">${formatIDR(a.saldoAkhir)}</td></tr>`).join('')}</tbody>
       </table>
     </div>`;
 }
@@ -1734,6 +1760,59 @@ const LABA_RUGI_FORMULAS = {
   labaBersih: (l) => `Laba Sebelum Pajak (${formatIDR(l.labaSebelumPajak)}) − Pajak Penghasilan (${formatIDR(l.pajakPenghasilan)})`
 };
 
+// Data klasifikasi/akun yang sedang tampil di layar (pratinjau impor ATAU
+// Detail Perusahaan) — dipakai oleh delegated click handler di bawah untuk
+// tahu transaksi mana yang harus ditampilkan saat sebuah baris akun diklik.
+let activeContributions = null;
+let activeLedgerAccounts = [];
+
+function openLedgerAccountModal(acc) {
+  const backdrop = el(`<div class="modal-backdrop">
+    <div class="modal" style="width:560px;">
+      <h3>${acc.code ? acc.code + ' &mdash; ' : ''}${acc.name || '(tanpa nama)'}</h3>
+      <div class="modal-sub">Saldo Awal: <strong>${formatIDR(acc.saldoAwal)}</strong> &middot; Saldo Akhir: <strong>${formatIDR(acc.saldoAkhir)}</strong></div>
+      <div class="table-wrap" style="max-height:360px;overflow-y:auto;">
+        <table>
+          <thead><tr><th>Tanggal</th><th>Keterangan</th><th class="num">Debit</th><th class="num">Kredit</th></tr></thead>
+          <tbody>
+            ${(acc.transaksi && acc.transaksi.length)
+              ? acc.transaksi.map(t => `<tr>
+                  <td>${t.tanggal || '–'}</td>
+                  <td>${t.keterangan || '–'}</td>
+                  <td class="num">${t.debit ? formatIDR(t.debit) : '–'}</td>
+                  <td class="num">${t.kredit ? formatIDR(t.kredit) : '–'}</td>
+                </tr>`).join('')
+              : `<tr><td colspan="4" style="text-align:center;color:var(--slate);">Tidak ada rincian transaksi untuk akun ini pada periode ini.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-actions"><button class="btn ghost" id="close-modal">Tutup</button></div>
+    </div>
+  </div>`);
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#close-modal').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+}
+
+// Delegated listener tunggal (dipasang sekali) supaya baris akun yang
+// dirender lewat innerHTML di berbagai halaman (pratinjau impor, Detail
+// Perusahaan) tetap bisa diklik tanpa perlu bind ulang tiap render.
+document.addEventListener('click', (e) => {
+  const contribRow = e.target.closest('.bb-akun-row');
+  if (contribRow) {
+    const field = contribRow.dataset.field;
+    const idx = Number(contribRow.dataset.idx);
+    const acc = activeContributions && activeContributions[field] && activeContributions[field][idx];
+    if (acc) openLedgerAccountModal(acc);
+    return;
+  }
+  const ledgerRow = e.target.closest('.bb-ledger-row');
+  if (ledgerRow) {
+    const acc = activeLedgerAccounts[Number(ledgerRow.dataset.idx)];
+    if (acc) openLedgerAccountModal(acc);
+  }
+});
+
 function derivedFieldRow(key, value, contributions, formulaFn, formulaData) {
   const list = contributions && contributions[key];
   let body;
@@ -1742,7 +1821,7 @@ function derivedFieldRow(key, value, contributions, formulaFn, formulaData) {
       <div class="table-wrap" style="margin-top:4px;">
         <table>
           <thead><tr><th>Kode</th><th>Nama Akun</th><th class="num">Saldo Awal</th><th class="num">Saldo Akhir</th><th class="num">Kontribusi</th></tr></thead>
-          <tbody>${list.map(c => `<tr><td>${c.code || '–'}</td><td>${c.name || '–'}</td><td class="num">${formatIDR(c.saldoAwal)}</td><td class="num">${formatIDR(c.saldoAkhir)}</td><td class="num">${formatIDR(c.amount)}</td></tr>`).join('')}</tbody>
+          <tbody>${list.map((c, i) => `<tr class="bb-akun-row" data-field="${key}" data-idx="${i}" title="Klik untuk melihat rincian transaksi"><td>${c.code || '–'}</td><td>${c.name || '–'}</td><td class="num">${formatIDR(c.saldoAwal)}</td><td class="num">${formatIDR(c.saldoAkhir)}</td><td class="num">${formatIDR(c.amount)}</td></tr>`).join('')}</tbody>
         </table>
       </div>`;
   } else if (formulaFn) {
@@ -1760,6 +1839,7 @@ function derivedFieldRow(key, value, contributions, formulaFn, formulaData) {
 }
 
 function derivedSectionDetails(obj, contributions, formulas) {
+  activeContributions = contributions;
   const entries = Object.entries(obj || {});
   if (entries.length === 0) return `<div style="color:var(--slate-light);font-size:13px;">Tidak ada data.</div>`;
   return entries.map(([k, v]) => derivedFieldRow(k, v, contributions, formulas[k], obj)).join('');
@@ -1775,6 +1855,7 @@ function neracaGroupHeader(label) {
 }
 
 function derivedNeracaGrouped(neraca, contributions) {
+  activeContributions = contributions;
   if (!neraca || Object.keys(neraca).length === 0) return `<div style="color:var(--slate-light);font-size:13px;">Tidak ada data.</div>`;
   const row = (key) => key in neraca ? derivedFieldRow(key, neraca[key], contributions, NERACA_FORMULAS[key], neraca) : '';
   const highlight = (key) => key in neraca
@@ -1841,6 +1922,12 @@ function paintCompanyDetail(statements) {
   if (!selected) selected = statements[statements.length - 1];
   state.companyDetailPeriodId = selected.id;
 
+  // Kalau periode ini punya data Buku Besar, klasifikasi Neraca & Laba Rugi
+  // direkonstruksi dari akun-akun tersimpan supaya baris-barisnya tetap bisa
+  // diklik untuk melihat rincian transaksi — sama seperti di layar pratinjau
+  // impor, bukan cuma tabel angka datar.
+  const bbContribs = contributionsFromLedger(selected.bukuBesar);
+
   content.innerHTML = `
     <div class="section-block">
       <div class="section-title">Pilih Periode</div>
@@ -1851,19 +1938,28 @@ function paintCompanyDetail(statements) {
 
     <div class="section-block grid grid-2">
       <div class="card">
-        <div class="section-title"><span class="badge teal">Neraca</span></div>
-        ${neracaGroupedTable(selected.neraca)}
+        <div class="section-title">
+          <span class="badge teal">Neraca</span>
+          ${bbContribs ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik baris untuk rincian akun</span>' : ''}
+        </div>
+        ${bbContribs ? derivedNeracaGrouped(selected.neraca, bbContribs) : neracaGroupedTable(selected.neraca)}
       </div>
       <div class="card">
-        <div class="section-title"><span class="badge gold">Laba Rugi</span></div>
-        ${keyValueTable(selected.labaRugi)}
+        <div class="section-title">
+          <span class="badge gold">Laba Rugi</span>
+          ${bbContribs ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik baris untuk rincian akun</span>' : ''}
+        </div>
+        ${bbContribs ? derivedSectionDetails(selected.labaRugi, bbContribs, LABA_RUGI_FORMULAS) : keyValueTable(selected.labaRugi)}
       </div>
       <div class="card">
         <div class="section-title"><span class="badge blue">Arus Kas</span></div>
         ${keyValueTable(selected.arusKas)}
       </div>
       <div class="card">
-        <div class="section-title"><span class="badge purple">Buku Besar</span></div>
+        <div class="section-title">
+          <span class="badge purple">Buku Besar</span>
+          ${hasSectionData(selected.bukuBesar) ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik baris untuk rincian transaksi</span>' : ''}
+        </div>
         ${ledgerTable(selected.bukuBesar)}
       </div>
     </div>
@@ -2088,12 +2184,8 @@ async function handleImportFile(file) {
         <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu baris untuk melihat akun buku besar yang menyusun angka tersebut.</div>
         <div class="card" style="padding:2px 12px;">${derivedSectionDetails(result.data.labaRugi, result.data.contributions, LABA_RUGI_FORMULAS)}</div>
         <div class="section-title" style="margin-top:16px;font-size:14px;">Rincian Akun Buku Besar (${result.data.ledger.length} akun)</div>
-        <div class="table-wrap" style="max-height:260px;overflow-y:auto;">
-          <table>
-            <thead><tr><th>Kode</th><th>Nama Akun</th><th class="num">Saldo Awal</th><th class="num">Saldo Akhir</th></tr></thead>
-            <tbody>${result.data.ledger.map(r => `<tr><td>${r.code || '–'}</td><td>${r.name}</td><td class="num">${formatIDR(r.saldoAwal)}</td><td class="num">${formatIDR(r.saldoAkhir)}</td></tr>`).join('') || '<tr><td colspan="4">Tidak ada akun terbaca</td></tr>'}</tbody>
-          </table>
-        </div>
+        <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu baris untuk melihat rincian transaksi akun tersebut.</div>
+        ${ledgerTable(result.data.ledger)}
       ` : `
         <table style="margin-top:10px;">
           <tbody>${Object.entries(result.data).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('') || '<tr><td colspan="2">Tidak ada data terbaca</td></tr>'}</tbody>
