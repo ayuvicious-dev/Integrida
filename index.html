@@ -654,6 +654,210 @@ const REPORT_TYPE_LABELS = { neraca: 'neraca', labaRugi: 'laba rugi', arusKas: '
 const CASH_NAME_RE = /\b(kas|bank|cash)\b/i;
 const INVENTORY_NAME_RE = /\b(persediaan|inventory|stok|stock)\b/i;
 
+// ---------- Parser Buku Besar: export general ledger asli ----------
+// Format yang dikenali (hasil export software akuntansi seperti QuickBooks):
+//   Baris 1 : Nama Perusahaan
+//   Baris 2 : "Buku Besar"
+//   Baris 3 : rentang tanggal "dd/mm/yyyy - dd/mm/yyyy"
+//   Baris header kolom: "Nama Akun / Tanggal | Transaksi | Nomor |
+//   Keterangan | Debit | Kredit | Saldo | Tags"
+//   Lalu per akun: baris nama akun (hanya kolom A terisi), baris "Saldo
+//   Awal" (kolom B, nilai di kolom G), baris-baris transaksi, dan baris
+//   "Ending Balance" (kolom D berisi "(nama akun) | Ending Balance", total
+//   debit/kredit di kolom E/F, saldo akhir di kolom G).
+//
+// Neraca & Laba Rugi diturunkan OTOMATIS dari akun-akun ini: Neraca
+// memakai SALDO AKHIR per akun (posisi akhir periode), Laba Rugi memakai
+// MUTASI periode (saldo akhir - saldo awal) supaya hanya aktivitas
+// periode berjalan yang terhitung (bukan akumulasi sejak akun dibuka).
+// Kategori akun (Aset/Kewajiban/Ekuitas/Pendapatan/Beban) dikenali dari
+// digit pertama KODE AKUN sebelum tanda "-" (1=Aset, 2=Kewajiban,
+// 3=Ekuitas, 4=Pendapatan, 5 ke atas=Beban) — asumsi konvensi penomoran
+// akun yang umum dipakai; bisa disesuaikan bila konvensi perusahaan Anda
+// berbeda. Kata kunci pada nama akun mempertajam sub-kategori (mis.
+// "tetap"/"penyusutan" -> aset tidak lancar, "jangka panjang" -> kewajiban
+// jangka panjang, "hpp"/"pokok penjualan" -> harga pokok penjualan,
+// "pajak" -> pajak penghasilan, "bunga"/"lain-lain" -> beban/pendapatan
+// di luar operasional utama). Akun dengan kode non-angka di luar 1-9
+// dilewati & dilaporkan sebagai peringatan.
+
+function parseLedgerAccountLabel(raw) {
+  const text = String(raw || '').trim();
+  const m = text.match(/^\(([^)]+)\)\s*(.*)$/); // "(1-10001) Kas" -> code "1-10001", name "Kas"
+  if (m) return { code: m[1].trim(), name: m[2].trim() || text };
+  return { code: '', name: text };
+}
+
+function classifyLedgerAccount(code, name) {
+  const n = normalizeKey(name);
+  const prefixStr = String(code || '').split('-')[0].trim();
+  const prefix = parseInt(prefixStr, 10);
+  if (isNaN(prefix)) return { group: null, bucket: null, field: null };
+
+  if (prefix === 1) {
+    const nonCurrent = /(aset tetap|tidak lancar|jangka panjang|penyusutan|akumulasi)/.test(n);
+    if (CASH_NAME_RE.test(n)) return { group: 'aset', bucket: nonCurrent ? 'tidakLancar' : 'lancar', field: 'kasSetaraKas' };
+    if (INVENTORY_NAME_RE.test(n)) return { group: 'aset', bucket: nonCurrent ? 'tidakLancar' : 'lancar', field: 'persediaan' };
+    return { group: 'aset', bucket: nonCurrent ? 'tidakLancar' : 'lancar', field: null };
+  }
+  if (prefix === 2) {
+    const nonCurrent = /jangka panjang/.test(n);
+    return { group: 'kewajiban', bucket: nonCurrent ? 'jangkaPanjang' : 'lancar', field: null };
+  }
+  if (prefix === 3) return { group: 'ekuitas', bucket: null, field: null };
+  if (prefix === 4) {
+    const lainnya = /(bunga|lain[- ]?lain|lainnya)/.test(n);
+    return { group: 'pendapatan', bucket: lainnya ? 'lainnya' : 'inti', field: null };
+  }
+  if (prefix >= 5) {
+    // Semua kode akun 5 ke atas dianggap Beban — sub-kategori (HPP, Pajak,
+    // Beban Lain-lain di luar operasional, atau Beban Operasional) dikenali
+    // dari kata kunci pada nama akun, bukan dari nilai digit prefix-nya,
+    // supaya tetap cocok walau perusahaan memakai kode 5/6/7/8/9/... untuk
+    // kelompok beban yang berbeda-beda.
+    const hpp = /(hpp|harga pokok penjualan)/.test(n);
+    const pajak = /pajak/.test(n);
+    const nonOperating = /(bunga|lain[- ]?lain|lainnya)/.test(n);
+    let bucket = 'operasional';
+    if (hpp) bucket = 'hpp';
+    else if (pajak) bucket = 'pajak';
+    else if (nonOperating) bucket = 'lainnya';
+    return { group: 'beban', bucket, field: null };
+  }
+  return { group: null, bucket: null, field: null };
+}
+
+/**
+ * Mengubah daftar akun Buku Besar menjadi objek Neraca & Laba Rugi siap
+ * pakai untuk perhitungan rasio, memakai kategori dari
+ * classifyLedgerAccount di atas.
+ */
+function deriveStatementsFromLedgerAccounts(accounts) {
+  const neraca = {
+    kasSetaraKas: 0, persediaan: 0,
+    totalAsetLancar: 0, totalAsetTidakLancar: 0, totalAset: 0,
+    totalKewajibanLancar: 0, totalKewajibanJangkaPanjang: 0, totalKewajiban: 0,
+    totalEkuitas: 0
+  };
+  const labaRugi = {
+    pendapatan: 0, pendapatanLainnya: 0, hpp: 0, labaKotor: 0,
+    bebanOperasional: 0, labaOperasional: 0, bebanLainnya: 0,
+    labaSebelumPajak: 0, pajakPenghasilan: 0, labaBersih: 0
+  };
+  const unrecognized = [];
+
+  accounts.forEach(a => {
+    const c = classifyLedgerAccount(a.code, a.name);
+    const akhir = a.saldoAkhir || 0;
+    const mutasi = (a.saldoAkhir || 0) - (a.saldoAwal || 0);
+
+    if (c.group === 'aset') {
+      if (c.field === 'kasSetaraKas') neraca.kasSetaraKas += akhir;
+      if (c.field === 'persediaan') neraca.persediaan += akhir;
+      if (c.bucket === 'lancar') neraca.totalAsetLancar += akhir; else neraca.totalAsetTidakLancar += akhir;
+    } else if (c.group === 'kewajiban') {
+      if (c.bucket === 'lancar') neraca.totalKewajibanLancar += akhir; else neraca.totalKewajibanJangkaPanjang += akhir;
+    } else if (c.group === 'ekuitas') {
+      neraca.totalEkuitas += akhir;
+    } else if (c.group === 'pendapatan') {
+      if (c.bucket === 'inti') labaRugi.pendapatan += mutasi; else labaRugi.pendapatanLainnya += mutasi;
+    } else if (c.group === 'beban') {
+      if (c.bucket === 'hpp') labaRugi.hpp += mutasi;
+      else if (c.bucket === 'operasional') labaRugi.bebanOperasional += mutasi;
+      else if (c.bucket === 'lainnya') labaRugi.bebanLainnya += mutasi;
+      else if (c.bucket === 'pajak') labaRugi.pajakPenghasilan += mutasi;
+    } else {
+      unrecognized.push(`${a.code ? '(' + a.code + ') ' : ''}${a.name}`);
+    }
+  });
+
+  neraca.totalAset = neraca.totalAsetLancar + neraca.totalAsetTidakLancar;
+  neraca.totalKewajiban = neraca.totalKewajibanLancar + neraca.totalKewajibanJangkaPanjang;
+
+  labaRugi.labaKotor = labaRugi.pendapatan - labaRugi.hpp;
+  labaRugi.labaOperasional = labaRugi.labaKotor - labaRugi.bebanOperasional;
+  labaRugi.labaSebelumPajak = labaRugi.labaOperasional + labaRugi.pendapatanLainnya - labaRugi.bebanLainnya;
+  labaRugi.labaBersih = labaRugi.labaSebelumPajak - labaRugi.pajakPenghasilan;
+
+  const warnings = [];
+  if (unrecognized.length) {
+    warnings.push(`Kode akun berikut tidak dikenali kategorinya sehingga dilewati dari Neraca/Laba Rugi (kode akun harus diawali 1-8): ${unrecognized.join(', ')}.`);
+  }
+
+  return { neraca, labaRugi, warnings };
+}
+
+/**
+ * Membaca satu sheet Buku Besar hasil export software akuntansi (format
+ * per akun: baris nama akun, baris "Saldo Awal", baris-baris transaksi,
+ * baris "Ending Balance") dan mengembalikan nama perusahaan, periode,
+ * daftar akun mentah (untuk referensi/audit), serta Neraca & Laba Rugi
+ * yang sudah diturunkan otomatis.
+ */
+function parseBukuBesarSheet(sheet) {
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+  let companyName = '';
+  let dateText = '';
+  let headerRowIdx = -1;
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const label = normalizeKey(rows[i][0]);
+    if (i === 0 && rows[i][0]) companyName = String(rows[i][0]).trim();
+    if (!dateText && parseIndoDate(String(rows[i][0]).split(/\s*-\s*/)[0])) dateText = String(rows[i][0]).trim();
+    if (label === 'nama akun / tanggal') { headerRowIdx = i; break; }
+  }
+  if (headerRowIdx === -1) {
+    throw new Error('File tidak dikenali sebagai Buku Besar. Pastikan file adalah hasil export Buku Besar apa adanya (berkolom "Nama Akun / Tanggal, Transaksi, Nomor, Keterangan, Debit, Kredit, Saldo").');
+  }
+  if (!dateText) {
+    throw new Error('Tidak menemukan rentang tanggal periode pada Buku Besar.');
+  }
+  const period = derivePeriodFromDateText(dateText);
+  if (!period) {
+    throw new Error(`Format tanggal "${dateText}" pada Buku Besar tidak dikenali.`);
+  }
+
+  const accounts = [];
+  let current = null;
+  for (let i = headerRowIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    const a = row[0], b = row[1], d = row[3], g = row[6];
+    const isBlank = (v) => v === '' || v === null || v === undefined;
+
+    if (!isBlank(a) && isBlank(b) && isBlank(row[2]) && isBlank(d) && isBlank(row[4]) && isBlank(row[5]) && isBlank(g)) {
+      // Baris nama akun -> mulai akun baru
+      const { code, name } = parseLedgerAccountLabel(a);
+      current = { code, name, saldoAwal: null, saldoAkhir: null };
+      accounts.push(current);
+      continue;
+    }
+    if (!current) continue;
+    if (isBlank(a) && !isBlank(d) && normalizeKey(d).includes('ending balance')) {
+      current.saldoAkhir = toNumberOrNull(g) || 0;
+      continue;
+    }
+    if (!isBlank(b) && normalizeKey(b) === 'saldo awal') {
+      current.saldoAwal = toNumberOrNull(g) || 0;
+    }
+  }
+  // Akun tanpa baris "Saldo Awal" eksplisit (baru dibuka periode ini) -> 0.
+  accounts.forEach(acc => {
+    if (acc.saldoAwal === null) acc.saldoAwal = 0;
+    if (acc.saldoAkhir === null) acc.saldoAkhir = acc.saldoAwal;
+  });
+
+  const derived = deriveStatementsFromLedgerAccounts(accounts);
+
+  return {
+    companyName,
+    period,
+    accounts,
+    neraca: derived.neraca,
+    labaRugi: derived.labaRugi,
+    warnings: derived.warnings
+  };
+}
+
 /**
  * Membaca satu sheet laporan (Neraca atau Laba Rugi) hasil export
  * software akuntansi: mengenali nama perusahaan, tanggal/periode, judul
@@ -774,11 +978,8 @@ const IMPORT_TYPES = {
   bukuBesar: {
     label: 'Buku Besar',
     badge: 'purple',
-    sheetMatch: n => n.includes('buku'),
-    dictionary: null,
     statementKey: 'bukuBesar',
-    mode: 'ledger',
-    templateFile: 'template/Template_Import_BukuBesar.xlsx'
+    mode: 'bukuBesarLedger'
   }
 };
 
@@ -816,7 +1017,30 @@ function parseSingleTypeExcel(arrayBuffer, typeKey) {
     throw lastError || new Error(`File tidak dapat dibaca sebagai laporan ${type.label}.`);
   }
 
-  // ---- Arus Kas & Buku Besar: masih memakai template Info + sheet khusus ----
+  // ---- Buku Besar: langsung dari hasil export software akuntansi ----
+  if (type.mode === 'bukuBesarLedger') {
+    let lastError = null;
+    for (const sheetName of workbook.SheetNames) {
+      try {
+        const parsed = parseBukuBesarSheet(workbook.Sheets[sheetName]);
+        return {
+          typeKey,
+          typeLabel: type.label,
+          badge: type.badge,
+          statementKey: type.statementKey,
+          companyName: parsed.companyName,
+          period: parsed.period,
+          data: { ledger: parsed.accounts, neraca: parsed.neraca, labaRugi: parsed.labaRugi },
+          warnings: parsed.warnings
+        };
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error('File tidak dapat dibaca sebagai Buku Besar.');
+  }
+
+  // ---- Arus Kas: masih memakai template Info + sheet khusus ----
   const sheetNames = workbook.SheetNames.map(n => n.toLowerCase());
   const infoName = workbook.SheetNames[sheetNames.findIndex(n => n.includes('info'))];
   const dataName = workbook.SheetNames[sheetNames.findIndex(n => type.sheetMatch(n))];
@@ -1484,6 +1708,9 @@ function updateDropzoneAndTemplate() {
   if (type.mode === 'accountingReport') {
     if (hint) hint.textContent = `Unggah laporan ${type.label} apa adanya, hasil export langsung dari software akuntansi Anda — kode & nama akun boleh berbeda-beda per perusahaan, sistem membacanya dari struktur laporan (akun header, sub-akun, dan baris total).`;
     if (templateBtn) templateBtn.style.display = 'none';
+  } else if (type.mode === 'bukuBesarLedger') {
+    if (hint) hint.textContent = `Unggah Buku Besar apa adanya, hasil export langsung dari software akuntansi Anda (per akun: Saldo Awal, daftar transaksi, Ending Balance). Neraca & Laba Rugi periode ini akan dihitung & diisi otomatis dari kode akun (1=Aset, 2=Kewajiban, 3=Ekuitas, 4=Pendapatan, 5/6=Beban).`;
+    if (templateBtn) templateBtn.style.display = 'none';
   } else {
     if (hint) hint.textContent = `File harus berisi sheet "Info" dan sheet data sesuai jenis yang dipilih di atas`;
     if (templateBtn) {
@@ -1546,6 +1773,8 @@ async function handleImportFile(file) {
     const result = parseSingleTypeExcel(buffer, state.importType);
     pendingImport = result;
 
+    const isLedger = result.statementKey === 'bukuBesar';
+
     panel.innerHTML = `
       <div class="section-title">Pratinjau Data</div>
       <div style="font-size:13px;margin-bottom:10px;">
@@ -1554,15 +1783,31 @@ async function handleImportFile(file) {
       </div>
       <div class="badge ${result.badge}">${result.typeLabel}</div>
       ${result.warnings.length ? `<div class="ratio-note" style="margin-top:8px;">${result.warnings.join('<br>')}</div>` : ''}
-      <table style="margin-top:10px;">
-        ${result.statementKey === 'bukuBesar'
-          ? `<thead><tr><th>Kode</th><th>Nama Akun</th><th class="num">Saldo</th></tr></thead>
-             <tbody>${result.data.map(r => `<tr><td>${r.kode || '–'}</td><td>${r.nama}</td><td class="num">${formatIDR(r.saldo)}</td></tr>`).join('') || '<tr><td colspan="3">Tidak ada data terbaca</td></tr>'}</tbody>`
-          : `<tbody>${Object.entries(result.data).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('') || '<tr><td colspan="2">Tidak ada data terbaca</td></tr>'}</tbody>`}
-      </table>
+      ${isLedger ? `
+        <div class="section-title" style="margin-top:16px;font-size:14px;">Neraca (diturunkan otomatis — saldo akhir periode)</div>
+        <table>
+          <tbody>${Object.entries(result.data.neraca).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('')}</tbody>
+        </table>
+        <div class="section-title" style="margin-top:16px;font-size:14px;">Laba Rugi (diturunkan otomatis — mutasi periode)</div>
+        <table>
+          <tbody>${Object.entries(result.data.labaRugi).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('')}</tbody>
+        </table>
+        <div class="section-title" style="margin-top:16px;font-size:14px;">Rincian Akun Buku Besar (${result.data.ledger.length} akun)</div>
+        <div class="table-wrap" style="max-height:260px;overflow-y:auto;">
+          <table>
+            <thead><tr><th>Kode</th><th>Nama Akun</th><th class="num">Saldo Awal</th><th class="num">Saldo Akhir</th></tr></thead>
+            <tbody>${result.data.ledger.map(r => `<tr><td>${r.code || '–'}</td><td>${r.name}</td><td class="num">${formatIDR(r.saldoAwal)}</td><td class="num">${formatIDR(r.saldoAkhir)}</td></tr>`).join('') || '<tr><td colspan="4">Tidak ada akun terbaca</td></tr>'}</tbody>
+          </table>
+        </div>
+      ` : `
+        <table style="margin-top:10px;">
+          <tbody>${Object.entries(result.data).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('') || '<tr><td colspan="2">Tidak ada data terbaca</td></tr>'}</tbody>
+        </table>
+      `}
       <div class="ratio-note" style="margin-top:12px;">
-        Data ini akan disimpan sebagai bagian <strong>${result.typeLabel}</strong> untuk periode <strong>${result.period.periodLabel}</strong>.
-        Jenis data lain yang sudah pernah diimpor untuk periode yang sama (jika ada) tidak akan tertimpa.
+        ${isLedger
+          ? `Data ini akan disimpan sebagai <strong>Buku Besar</strong>, dan otomatis mengisi bagian <strong>Neraca</strong> &amp; <strong>Laba Rugi</strong> untuk periode <strong>${result.period.periodLabel}</strong>. Neraca/Laba Rugi periode ini yang sudah pernah diimpor manual sebelumnya (jika ada) akan tertimpa oleh hasil turunan Buku Besar ini.`
+          : `Data ini akan disimpan sebagai bagian <strong>${result.typeLabel}</strong> untuk periode <strong>${result.period.periodLabel}</strong>. Jenis data lain yang sudah pernah diimpor untuk periode yang sama (jika ada) tidak akan tertimpa.`}
       </div>
       <button class="btn primary" id="confirm-import" style="margin-top:16px;width:100%;justify-content:center;">Simpan ke Sistem</button>
     `;
@@ -1575,8 +1820,15 @@ async function handleImportFile(file) {
 async function confirmImport() {
   const companyId = document.getElementById('import-company').value;
   if (!pendingImport) return;
-  await DB.saveStatementSection(companyId, pendingImport.period, pendingImport.statementKey, pendingImport.data);
-  toast(`Data ${pendingImport.typeLabel} berhasil disimpan`, 'success');
+  if (pendingImport.statementKey === 'bukuBesar') {
+    await DB.saveStatementSection(companyId, pendingImport.period, 'bukuBesar', pendingImport.data.ledger);
+    await DB.saveStatementSection(companyId, pendingImport.period, 'neraca', pendingImport.data.neraca);
+    await DB.saveStatementSection(companyId, pendingImport.period, 'labaRugi', pendingImport.data.labaRugi);
+    toast(`Buku Besar tersimpan — Neraca & Laba Rugi otomatis diperbarui`, 'success');
+  } else {
+    await DB.saveStatementSection(companyId, pendingImport.period, pendingImport.statementKey, pendingImport.data);
+    toast(`Data ${pendingImport.typeLabel} berhasil disimpan`, 'success');
+  }
   pendingImport = null;
   renderImport();
 }
