@@ -2,16 +2,12 @@
 // Caching dasar untuk shell aplikasi agar dapat dibuka ulang saat offline
 // (data laporan keuangan tetap membutuhkan koneksi ke Firebase).
 
-const CACHE_NAME = 'integrida-cache-v1';
+// v2: seluruh CSS & JS aplikasi sudah digabung ke dalam index.html,
+// jadi app shell yang perlu di-cache jauh lebih sederhana.
+const CACHE_NAME = 'integrida-cache-v2';
 const APP_SHELL = [
   './',
   './index.html',
-  './css/style.css',
-  './js/firebase-config.js',
-  './js/db.js',
-  './js/import-excel.js',
-  './js/analysis.js',
-  './js/app.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png'

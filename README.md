@@ -11,21 +11,30 @@ Dibangun dengan HTML/CSS/JavaScript murni (tanpa build tool) + **Firebase**
 
 ## Struktur File
 
+Seluruh CSS dan JavaScript (config Firebase, akses data, parsing Excel,
+analisis rasio, dan logika UI) sudah digabung langsung ke dalam
+`index.html`, jadi kalau ada pembaruan, cukup **timpa satu file itu saja**
+saat re-upload ke hosting.
+
 ```
 integrida/
-├── index.html                  # Halaman utama aplikasi
+├── index.html                  # Halaman utama + seluruh CSS/JS aplikasi
 ├── manifest.json                # Konfigurasi PWA
-├── service-worker.js            # Caching offline dasar
-├── css/style.css                 # Seluruh styling
-├── js/
-│   ├── firebase-config.js       # ⚠️ ISI dengan config Firebase Anda
-│   ├── db.js                    # Akses data Firestore
-│   ├── import-excel.js          # Parsing file Excel (neraca & laba rugi)
-│   ├── analysis.js              # Perhitungan rasio keuangan
-│   └── app.js                   # Logika UI & routing
+├── service-worker.js            # Caching offline dasar (wajib file terpisah)
 ├── icons/icon-192.png, icon-512.png
 └── template/Template_Import_Neraca_LabaRugi.xlsx   # Template impor untuk pengguna
 ```
+
+`manifest.json`, `service-worker.js`, dan file ikon **tidak bisa** ikut
+digabung ke `index.html` — browser mensyaratkan ketiganya sebagai file
+terpisah yang bisa diakses lewat URL sendiri (manifest & service worker
+untuk fitur PWA, ikon untuk gambar). Tapi ketiganya jarang perlu diubah;
+hampir semua perubahan aplikasi sehari-hari (tampilan, logika, rasio,
+dsb.) ada di dalam `index.html`.
+
+Jika suatu saat Anda ingin mengedit config Firebase, cari komentar
+`// ===== firebase-config.js =====` di dalam `<script>` pertama pada
+`index.html`.
 
 ## 1. Setup Firebase (wajib sebelum digunakan)
 
@@ -125,7 +134,29 @@ Mengunggah ulang file dengan Perusahaan, Tahun, Jenis Periode, dan Label
 Periode yang sama akan **menimpa** data periode tersebut (bukan membuat
 duplikat).
 
-## 6. Teknologi
+## 6. Status Sinkronisasi
+
+Di pojok kanan atas (sebelah tombol "Muat ulang data") ada badge kecil
+yang menunjukkan status sinkronisasi data dengan server, berguna saat
+aplikasi dibuka di beberapa perangkat sekaligus (mis. PC kantor & laptop
+di rumah, dengan akun yang sama):
+
+- 🟢 **Tersinkron** — data yang tampil sudah terkonfirmasi sama dengan
+  yang ada di server Firestore. Perangkat lain yang login dengan akun
+  yang sama akan melihat data yang sama pula.
+- 🟡 **Menyinkronkan…** — ada perubahan (tambah perusahaan, impor data,
+  hapus data, dsb.) yang baru saja dilakukan di perangkat ini dan sedang
+  dikirim ke server.
+- 🔴 **Offline** — tidak ada koneksi ke server. Perubahan tetap tersimpan
+  di penyimpanan lokal perangkat dan akan otomatis terkirim begitu
+  koneksi internet kembali tersedia.
+
+Selain itu, halaman **Dashboard**, **Perbandingan**, dan **Analisis
+Rasio** sekarang memakai listener realtime — jadi kalau ada data baru
+yang diimpor dari perangkat lain, tampilan di perangkat ini akan
+otomatis ikut ter-update tanpa perlu menekan "Muat ulang data".
+
+## 7. Teknologi
 
 - **Firebase Authentication** — login email/password.
 - **Firebase Firestore** — penyimpanan data perusahaan & laporan keuangan.
