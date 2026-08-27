@@ -204,7 +204,12 @@ tbody tr:hover{background:#fafcfb;}
 .chart-box canvas{max-height:280px;}
 
 .ratio-note{font-size:12px;color:var(--slate);background:#fafbfb;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:10px;line-height:1.5;}
-.bb-akun-row:hover td,.bb-ledger-row:hover td{background:var(--teal-light);}
+.bb-akun-row:hover td{background:var(--teal-light);}
+.bb-ledger-row:hover{background:var(--teal-light);}
+.ledger-group summary::-webkit-details-marker{display:none;}
+.ledger-group summary{list-style:none;}
+.ledger-group summary::before{content:'▾';display:inline-block;width:14px;color:var(--slate-light);font-size:11px;transition:transform .15s;}
+.ledger-group:not([open]) summary::before{transform:rotate(-90deg);}
 
 .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--slate);font-family:var(--font-display);}
 
@@ -726,6 +731,67 @@ function classifyLedgerAccount(code, name) {
     return { group: 'beban', bucket, field: null };
   }
   return { group: null, bucket: null, field: null };
+}
+
+// Urutan & label kelompok akun untuk pratinjau/rincian Buku Besar —
+// dipakai supaya daftar akun mentah tidak tampil datar tanpa konteks,
+// melainkan dikelompokkan seperti pada laporan akuntansi (mis. "Kas &
+// Setara Kas" berisi akun Kas, Bank Jatim, Bank Mandiri Sidoarjo, dst).
+const LEDGER_GROUP_ORDER = [
+  { key: 'kasSetaraKas', label: 'Kas & Setara Kas' },
+  { key: 'persediaan', label: 'Persediaan' },
+  { key: 'asetLancarLainnya', label: 'Aset Lancar Lainnya' },
+  { key: 'asetTidakLancar', label: 'Aset Tidak Lancar' },
+  { key: 'kewajibanLancar', label: 'Kewajiban Lancar' },
+  { key: 'kewajibanJangkaPanjang', label: 'Kewajiban Jangka Panjang' },
+  { key: 'ekuitas', label: 'Ekuitas' },
+  { key: 'pendapatan', label: 'Pendapatan' },
+  { key: 'pendapatanLainnya', label: 'Pendapatan Lainnya' },
+  { key: 'hpp', label: 'Harga Pokok Penjualan (HPP)' },
+  { key: 'bebanOperasional', label: 'Beban Operasional' },
+  { key: 'bebanLainnya', label: 'Beban Lainnya' },
+  { key: 'pajakPenghasilan', label: 'Pajak Penghasilan' },
+  { key: 'takDikenali', label: 'Tidak Dikenali' }
+];
+
+// Memetakan hasil classifyLedgerAccount (group/bucket/field) ke satu
+// kunci kelompok pada LEDGER_GROUP_ORDER di atas.
+function ledgerGroupKey(code, name) {
+  const c = classifyLedgerAccount(code, name);
+  if (c.group === 'aset') {
+    if (c.field === 'kasSetaraKas') return 'kasSetaraKas';
+    if (c.field === 'persediaan') return 'persediaan';
+    return c.bucket === 'lancar' ? 'asetLancarLainnya' : 'asetTidakLancar';
+  }
+  if (c.group === 'kewajiban') return c.bucket === 'lancar' ? 'kewajibanLancar' : 'kewajibanJangkaPanjang';
+  if (c.group === 'ekuitas') return 'ekuitas';
+  if (c.group === 'pendapatan') return c.bucket === 'inti' ? 'pendapatan' : 'pendapatanLainnya';
+  if (c.group === 'beban') {
+    if (c.bucket === 'hpp') return 'hpp';
+    if (c.bucket === 'pajak') return 'pajakPenghasilan';
+    if (c.bucket === 'lainnya') return 'bebanLainnya';
+    return 'bebanOperasional';
+  }
+  return 'takDikenali';
+}
+
+/**
+ * Mengelompokkan daftar akun mentah Buku Besar berdasarkan klasifikasi
+ * yang sama dipakai untuk menurunkan Neraca/Laba Rugi. Tiap akun tetap
+ * menyimpan indeks aslinya (_idx) di array accounts supaya baris yang
+ * diklik pada tampilan berkelompok ini tetap bisa dicocokkan ke
+ * activeLedgerAccounts untuk menampilkan rincian transaksinya.
+ */
+function groupLedgerAccountsByClassification(accounts) {
+  const groups = {};
+  accounts.forEach((a, idx) => {
+    const key = ledgerGroupKey(a.code, a.name);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push({ ...a, _idx: idx });
+  });
+  return LEDGER_GROUP_ORDER
+    .map(g => ({ ...g, accounts: groups[g.key] || [] }))
+    .filter(g => g.accounts.length > 0);
 }
 
 /**
@@ -1731,15 +1797,48 @@ function keyValueTable(obj) {
   return `<table><tbody>${entries.map(([k, v]) => `<tr><td>${humanizeKey(k)}</td><td class="num">${formatIDR(v)}</td></tr>`).join('')}</tbody></table>`;
 }
 
+// Baris satu akun di dalam kelompok klasifikasi Buku Besar — kode akun
+// (kalau ada) + nama di kiri, saldo akhir di kanan, seluruh baris bisa
+// diklik (delegated listener .bb-ledger-row) untuk membuka rincian
+// transaksi akun tersebut.
+function ledgerAccountRow(a) {
+  const codeTag = a.code
+    ? `<span style="font-family:var(--font-mono);font-size:11px;color:var(--slate-light);margin-right:7px;">${a.code}</span>`
+    : '';
+  return `
+    <div class="bb-ledger-row" data-idx="${a._idx}" title="Klik untuk melihat rincian transaksi"
+         style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;">
+      <span style="color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${codeTag}${a.name || '(tanpa nama)'}</span>
+      <span class="num" style="font-family:var(--font-mono);flex-shrink:0;">${formatIDR(a.saldoAkhir)}</span>
+    </div>`;
+}
+
+// Tampilan Buku Besar dikelompokkan per klasifikasi akun (Kas & Setara
+// Kas, Persediaan, Aset Tidak Lancar, dst — lihat LEDGER_GROUP_ORDER),
+// masing-masing menampilkan total kelompok di judul lalu daftar akun
+// penyusunnya di bawahnya — supaya pengguna langsung melihat akun apa
+// saja yang membentuk sebuah kategori (mis. "Kas & Setara Kas" terdiri
+// dari akun Kas, Bank Jatim, Bank Mandiri Sidoarjo), dan tiap akun tetap
+// bisa diklik untuk melihat rincian transaksinya (sama seperti sebelumnya).
 function ledgerTable(accounts) {
   if (!Array.isArray(accounts) || accounts.length === 0) return `<div style="color:var(--slate-light);font-size:13px;padding:6px 2px;">Belum ada data.</div>`;
   activeLedgerAccounts = accounts;
+  const groups = groupLedgerAccountsByClassification(accounts);
   return `
-    <div class="table-wrap" style="max-height:320px;overflow-y:auto;">
-      <table>
-        <thead><tr><th>Kode</th><th>Nama Akun</th><th class="num">Saldo Awal</th><th class="num">Saldo Akhir</th></tr></thead>
-        <tbody>${accounts.map((a, i) => `<tr class="bb-ledger-row" data-idx="${i}" title="Klik untuk melihat rincian transaksi"><td>${a.code || '–'}</td><td>${a.name || '–'}</td><td class="num">${formatIDR(a.saldoAwal)}</td><td class="num">${formatIDR(a.saldoAkhir)}</td></tr>`).join('')}</tbody>
-      </table>
+    <div style="max-height:420px;overflow-y:auto;">
+      ${groups.map(g => {
+        const total = g.accounts.reduce((sum, a) => sum + (a.saldoAkhir || 0), 0);
+        return `
+        <details class="ledger-group" open style="border-bottom:1px solid var(--border);">
+          <summary style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 2px;cursor:pointer;font-weight:600;font-size:13.5px;">
+            <span>${g.label}<span style="font-weight:400;color:var(--slate-light);margin-left:6px;">(${g.accounts.length} akun)</span></span>
+            <span class="num" style="font-family:var(--font-mono);">${formatIDR(total)}</span>
+          </summary>
+          <div style="padding:0 2px 8px 20px;">
+            ${g.accounts.map(ledgerAccountRow).join('')}
+          </div>
+        </details>`;
+      }).join('')}
     </div>`;
 }
 
