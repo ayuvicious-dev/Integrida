@@ -744,6 +744,20 @@ function deriveStatementsFromLedgerAccounts(accounts) {
     bebanOperasional: 0, labaOperasional: 0, bebanLainnya: 0,
     labaSebelumPajak: 0, pajakPenghasilan: 0, labaBersih: 0
   };
+  // Melacak akun-akun buku besar mana saja yang menyusun tiap baris
+  // Neraca/Laba Rugi di atas — dipakai di pratinjau impor supaya pengguna
+  // bisa mengecek kesesuaian transaksi per baris (bukan hanya angka akhir).
+  const contributions = {};
+  const addContribution = (field, account, amount) => {
+    if (!contributions[field]) contributions[field] = [];
+    contributions[field].push({
+      code: account.code,
+      name: account.name,
+      saldoAwal: account.saldoAwal || 0,
+      saldoAkhir: account.saldoAkhir || 0,
+      amount
+    });
+  };
   const unrecognized = [];
 
   accounts.forEach(a => {
@@ -752,20 +766,24 @@ function deriveStatementsFromLedgerAccounts(accounts) {
     const mutasi = (a.saldoAkhir || 0) - (a.saldoAwal || 0);
 
     if (c.group === 'aset') {
-      if (c.field === 'kasSetaraKas') neraca.kasSetaraKas += akhir;
-      if (c.field === 'persediaan') neraca.persediaan += akhir;
-      if (c.bucket === 'lancar') neraca.totalAsetLancar += akhir; else neraca.totalAsetTidakLancar += akhir;
+      if (c.field === 'kasSetaraKas') { neraca.kasSetaraKas += akhir; addContribution('kasSetaraKas', a, akhir); }
+      if (c.field === 'persediaan') { neraca.persediaan += akhir; addContribution('persediaan', a, akhir); }
+      if (c.bucket === 'lancar') { neraca.totalAsetLancar += akhir; addContribution('totalAsetLancar', a, akhir); }
+      else { neraca.totalAsetTidakLancar += akhir; addContribution('totalAsetTidakLancar', a, akhir); }
     } else if (c.group === 'kewajiban') {
-      if (c.bucket === 'lancar') neraca.totalKewajibanLancar += akhir; else neraca.totalKewajibanJangkaPanjang += akhir;
+      if (c.bucket === 'lancar') { neraca.totalKewajibanLancar += akhir; addContribution('totalKewajibanLancar', a, akhir); }
+      else { neraca.totalKewajibanJangkaPanjang += akhir; addContribution('totalKewajibanJangkaPanjang', a, akhir); }
     } else if (c.group === 'ekuitas') {
       neraca.totalEkuitas += akhir;
+      addContribution('totalEkuitas', a, akhir);
     } else if (c.group === 'pendapatan') {
-      if (c.bucket === 'inti') labaRugi.pendapatan += mutasi; else labaRugi.pendapatanLainnya += mutasi;
+      if (c.bucket === 'inti') { labaRugi.pendapatan += mutasi; addContribution('pendapatan', a, mutasi); }
+      else { labaRugi.pendapatanLainnya += mutasi; addContribution('pendapatanLainnya', a, mutasi); }
     } else if (c.group === 'beban') {
-      if (c.bucket === 'hpp') labaRugi.hpp += mutasi;
-      else if (c.bucket === 'operasional') labaRugi.bebanOperasional += mutasi;
-      else if (c.bucket === 'lainnya') labaRugi.bebanLainnya += mutasi;
-      else if (c.bucket === 'pajak') labaRugi.pajakPenghasilan += mutasi;
+      if (c.bucket === 'hpp') { labaRugi.hpp += mutasi; addContribution('hpp', a, mutasi); }
+      else if (c.bucket === 'operasional') { labaRugi.bebanOperasional += mutasi; addContribution('bebanOperasional', a, mutasi); }
+      else if (c.bucket === 'lainnya') { labaRugi.bebanLainnya += mutasi; addContribution('bebanLainnya', a, mutasi); }
+      else if (c.bucket === 'pajak') { labaRugi.pajakPenghasilan += mutasi; addContribution('pajakPenghasilan', a, mutasi); }
     } else {
       unrecognized.push(`${a.code ? '(' + a.code + ') ' : ''}${a.name}`);
     }
@@ -784,7 +802,7 @@ function deriveStatementsFromLedgerAccounts(accounts) {
     warnings.push(`Kode akun berikut tidak dikenali kategorinya sehingga dilewati dari Neraca/Laba Rugi (kode akun harus diawali 1-8): ${unrecognized.join(', ')}.`);
   }
 
-  return { neraca, labaRugi, warnings };
+  return { neraca, labaRugi, warnings, contributions };
 }
 
 /**
@@ -854,7 +872,8 @@ function parseBukuBesarSheet(sheet) {
     accounts,
     neraca: derived.neraca,
     labaRugi: derived.labaRugi,
-    warnings: derived.warnings
+    warnings: derived.warnings,
+    contributions: derived.contributions
   };
 }
 
@@ -868,6 +887,18 @@ function parseAccountingReportSheet(sheet, statementKey) {
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
   const expected = REPORT_TYPE_LABELS[statementKey] || statementKey;
   const knownLabels = Object.values(REPORT_TYPE_LABELS);
+
+  // Guard: file ini sebenarnya hasil export Buku Besar (General Ledger),
+  // bukan laporan ringkas Neraca/Laba Rugi/Arus Kas. Tanpa pemeriksaan ini,
+  // parser di bawah bisa "berhasil" membaca sebagian kolom (mis. kolom
+  // "Nomor" transaksi salah terbaca sebagai nilai akun) dan menghasilkan
+  // angka yang keliru tanpa peringatan — jadi lebih aman ditolak sejak awal.
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const label = normalizeKey(rows[i][0]);
+    if (label === 'buku besar' || label === 'nama akun / tanggal') {
+      throw new Error('File ini terdeteksi sebagai hasil export Buku Besar (General Ledger), bukan laporan ringkas. Pilih jenis data "Buku Besar" pada langkah 2 di atas, lalu unggah ulang file ini.');
+    }
+  }
 
   let companyName = '';
   let reportTypeText = '';
@@ -1030,7 +1061,7 @@ function parseSingleTypeExcel(arrayBuffer, typeKey) {
           statementKey: type.statementKey,
           companyName: parsed.companyName,
           period: parsed.period,
-          data: { ledger: parsed.accounts, neraca: parsed.neraca, labaRugi: parsed.labaRugi },
+          data: { ledger: parsed.accounts, neraca: parsed.neraca, labaRugi: parsed.labaRugi, contributions: parsed.contributions },
           warnings: parsed.warnings
         };
       } catch (err) {
@@ -1174,7 +1205,9 @@ const state = {
   unsubCompanies: null,   // listener realtime daftar perusahaan (aktif sepanjang sesi)
   unsubData: null,        // listener realtime data view yang sedang aktif (dashboard/compare/ratios)
   importCompanyId: null,
-  importType: 'neraca'    // jenis data yang sedang dipilih di halaman Impor Data
+  importType: 'neraca',   // jenis data yang sedang dipilih di halaman Impor Data
+  companyDetailId: null,      // perusahaan yang sedang dilihat rinciannya
+  companyDetailPeriodId: null // periode (statementId) yang sedang dipilih di halaman rincian
 };
 
 // =============================================================
@@ -1430,6 +1463,7 @@ function renderCurrentView() {
   const map = {
     dashboard: renderDashboard,
     companies: renderCompanies,
+    'company-detail': renderCompanyDetail,
     import: renderImport,
     compare: renderCompare,
     ratios: renderRatios,
@@ -1579,14 +1613,25 @@ function renderCompanies() {
 
 async function fillCompanyRows() {
   const tbody = document.getElementById('company-rows');
-  tbody.innerHTML = state.companies.map(c => `<tr data-id="${c.id}"><td>${c.name}</td><td class="num">…</td><td style="text-align:right;"><button class="btn ghost" data-del="${c.id}">Hapus</button></td></tr>`).join('');
+  tbody.innerHTML = state.companies.map(c => `<tr data-id="${c.id}">
+    <td><a href="#" class="company-link" data-open="${c.id}" style="color:var(--ink);font-weight:600;text-decoration:none;">${c.name}</a></td>
+    <td class="num">…</td>
+    <td style="text-align:right;"><button class="btn ghost" data-del="${c.id}">Hapus</button></td>
+  </tr>`).join('');
   for (const c of state.companies) {
     const statements = await DB.getStatements(c.id);
     const row = tbody.querySelector(`tr[data-id="${c.id}"] td:nth-child(2)`);
     if (row) row.textContent = statements.length;
   }
+  tbody.querySelectorAll('[data-open]').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      openCompanyDetail(link.dataset.open);
+    });
+  });
   tbody.querySelectorAll('[data-del]').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       if (!confirm('Hapus perusahaan ini beserta seluruh data laporannya?')) return;
       await DB.deleteCompany(btn.dataset.del);
       toast('Perusahaan dihapus', 'success');
@@ -1615,6 +1660,211 @@ function openAddCompanyModal() {
     backdrop.remove();
     toast('Perusahaan ditambahkan', 'success');
     await reloadCompanies();
+  });
+}
+
+// ---------- Rincian Perusahaan ----------
+function openCompanyDetail(companyId) {
+  teardownActiveDataListener();
+  state.view = 'company-detail';
+  state.companyDetailId = companyId;
+  state.companyDetailPeriodId = null;
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const company = state.companies.find(c => c.id === companyId);
+  document.getElementById('topbar-title').textContent = company ? company.name : 'Detail Perusahaan';
+  document.getElementById('topbar-sub').textContent = 'Rincian laporan & riwayat impor';
+  renderCompanyDetail();
+}
+
+function humanizeKey(key) {
+  const withSpaces = String(key || '').replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+  return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1);
+}
+
+function keyValueTable(obj) {
+  const entries = Object.entries(obj || {}).filter(([, v]) => v !== undefined && v !== null);
+  if (entries.length === 0) return `<div style="color:var(--slate-light);font-size:13px;padding:6px 2px;">Belum ada data.</div>`;
+  return `<table><tbody>${entries.map(([k, v]) => `<tr><td>${humanizeKey(k)}</td><td class="num">${formatIDR(v)}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function ledgerTable(accounts) {
+  if (!Array.isArray(accounts) || accounts.length === 0) return `<div style="color:var(--slate-light);font-size:13px;padding:6px 2px;">Belum ada data.</div>`;
+  return `
+    <div class="table-wrap" style="max-height:320px;overflow-y:auto;">
+      <table>
+        <thead><tr><th>Kode</th><th>Nama Akun</th><th class="num">Saldo Awal</th><th class="num">Saldo Akhir</th></tr></thead>
+        <tbody>${accounts.map(a => `<tr><td>${a.code || '–'}</td><td>${a.name || '–'}</td><td class="num">${formatIDR(a.saldoAwal)}</td><td class="num">${formatIDR(a.saldoAkhir)}</td></tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+// ---------- Rincian Akun (pratinjau impor Buku Besar) ----------
+// Baris Neraca/Laba Rugi yang diturunkan otomatis dari Buku Besar bisa
+// diklik untuk melihat akun-akun mana yang menyusun angka tersebut
+// (untuk mengecek kesesuaian transaksi), atau formula perhitungannya
+// untuk baris yang merupakan hasil turunan dari baris lain (bukan
+// dijumlah langsung dari akun).
+const NERACA_FORMULAS = {
+  totalAset: (n) => `Total Aset Lancar (${formatIDR(n.totalAsetLancar)}) + Total Aset Tidak Lancar (${formatIDR(n.totalAsetTidakLancar)})`,
+  totalKewajiban: (n) => `Total Kewajiban Lancar (${formatIDR(n.totalKewajibanLancar)}) + Total Kewajiban Jangka Panjang (${formatIDR(n.totalKewajibanJangkaPanjang)})`
+};
+const LABA_RUGI_FORMULAS = {
+  labaKotor: (l) => `Pendapatan (${formatIDR(l.pendapatan)}) − HPP (${formatIDR(l.hpp)})`,
+  labaOperasional: (l) => `Laba Kotor (${formatIDR(l.labaKotor)}) − Beban Operasional (${formatIDR(l.bebanOperasional)})`,
+  labaSebelumPajak: (l) => `Laba Operasional (${formatIDR(l.labaOperasional)}) + Pendapatan Lainnya (${formatIDR(l.pendapatanLainnya)}) − Beban Lainnya (${formatIDR(l.bebanLainnya)})`,
+  labaBersih: (l) => `Laba Sebelum Pajak (${formatIDR(l.labaSebelumPajak)}) − Pajak Penghasilan (${formatIDR(l.pajakPenghasilan)})`
+};
+
+function derivedFieldRow(key, value, contributions, formulaFn, formulaData) {
+  const list = contributions && contributions[key];
+  let body;
+  if (list && list.length) {
+    body = `
+      <div class="table-wrap" style="margin-top:4px;">
+        <table>
+          <thead><tr><th>Kode</th><th>Nama Akun</th><th class="num">Saldo Awal</th><th class="num">Saldo Akhir</th><th class="num">Kontribusi</th></tr></thead>
+          <tbody>${list.map(c => `<tr><td>${c.code || '–'}</td><td>${c.name || '–'}</td><td class="num">${formatIDR(c.saldoAwal)}</td><td class="num">${formatIDR(c.saldoAkhir)}</td><td class="num">${formatIDR(c.amount)}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>`;
+  } else if (formulaFn) {
+    body = `<div class="ratio-note" style="margin-top:4px;">${formulaFn(formulaData)}</div>`;
+  } else {
+    body = `<div style="color:var(--slate-light);font-size:12px;margin-top:4px;padding-left:2px;">Tidak ada akun buku besar yang menyusun baris ini.</div>`;
+  }
+  return `
+    <details style="border-bottom:1px solid var(--border);">
+      <summary style="display:flex;justify-content:space-between;align-items:center;padding:7px 2px;cursor:pointer;">
+        <span>${humanizeKey(key)}</span><span class="num" style="font-family:var(--font-mono);">${formatIDR(value)}</span>
+      </summary>
+      <div style="padding:2px 2px 12px 12px;">${body}</div>
+    </details>`;
+}
+
+function derivedSectionDetails(obj, contributions, formulas) {
+  const entries = Object.entries(obj || {});
+  if (entries.length === 0) return `<div style="color:var(--slate-light);font-size:13px;">Tidak ada data.</div>`;
+  return entries.map(([k, v]) => derivedFieldRow(k, v, contributions, formulas[k], obj)).join('');
+}
+
+function renderCompanyDetail() {
+  const root = document.getElementById('view-root');
+  const company = state.companies.find(c => c.id === state.companyDetailId);
+  if (!company) {
+    // Perusahaan sudah dihapus / tidak ditemukan — kembali ke daftar perusahaan.
+    setView('companies');
+    return;
+  }
+
+  root.innerHTML = `
+    <div class="section-block" style="display:flex;justify-content:space-between;align-items:center;">
+      <button class="btn ghost" id="back-to-companies">&larr; Kembali ke Daftar Perusahaan</button>
+    </div>
+    <div id="company-detail-content"><div class="card" style="color:var(--slate);">Memuat data…</div></div>
+  `;
+  document.getElementById('back-to-companies').addEventListener('click', () => setView('companies'));
+
+  // Listener realtime: rincian & riwayat impor otomatis diperbarui begitu
+  // ada data baru/dihapus, baik dari perangkat ini maupun perangkat lain.
+  state.unsubData = DB.watchStatements(state.companyDetailId, (rawStatements, meta) => {
+    Sync.report('statements', meta);
+    if (state.view !== 'company-detail' || state.companyDetailId !== company.id) return;
+    const statements = rawStatements.sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex);
+    paintCompanyDetail(statements);
+  }, (err) => toast('Gagal memuat data laporan: ' + err.message, 'error'));
+}
+
+function paintCompanyDetail(statements) {
+  const content = document.getElementById('company-detail-content');
+  if (!content) return;
+
+  if (statements.length === 0) {
+    content.innerHTML = `
+      <div class="card" style="color:var(--slate);margin-bottom:20px;">Belum ada data laporan keuangan untuk perusahaan ini. Silakan impor data terlebih dahulu di menu <strong>Impor Data</strong>.</div>
+      <div class="section-block">
+        <div class="section-title">Riwayat Impor</div>
+        <div class="card" style="color:var(--slate);">Belum ada riwayat impor.</div>
+      </div>
+    `;
+    return;
+  }
+
+  // Pilih periode aktif: gunakan pilihan sebelumnya bila masih ada, kalau
+  // tidak jatuhkan ke periode terbaru.
+  let selected = statements.find(s => s.id === state.companyDetailPeriodId);
+  if (!selected) selected = statements[statements.length - 1];
+  state.companyDetailPeriodId = selected.id;
+
+  content.innerHTML = `
+    <div class="section-block">
+      <div class="section-title">Pilih Periode</div>
+      <div class="pill-row" id="detail-period-pills">
+        ${statements.map(s => `<div class="pill ${s.id === selected.id ? 'active' : ''}" data-period-id="${s.id}">${s.periodLabel}</div>`).join('')}
+      </div>
+    </div>
+
+    <div class="section-block grid grid-2">
+      <div class="card">
+        <div class="section-title"><span class="badge teal">Neraca</span></div>
+        ${keyValueTable(selected.neraca)}
+      </div>
+      <div class="card">
+        <div class="section-title"><span class="badge gold">Laba Rugi</span></div>
+        ${keyValueTable(selected.labaRugi)}
+      </div>
+      <div class="card">
+        <div class="section-title"><span class="badge blue">Arus Kas</span></div>
+        ${keyValueTable(selected.arusKas)}
+      </div>
+      <div class="card">
+        <div class="section-title"><span class="badge purple">Buku Besar</span></div>
+        ${ledgerTable(selected.bukuBesar)}
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="section-title">Riwayat Impor</div>
+      <div style="font-size:12px;color:var(--slate);margin:-8px 0 12px 0;">
+        Menghapus satu baris riwayat akan menghapus <strong>seluruh data periode tersebut</strong> (Neraca, Laba Rugi, Arus Kas, dan Buku Besar yang pernah diimpor untuk periode itu) secara permanen.
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Periode</th><th>Neraca</th><th>Laba Rugi</th><th>Arus Kas</th><th>Buku Besar</th><th></th></tr></thead>
+          <tbody>
+            ${statements.slice().reverse().map(s => `<tr data-statement-id="${s.id}">
+              <td>${s.periodLabel}</td>
+              <td>${hasSectionData(s.neraca) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
+              <td>${hasSectionData(s.labaRugi) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
+              <td>${hasSectionData(s.arusKas) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
+              <td>${hasSectionData(s.bukuBesar) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
+              <td style="text-align:right;"><button class="btn danger" data-del-statement="${s.id}" data-label="${s.periodLabel}">Hapus</button></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  document.querySelectorAll('#detail-period-pills .pill').forEach(p => {
+    p.addEventListener('click', () => {
+      state.companyDetailPeriodId = p.dataset.periodId;
+      paintCompanyDetail(statements);
+    });
+  });
+
+  document.querySelectorAll('[data-del-statement]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const statementId = btn.dataset.delStatement;
+      const label = btn.dataset.label;
+      if (!confirm(`Hapus seluruh data periode "${label}"? Data Neraca, Laba Rugi, Arus Kas, dan Buku Besar yang pernah diimpor untuk periode ini akan ikut terhapus dan tidak bisa dikembalikan.`)) return;
+      try {
+        await DB.deleteStatement(state.companyDetailId, statementId);
+        if (state.companyDetailPeriodId === statementId) state.companyDetailPeriodId = null;
+        toast(`Data periode "${label}" dihapus`, 'success');
+        // Tampilan akan otomatis diperbarui lewat listener realtime.
+      } catch (err) {
+        toast('Gagal menghapus data: ' + err.message, 'error');
+      }
+    });
   });
 }
 
@@ -1785,13 +2035,11 @@ async function handleImportFile(file) {
       ${result.warnings.length ? `<div class="ratio-note" style="margin-top:8px;">${result.warnings.join('<br>')}</div>` : ''}
       ${isLedger ? `
         <div class="section-title" style="margin-top:16px;font-size:14px;">Neraca (diturunkan otomatis — saldo akhir periode)</div>
-        <table>
-          <tbody>${Object.entries(result.data.neraca).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('')}</tbody>
-        </table>
+        <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu baris untuk melihat akun buku besar yang menyusun angka tersebut.</div>
+        <div class="card" style="padding:2px 12px;">${derivedSectionDetails(result.data.neraca, result.data.contributions, NERACA_FORMULAS)}</div>
         <div class="section-title" style="margin-top:16px;font-size:14px;">Laba Rugi (diturunkan otomatis — mutasi periode)</div>
-        <table>
-          <tbody>${Object.entries(result.data.labaRugi).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('')}</tbody>
-        </table>
+        <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu baris untuk melihat akun buku besar yang menyusun angka tersebut.</div>
+        <div class="card" style="padding:2px 12px;">${derivedSectionDetails(result.data.labaRugi, result.data.contributions, LABA_RUGI_FORMULAS)}</div>
         <div class="section-title" style="margin-top:16px;font-size:14px;">Rincian Akun Buku Besar (${result.data.ledger.length} akun)</div>
         <div class="table-wrap" style="max-height:260px;overflow-y:auto;">
           <table>
@@ -2084,7 +2332,7 @@ auth.onAuthStateChanged(async (user) => {
     state.unsubCompanies = DB.watchCompanies(user.uid, (companies, meta) => {
       state.companies = companies;
       Sync.report('companies', meta);
-      const safeToRerender = ['dashboard', 'companies', 'compare', 'ratios'].includes(state.view)
+      const safeToRerender = ['dashboard', 'companies', 'company-detail', 'compare', 'ratios'].includes(state.view)
         && !document.querySelector('.modal-backdrop');
       if (safeToRerender) renderCurrentView();
     }, (err) => toast('Gagal memuat data perusahaan: ' + err.message, 'error'));
