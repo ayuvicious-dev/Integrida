@@ -4,7 +4,8 @@
 
 // v2: seluruh CSS & JS aplikasi sudah digabung ke dalam index.html,
 // jadi app shell yang perlu di-cache jauh lebih sederhana.
-const CACHE_NAME = 'integrida-cache-v2';
+// v3: pembaruan index.html.
+const CACHE_NAME = 'integrida-cache-v3';
 const APP_SHELL = [
   './',
   './index.html',
