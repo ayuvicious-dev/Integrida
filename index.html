@@ -112,6 +112,19 @@ input,select{font-family:inherit;}
 .grid-2{grid-template-columns:repeat(2,1fr);}
 @media(max-width:1100px){.grid-4{grid-template-columns:repeat(2,1fr);}.grid-3{grid-template-columns:repeat(2,1fr);}}
 
+/* ---------- Grid Perusahaan (tampilan "folder") ---------- */
+.company-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+@media(max-width:900px){.company-grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:560px){.company-grid{grid-template-columns:1fr;}}
+.company-card{
+  display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;
+  padding:26px 16px 20px;border:1px solid var(--border);border-radius:16px;background:var(--card);
+  cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease;
+}
+.company-card:hover{border-color:var(--teal);box-shadow:0 6px 18px rgba(22,33,58,0.08);transform:translateY(-2px);}
+.company-card-name{font-weight:600;font-size:14px;color:var(--ink);line-height:1.35;word-break:break-word;}
+.company-card-code{font-size:12px;color:var(--slate);font-family:var(--font-mono);}
+
 .kpi-card{display:flex;flex-direction:column;gap:6px;}
 .kpi-label{font-size:12px;color:var(--slate);text-transform:uppercase;letter-spacing:.5px;}
 .kpi-value{font-family:var(--font-mono);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;}
@@ -2048,7 +2061,7 @@ function renderCompanies() {
   root.innerHTML = `
     <div class="section-block" style="display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;">
       <div class="pill-row" id="companies-view-tabs" style="margin-bottom:0;">
-        <div class="pill ${view === 'table' ? 'active' : ''}" data-tab="table">Tabel</div>
+        <div class="pill ${view === 'table' ? 'active' : ''}" data-tab="table">Grid</div>
         <div class="pill ${view === 'chart' ? 'active' : ''}" data-tab="chart">Bagan Struktur</div>
       </div>
       <button class="btn primary" id="add-company-btn">+ Tambah Perusahaan</button>
@@ -2066,11 +2079,14 @@ function renderCompanies() {
   if (view === 'chart') {
     renderCompaniesChartView();
   } else {
-    renderCompaniesTableView();
+    renderCompaniesGridView();
   }
 }
 
-function renderCompaniesTableView() {
+// Tampilan "folder": grid kartu besar berisi logo & nama perusahaan saja.
+// Detail lain (kode, klasifikasi, induk, jumlah periode, hapus) dipindah
+// ke halaman Detail Perusahaan yang terbuka saat kartu diklik.
+function renderCompaniesGridView() {
   const body = document.getElementById('companies-view-body');
   if (!body) return;
   body.innerHTML = `
@@ -2078,16 +2094,11 @@ function renderCompaniesTableView() {
       <input type="text" id="company-search" placeholder="Cari kode atau nama perusahaan…" style="flex:1;min-width:220px;max-width:360px;" ${state.companies.length === 0 ? 'disabled' : ''}>
     </div>
     ${state.companies.length === 0 ? emptyState('Belum ada perusahaan', 'Mulai dengan menambahkan perusahaan pertama Anda.', '', '') : `
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Kode</th><th>Nama Perusahaan</th><th>Klasifikasi</th><th>Induk Perusahaan</th><th class="num">Jumlah Periode Tersimpan</th><th></th></tr></thead>
-        <tbody id="company-rows"></tbody>
-      </table>
-    </div>
+    <div class="company-grid" id="company-grid"></div>
     <div id="company-search-empty" class="card" style="display:none;color:var(--slate);margin-top:10px;">Tidak ada perusahaan yang cocok dengan pencarian.</div>`}
   `;
   if (state.companies.length) {
-    fillCompanyRows(state.companies);
+    fillCompanyGrid(state.companies);
     const searchInput = document.getElementById('company-search');
     searchInput.addEventListener('input', () => {
       const q = searchInput.value.trim().toLowerCase();
@@ -2097,80 +2108,24 @@ function renderCompaniesTableView() {
         String(c.category || '').toLowerCase().includes(q)
       );
       document.getElementById('company-search-empty').style.display = filtered.length === 0 ? '' : 'none';
-      fillCompanyRows(filtered);
+      fillCompanyGrid(filtered);
     });
   }
 }
 
-async function fillCompanyRows(list) {
+function fillCompanyGrid(list) {
   const companies = list || state.companies;
-  const tbody = document.getElementById('company-rows');
-  const parentLabel = (c) => {
-    if (!c.parentId) return '<span style="color:var(--slate-light);font-style:italic;">+ induk</span>';
-    const parent = state.companies.find(p => p.id === c.parentId);
-    return parent ? companyDisplayLabel(parent) : '<span style="color:var(--slate-light);font-style:italic;">+ induk</span>';
-  };
-  tbody.innerHTML = companies.map(c => `<tr data-id="${c.id}">
-    <td><a href="#" class="company-code-edit" data-code="${c.id}" style="color:var(--slate);text-decoration:none;" title="Klik untuk mengubah kode">${c.code ? c.code : '<span style="color:var(--slate-light);font-style:italic;">+ kode</span>'}</a></td>
-    <td><a href="#" class="company-link" data-open="${c.id}" style="color:var(--ink);font-weight:600;text-decoration:none;">${c.name}</a></td>
-    <td><a href="#" class="company-category-edit" data-category="${c.id}" style="text-decoration:none;" title="Klik untuk mengubah klasifikasi">${categoryBadgeHTML(c.category)}</a></td>
-    <td><a href="#" class="company-parent-edit" data-parent="${c.id}" style="color:var(--slate);text-decoration:none;" title="Klik untuk mengubah induk perusahaan">${parentLabel(c)}</a></td>
-    <td class="num">…</td>
-    <td style="text-align:right;"><button class="btn ghost" data-del="${c.id}">Hapus</button></td>
-  </tr>`).join('');
-  for (const c of companies) {
-    const statements = await DB.getStatements(c.id);
-    const row = tbody.querySelector(`tr[data-id="${c.id}"] td:nth-child(5)`);
-    if (row) row.textContent = statements.length;
-  }
-  tbody.querySelectorAll('[data-open]').forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      openCompanyDetail(link.dataset.open);
-    });
-  });
-  tbody.querySelectorAll('[data-code]').forEach(link => {
-    link.addEventListener('click', async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const id = link.dataset.code;
-      const current = companies.find(c => c.id === id);
-      const next = prompt('Kode perusahaan:', current ? (current.code || '') : '');
-      if (next === null) return;
-      const trimmed = next.trim();
-      await DB.updateCompanyCode(id, trimmed);
-      if (current) current.code = trimmed;
-      link.innerHTML = trimmed ? trimmed : '<span style="color:var(--slate-light);font-style:italic;">+ kode</span>';
-      toast('Kode perusahaan diperbarui', 'success');
-    });
-  });
-  tbody.querySelectorAll('[data-parent]').forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      openEditParentModal(link.dataset.parent);
-    });
-  });
-  tbody.querySelectorAll('[data-category]').forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      openEditCategoryModal(link.dataset.category);
-    });
-  });
-  tbody.querySelectorAll('[data-del]').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const id = btn.dataset.del;
-      const hasChildren = state.companies.some(c => c.parentId === id);
-      const msg = hasChildren
-        ? 'Hapus perusahaan ini beserta seluruh data laporannya? Anak perusahaan yang terhubung akan menjadi induk tersendiri.'
-        : 'Hapus perusahaan ini beserta seluruh data laporannya?';
-      if (!confirm(msg)) return;
-      await DB.deleteCompany(id);
-      toast('Perusahaan dihapus', 'success');
-      await reloadCompanies();
-    });
+  const grid = document.getElementById('company-grid');
+  if (!grid) return;
+  grid.innerHTML = companies.map(c => `
+    <div class="company-card" data-open="${c.id}" title="${escapeHTML(c.name)}">
+      ${companyAvatarHTML(c, 108, 20)}
+      <div class="company-card-name">${escapeHTML(c.name)}</div>
+      ${c.code ? `<div class="company-card-code">${escapeHTML(c.code)}</div>` : ''}
+    </div>
+  `).join('');
+  grid.querySelectorAll('[data-open]').forEach(card => {
+    card.addEventListener('click', () => openCompanyDetail(card.dataset.open));
   });
 }
 
@@ -2243,8 +2198,19 @@ function openEditParentModal(companyId) {
     company.parentId = parentId;
     backdrop.remove();
     toast('Induk perusahaan diperbarui', 'success');
-    renderCompaniesTableView();
+    refreshCompaniesOrDetail();
   });
+}
+
+// Menyegarkan tampilan yang relevan setelah kode/klasifikasi/induk
+// perusahaan diubah — bisa dipanggil baik dari grid daftar Perusahaan
+// maupun dari halaman Detail Perusahaan (Informasi Bisnis).
+function refreshCompaniesOrDetail() {
+  if (state.view === 'company-detail') {
+    renderCompanyDetail();
+  } else if (document.getElementById('company-grid')) {
+    fillCompanyGrid(state.companies);
+  }
 }
 
 function openEditCategoryModal(companyId) {
@@ -2274,7 +2240,7 @@ function openEditCategoryModal(companyId) {
     company.category = category;
     backdrop.remove();
     toast('Klasifikasi perusahaan diperbarui', 'success');
-    renderCompaniesTableView();
+    refreshCompaniesOrDetail();
   });
 }
 
@@ -2836,14 +2802,19 @@ function resizeImageFile(file, maxSize) {
   });
 }
 
-function businessInfoHTML(company) {
+function businessInfoHTML(company, periodCount) {
   const ownership = Array.isArray(company.ownership) ? company.ownership : [];
   const total = ownership.reduce((sum, o) => sum + (Number(o.percentage) || 0), 0);
+  const parent = company.parentId ? state.companies.find(p => p.id === company.parentId) : null;
+  const parentLabel = parent ? companyDisplayLabel(parent) : '<span style="color:var(--slate-light);font-style:italic;">+ induk</span>';
   return `
     <div class="section-block">
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
         <span>Informasi Bisnis</span>
-        <button class="btn ghost" id="edit-business-info" style="font-size:12px;">Edit Info Bisnis</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn ghost" id="edit-business-info" style="font-size:12px;">Edit Info Bisnis</button>
+          <button class="btn ghost" id="delete-company-btn" style="font-size:12px;color:var(--danger);">Hapus Perusahaan</button>
+        </div>
       </div>
       <div class="card">
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
@@ -2855,6 +2826,24 @@ function businessInfoHTML(company) {
               ${company.logoUrl ? `<button class="btn ghost" id="remove-logo-btn" style="font-size:12px;padding:6px 10px;color:var(--danger);">Hapus Logo</button>` : ''}
             </div>
             <input type="file" id="logo-file-input" accept="image/png,image/jpeg,image/webp" style="display:none;">
+          </div>
+        </div>
+        <div class="grid grid-4" style="gap:14px;margin-bottom:16px;">
+          <div>
+            <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px;">Kode</div>
+            <a href="#" id="edit-company-code" style="font-size:13.5px;color:var(--ink);text-decoration:none;" title="Klik untuk mengubah kode">${company.code ? escapeHTML(company.code) : '<span style="color:var(--slate-light);font-style:italic;">+ kode</span>'}</a>
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px;">Klasifikasi</div>
+            <a href="#" id="edit-company-category" style="text-decoration:none;" title="Klik untuk mengubah klasifikasi">${categoryBadgeHTML(company.category)}</a>
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px;">Induk Perusahaan</div>
+            <a href="#" id="edit-company-parent" style="font-size:13.5px;color:var(--ink);text-decoration:none;" title="Klik untuk mengubah induk perusahaan">${parentLabel}</a>
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px;">Jumlah Periode Tersimpan</div>
+            <div style="font-size:13.5px;">${periodCount != null ? periodCount : '…'}</div>
           </div>
         </div>
         <div style="margin-bottom:16px;">
@@ -3478,6 +3467,42 @@ function paintCompanyDetail(statements) {
     const btn = document.getElementById('edit-business-info');
     if (btn) btn.addEventListener('click', () => openEditBusinessInfoModal(state.companyDetailId));
 
+    const codeLink = document.getElementById('edit-company-code');
+    if (codeLink) {
+      codeLink.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const next = prompt('Kode perusahaan:', company ? (company.code || '') : '');
+        if (next === null) return;
+        const trimmed = next.trim();
+        await DB.updateCompanyCode(state.companyDetailId, trimmed);
+        if (company) company.code = trimmed;
+        toast('Kode perusahaan diperbarui', 'success');
+        paintCompanyDetail(statements);
+      });
+    }
+
+    const categoryLink = document.getElementById('edit-company-category');
+    if (categoryLink) categoryLink.addEventListener('click', (e) => { e.preventDefault(); openEditCategoryModal(state.companyDetailId); });
+
+    const parentLink = document.getElementById('edit-company-parent');
+    if (parentLink) parentLink.addEventListener('click', (e) => { e.preventDefault(); openEditParentModal(state.companyDetailId); });
+
+    const deleteBtn = document.getElementById('delete-company-btn');
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', async () => {
+        const id = state.companyDetailId;
+        const hasChildren = state.companies.some(c => c.parentId === id);
+        const msg = hasChildren
+          ? 'Hapus perusahaan ini beserta seluruh data laporannya? Anak perusahaan yang terhubung akan menjadi induk tersendiri.'
+          : 'Hapus perusahaan ini beserta seluruh data laporannya?';
+        if (!confirm(msg)) return;
+        await DB.deleteCompany(id);
+        toast('Perusahaan dihapus', 'success');
+        await reloadCompanies();
+        setView('companies');
+      });
+    }
+
     const uploadBtn = document.getElementById('upload-logo-btn');
     const fileInput = document.getElementById('logo-file-input');
     const removeBtn = document.getElementById('remove-logo-btn');
@@ -3523,7 +3548,7 @@ function paintCompanyDetail(statements) {
 
   if (statements.length === 0) {
     content.innerHTML = `
-      ${company ? businessInfoHTML(company) : ''}
+      ${company ? businessInfoHTML(company, 0) : ''}
       <div class="card" style="color:var(--slate);margin-bottom:20px;">Belum ada data laporan keuangan untuk perusahaan ini. Silakan impor data terlebih dahulu di menu <strong>Impor Data</strong>.</div>
       <div class="section-block">
         <div class="section-title">Riwayat Impor</div>
@@ -3553,7 +3578,7 @@ function paintCompanyDetail(statements) {
   const modalDisplay = withPerubahanModal(selected.perubahanModal, neracaDisplay);
 
   content.innerHTML = `
-    ${company ? businessInfoHTML(company) : ''}
+    ${company ? businessInfoHTML(company, statements.length) : ''}
     <div class="section-block">
       <div class="section-title">Pilih Periode</div>
       <div class="pill-row" id="detail-period-pills">

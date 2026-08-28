@@ -52,7 +52,13 @@
 //      Modal semuanya sudah diturunkan otomatis dari impor Buku Besar).
 //      Jenis impor yang tersisa hanya Buku Besar; langkah "Pilih Jenis
 //      Data" pada Impor Data ikut dihapus karena tidak relevan lagi.
-const CACHE_NAME = 'integrida-cache-v15';
+// v16: index.html diperbarui — tampilan menu Perusahaan (tab "Tabel")
+//      diganti jadi grid kartu ala folder (3 kartu per baris) yang cuma
+//      menampilkan logo & nama perusahaan; kode, klasifikasi, induk
+//      perusahaan, jumlah periode tersimpan, dan tombol hapus perusahaan
+//      dipindahkan ke kartu "Informasi Bisnis" pada halaman Detail
+//      Perusahaan (terbuka saat kartu grid diklik).
+const CACHE_NAME = 'integrida-cache-v16';
 const APP_SHELL = [
   './',
   './index.html',
