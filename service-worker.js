@@ -58,7 +58,19 @@
 //      perusahaan, jumlah periode tersimpan, dan tombol hapus perusahaan
 //      dipindahkan ke kartu "Informasi Bisnis" pada halaman Detail
 //      Perusahaan (terbuka saat kartu grid diklik).
-const CACHE_NAME = 'integrida-cache-v16';
+// v17: index.html diperbarui — kop/judul laporan (nama perusahaan, nama
+//      laporan, "Per .../Untuk Periode ...", "(dalam IDR)") ditambahkan
+//      di atas tabel Neraca, Laba Rugi, Arus Kas, dan Perubahan Modal
+//      pada halaman Detail Perusahaan.
+// v18: index.html diperbarui — kop/judul laporan (Neraca, Laba Rugi,
+//      Arus Kas, Perubahan Modal) diratakan ke tengah (rata tengah),
+//      bukan rata kiri.
+// v19: index.html diperbarui — kop laporan Laba Rugi, Arus Kas, &
+//      Perubahan Modal kini menampilkan rentang tanggal periode
+//      (mis. "01/08/2026 - 31/08/2026"), dihitung otomatis dari
+//      year/periodType/periodIndex, menggantikan baris "Untuk Periode
+//      ...". Kop Neraca tidak berubah (tetap "Per [label periode]").
+const CACHE_NAME = 'integrida-cache-v19';
 const APP_SHELL = [
   './',
   './index.html',
