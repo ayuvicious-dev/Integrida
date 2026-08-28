@@ -1161,6 +1161,60 @@ function deriveArusKasLangsungFromLedger(accounts) {
   };
 }
 
+// ---------- Laporan Perubahan Modal (diturunkan dari Buku Besar) ----------
+// Akun Ekuitas pada Buku Besar (kode akun 3) umumnya hanya berisi
+// modal/setoran pemilik — BELUM termasuk laba/rugi periode berjalan
+// (lihat catatan di atas withRetainedEarnings untuk Neraca). Laporan
+// Perubahan Modal berikut merekonsiliasi mutasi Modal Disetor selama
+// periode (Saldo Awal -> Saldo Akhir akun Ekuitas) dengan Setoran Modal
+// Pemilik & Penarikan Modal Pemilik/Dividen yang sudah diklasifikasikan
+// dari transaksi kas (pos "modal" pada CASHFLOW_DIRECT_CATEGORIES /
+// deriveArusKasLangsungFromLedger), lalu menambahkan Laba Bersih periode
+// berjalan supaya diperoleh Total Ekuitas Akhir Periode.
+function derivePerubahanModalFromLedger(accounts, arusKas, labaBersih) {
+  const equityAccounts = (accounts || []).filter(a => classifyLedgerAccount(a.code, a.name).group === 'ekuitas');
+  const modalDisetorAwal = equityAccounts.reduce((s, a) => s + (a.saldoAwal || 0), 0);
+  const modalDisetorAkhir = equityAccounts.reduce((s, a) => s + (a.saldoAkhir || 0), 0);
+
+  const pendanaan = (arusKas && arusKas.rincian && arusKas.rincian.pendanaan) || [];
+  const setoranBucket = pendanaan.find(b => b.key === 'modal_masuk');
+  const penarikanBucket = pendanaan.find(b => b.key === 'modal_keluar');
+  const setoranModal = setoranBucket ? setoranBucket.masuk : 0;
+  const penarikanModal = penarikanBucket ? penarikanBucket.keluar : 0;
+
+  const labaBersihPeriode = labaBersih || 0;
+  const totalEkuitasAkhir = modalDisetorAkhir + labaBersihPeriode;
+
+  const warnings = [];
+  if (equityAccounts.length === 0) {
+    warnings.push('Tidak ditemukan akun Ekuitas (kode akun 3) pada Buku Besar, sehingga Laporan Perubahan Modal tidak dapat diturunkan.');
+  } else {
+    const selisih = (modalDisetorAwal + setoranModal - penarikanModal) - modalDisetorAkhir;
+    if (Math.abs(selisih) > 1) {
+      warnings.push(`Terdapat selisih ${formatIDR(selisih)} antara mutasi akun Ekuitas dan hasil klasifikasi Setoran/Penarikan Modal pada Arus Kas — kemungkinan ada transaksi modal yang tidak melalui kas, atau keterangan transaksinya tidak mengandung kata kunci terkait modal (mis. "modal", "setoran pemilik", "prive", "dividen").`);
+    }
+  }
+
+  return { modalDisetorAwal, setoranModal, penarikanModal, modalDisetorAkhir, labaBersihPeriode, totalEkuitasAkhir, warnings };
+}
+
+// Melengkapi Laporan Perubahan Modal dengan Laba Ditahan Awal Periode &
+// Saldo Ekuitas termasuk laba ditahan — sama seperti withRetainedEarnings
+// untuk Neraca, dipakai di Detail Perusahaan yang punya akses ke seluruh
+// riwayat periode (tidak tersedia di layar Pratinjau Impor satu periode).
+function withPerubahanModal(modal, neracaDisplay) {
+  if (!modal || !neracaDisplay) return modal;
+  const periodeIni = neracaDisplay.pendapatanPeriodeIni || 0;
+  const sampaiTahunLalu = neracaDisplay.pendapatanSampaiTahunLalu || 0;
+  const labaDitahanAwal = sampaiTahunLalu + (periodeIni - modal.labaBersihPeriode);
+  return {
+    ...modal,
+    labaDitahanAwal,
+    saldoAwalEkuitas: modal.modalDisetorAwal + labaDitahanAwal,
+    totalEkuitasAkhirTermasukLabaDitahan: modal.modalDisetorAkhir + periodeIni + sampaiTahunLalu
+  };
+}
+
 /**
  * Merekonstruksi klasifikasi (contributions) dari daftar akun Buku Besar
  * yang SUDAH tersimpan di Firestore (statement.bukuBesar) — dipakai di
@@ -1245,6 +1299,7 @@ function parseBukuBesarSheet(sheet) {
 
   const derived = deriveStatementsFromLedgerAccounts(accounts);
   const arusKas = deriveArusKasLangsungFromLedger(accounts);
+  const perubahanModal = derivePerubahanModalFromLedger(accounts, arusKas, derived.labaRugi.labaBersih);
 
   return {
     companyName,
@@ -1253,7 +1308,8 @@ function parseBukuBesarSheet(sheet) {
     neraca: derived.neraca,
     labaRugi: derived.labaRugi,
     arusKas,
-    warnings: derived.warnings.concat(arusKas.warnings),
+    perubahanModal,
+    warnings: derived.warnings.concat(arusKas.warnings, perubahanModal.warnings),
     contributions: derived.contributions
   };
 }
@@ -1364,27 +1420,13 @@ function parseAccountingReportSheet(sheet, statementKey) {
   return { companyName, period, data, warnings };
 }
 
-// Registri jenis data yang bisa diimpor. Setiap jenis punya file Excel
-// SENDIRI (bukan lagi digabung satu file banyak sheet) — jadi Anda bisa
-// mengimpor Neraca hari ini, lalu Laba Rugi menyusul di lain waktu, untuk
-// periode yang sama. Data akan digabung (merge) di dokumen periode yang sama.
-// Registri jenis data yang bisa diimpor. Neraca & Laba Rugi TIDAK lagi
-// diimpor terpisah di sini — keduanya diturunkan otomatis dari impor
-// Buku Besar (lihat deriveStatementsFromLedgerAccounts), supaya tidak
-// ada dua sumber data yang bisa saling tidak sinkron untuk periode yang
-// sama. Arus Kas kini JUGA diturunkan otomatis dari impor Buku Besar
-// (metode langsung, lihat deriveArusKasLangsungFromLedger) — jenis impor
-// "Arus Kas" di bawah ini dipertahankan sebagai opsi manual/cadangan
-// (mis. bila software akuntansi sumbernya tidak diekspor lewat Buku
-// Besar), dan hasilnya akan TERTIMPA otomatis begitu Buku Besar periode
-// yang sama diimpor.
+// Registri jenis data yang bisa diimpor. Neraca, Laba Rugi, Arus Kas,
+// & Perubahan Modal TIDAK diimpor terpisah lagi — keempatnya diturunkan
+// otomatis dari satu-satunya jenis impor yang tersisa, Buku Besar (lihat
+// deriveStatementsFromLedgerAccounts, deriveArusKasLangsungFromLedger,
+// derivePerubahanModalFromLedger), supaya tidak ada dua sumber data yang
+// bisa saling tidak sinkron untuk periode yang sama.
 const IMPORT_TYPES = {
-  arusKas: {
-    label: 'Arus Kas',
-    badge: 'blue',
-    statementKey: 'arusKas',
-    mode: 'accountingReport'
-  },
   bukuBesar: {
     label: 'Buku Besar',
     badge: 'purple',
@@ -1440,7 +1482,7 @@ function parseSingleTypeExcel(arrayBuffer, typeKey) {
           statementKey: type.statementKey,
           companyName: parsed.companyName,
           period: parsed.period,
-          data: { ledger: parsed.accounts, neraca: parsed.neraca, labaRugi: parsed.labaRugi, arusKas: parsed.arusKas, contributions: parsed.contributions },
+          data: { ledger: parsed.accounts, neraca: parsed.neraca, labaRugi: parsed.labaRugi, arusKas: parsed.arusKas, perubahanModal: parsed.perubahanModal, contributions: parsed.contributions },
           warnings: parsed.warnings
         };
       } catch (err) {
@@ -3109,7 +3151,7 @@ function arusKasLangsungActivityBlock(label, buckets, total) {
   return `
     <div style="font-weight:600;color:var(--slate);font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:12px 2px 4px 2px;">${label}</div>
     ${buckets.map(arusKasLangsungLineRow).join('')}
-    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600;padding:6px 2px;border-top:1px dashed var(--border);margin-top:2px;">
+    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding:7px 8px;border-radius:6px;background:var(--teal-light);margin-top:4px;">
       <span>Kas Bersih dari ${label}</span>
       <span class="num" style="font-family:var(--font-mono);">${total < 0 ? '(' + formatIDR(Math.abs(total)) + ')' : formatIDR(total)}</span>
     </div>`;
@@ -3132,7 +3174,7 @@ function arusKasTable(arusKas) {
       <span class="num" style="font-family:var(--font-mono);">${arusKas.kenaikanKasBersih < 0 ? '(' + formatIDR(Math.abs(arusKas.kenaikanKasBersih)) + ')' : formatIDR(arusKas.kenaikanKasBersih)}</span>
     </div>`;
   const kasAkhirRow = `
-    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding:5px 2px;color:var(--teal);">
+    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding:7px 8px;border-radius:6px;background:var(--teal-light);margin-top:6px;">
       <span>Kas &amp; Setara Kas Akhir Periode</span><span class="num" style="font-family:var(--font-mono);">${formatIDR(arusKas.kasAkhir)}</span>
     </div>`;
   return `
@@ -3140,6 +3182,42 @@ function arusKasTable(arusKas) {
     ${arusKasLangsungActivityBlock(ARUS_KAS_ACTIVITY_LABELS.investasi, arusKas.rincian.investasi, arusKas.totalInvestasi)}
     ${arusKasLangsungActivityBlock(ARUS_KAS_ACTIVITY_LABELS.pendanaan, arusKas.rincian.pendanaan, arusKas.totalPendanaan)}
     <div style="margin-top:10px;">${kasAwalRow}${kenaikanRow}${kasAkhirRow}</div>`;
+}
+
+// Tampilan Laporan Perubahan Modal — diturunkan otomatis dari mutasi akun
+// Ekuitas & klasifikasi Setoran/Penarikan Modal pada Arus Kas (lihat
+// derivePerubahanModalFromLedger). Dipakai baik di pratinjau impor maupun
+// Detail Perusahaan. Saat dilengkapi withPerubahanModal (tersedia riwayat
+// periode), baris Laba Ditahan Awal Periode & Saldo Ekuitas termasuk laba
+// ditahan ikut ditampilkan, sejalan dengan Total Ekuitas (Termasuk
+// Laba/Rugi) pada Neraca.
+function perubahanModalTable(modal) {
+  if (!modal) return `<div style="color:var(--slate-light);font-size:13px;padding:6px 2px;">Belum ada data.</div>`;
+  const line = (label, value) => `
+    <div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 2px;">
+      <span>${label}</span><span class="num" style="font-family:var(--font-mono);">${value < 0 ? '(' + formatIDR(Math.abs(value)) + ')' : formatIDR(value)}</span>
+    </div>`;
+  const highlight = (label, value) => `
+    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding:7px 8px;border-radius:6px;background:var(--teal-light);margin:6px 0;">
+      <span>${label}</span><span class="num" style="font-family:var(--font-mono);">${value < 0 ? '(' + formatIDR(Math.abs(value)) + ')' : formatIDR(value)}</span>
+    </div>`;
+  const groupLabel = (text) => `<div style="font-weight:600;color:var(--slate);font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:10px 2px 4px 2px;">${text}</div>`;
+  const hasHistori = 'saldoAwalEkuitas' in modal;
+
+  return `
+    ${hasHistori
+      ? line('Modal Disetor Awal Periode', modal.modalDisetorAwal) + line('Laba Ditahan Awal Periode', modal.labaDitahanAwal) + highlight('Saldo Awal Ekuitas', modal.saldoAwalEkuitas)
+      : line('Modal Disetor Awal Periode', modal.modalDisetorAwal)}
+    ${groupLabel('Penambahan')}
+    ${line('Setoran Modal Pemilik', modal.setoranModal)}
+    ${line('Laba Bersih Periode Berjalan', modal.labaBersihPeriode)}
+    ${groupLabel('Pengurangan')}
+    ${line('Penarikan Modal Pemilik/Dividen', -modal.penarikanModal)}
+    ${highlight('Modal Disetor Akhir Periode', modal.modalDisetorAkhir)}
+    ${hasHistori
+      ? highlight('Saldo Akhir Ekuitas (Termasuk Laba Ditahan)', modal.totalEkuitasAkhirTermasukLabaDitahan)
+      : highlight('Total Ekuitas Akhir Periode (Termasuk Laba Periode Ini)', modal.totalEkuitasAkhir)}
+    ${modal.warnings && modal.warnings.length ? `<div class="ratio-note" style="margin-top:8px;">${modal.warnings.join('<br>')}</div>` : ''}`;
 }
 
 // Baris satu akun di dalam kelompok klasifikasi Buku Besar — kode akun
@@ -3472,6 +3550,7 @@ function paintCompanyDetail(statements) {
   // Pendapatan s.d. Tahun Lalu (lihat withRetainedEarnings) supaya Total
   // Aset bisa dicocokkan dengan Total Kewajiban + Total Ekuitas.
   const neracaDisplay = withRetainedEarnings(selected.neraca, statements, selected);
+  const modalDisplay = withPerubahanModal(selected.perubahanModal, neracaDisplay);
 
   content.innerHTML = `
     ${company ? businessInfoHTML(company) : ''}
@@ -3497,12 +3576,18 @@ function paintCompanyDetail(statements) {
         </div>
         ${bbContribs ? derivedSectionDetails(selected.labaRugi, bbContribs, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS, LABA_RUGI_ORDER) : keyValueTable(selected.labaRugi, LABA_RUGI_ORDER, LABA_RUGI_LABELS)}
       </div>
-      <div class="card" style="grid-column:1 / -1;">
+      <div class="card">
         <div class="section-title">
           <span class="badge blue">Arus Kas (Metode Langsung)</span>
           ${selected.arusKas && selected.arusKas.rincian ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik pos untuk rincian transaksi kas</span>' : ''}
         </div>
         ${arusKasTable(selected.arusKas)}
+      </div>
+      <div class="card">
+        <div class="section-title">
+          <span class="badge purple">Perubahan Modal</span>
+        </div>
+        ${perubahanModalTable(modalDisplay)}
       </div>
     </div>
 
@@ -3513,13 +3598,14 @@ function paintCompanyDetail(statements) {
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Periode</th><th>Neraca</th><th>Laba Rugi</th><th>Arus Kas</th><th>Buku Besar</th><th></th></tr></thead>
+          <thead><tr><th>Periode</th><th>Neraca</th><th>Laba Rugi</th><th>Arus Kas</th><th>Perubahan Modal</th><th>Buku Besar</th><th></th></tr></thead>
           <tbody>
             ${statements.slice().reverse().map(s => `<tr data-statement-id="${s.id}">
               <td>${s.periodLabel}</td>
               <td>${hasSectionData(s.neraca) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${hasSectionData(s.labaRugi) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${hasSectionData(s.arusKas) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
+              <td>${hasSectionData(s.perubahanModal) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${hasSectionData(s.bukuBesar) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td style="text-align:right;"><button class="btn danger" data-del-statement="${s.id}" data-label="${s.periodLabel}">Hapus</button></td>
             </tr>`).join('')}
@@ -3616,24 +3702,18 @@ function renderImport() {
           <div id="import-company-dropdown" class="combo-dropdown" style="display:none;"></div>
         </div>
 
-        <div class="section-title" style="margin-top:20px;">2. Pilih Jenis Data</div>
-        <div class="pill-row" id="import-type-pills">
-          ${Object.entries(IMPORT_TYPES).map(([key, t]) => `<div class="pill ${state.importType === key ? 'active' : ''}" data-type="${key}">${t.label}</div>`).join('')}
-        </div>
+        <div class="section-title" style="margin-top:20px;">2. Unggah File Excel Buku Besar</div>
         <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 16px 0;line-height:1.5;">
-          Setiap jenis data diimpor dari file Excel <strong>terpisah</strong> — satu file khusus untuk satu jenis data saja
-          (bukan satu file berisi semua laporan). Anda bisa mengimpor tiap jenis di waktu yang berbeda untuk periode yang sama;
-          data yang sudah tersimpan sebelumnya tidak akan tertimpa.
+          Neraca, Laba Rugi, Arus Kas Metode Langsung, & Perubahan Modal untuk periode ini akan diturunkan otomatis
+          dari file Buku Besar yang Anda unggah — tidak perlu diimpor terpisah.
         </div>
 
-        <div class="section-title">3. Unggah File Excel</div>
         <div class="dropzone" id="dropzone">
           ${icon('upload')}
           <div>Seret file .xlsx <strong id="dropzone-type-label"></strong> ke sini, atau klik untuk memilih</div>
           <div style="font-size:11.5px;margin-top:6px;" id="dropzone-hint"></div>
         </div>
         <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none;">
-        <a href="#" download class="btn ghost" id="download-template-btn" style="margin-top:14px;width:100%;justify-content:center;"></a>
       </div>
       <div class="card" id="preview-panel">
         <div class="section-title">Pratinjau Data</div>
@@ -3668,15 +3748,6 @@ function renderImport() {
     if (e.key === 'Escape') companyInput.blur();
   });
 
-  document.querySelectorAll('#import-type-pills .pill').forEach(p => {
-    p.addEventListener('click', () => {
-      state.importType = p.dataset.type;
-      document.querySelectorAll('#import-type-pills .pill').forEach(x => x.classList.toggle('active', x === p));
-      updateDropzoneAndTemplate();
-      resetPreview();
-    });
-  });
-
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('file-input');
   dropzone.addEventListener('click', () => {
@@ -3694,21 +3765,7 @@ function updateDropzoneAndTemplate() {
   const label = document.getElementById('dropzone-type-label');
   if (label) label.textContent = type.label;
   const hint = document.getElementById('dropzone-hint');
-  const templateBtn = document.getElementById('download-template-btn');
-  if (type.mode === 'accountingReport') {
-    if (hint) hint.textContent = `Unggah laporan ${type.label} apa adanya, hasil export langsung dari software akuntansi Anda — kode & nama akun boleh berbeda-beda per perusahaan, sistem membacanya dari struktur laporan (akun header, sub-akun, dan baris total).`;
-    if (templateBtn) templateBtn.style.display = 'none';
-  } else if (type.mode === 'bukuBesarLedger') {
-    if (hint) hint.textContent = `Unggah Buku Besar apa adanya, hasil export langsung dari software akuntansi Anda (per akun: Saldo Awal, daftar transaksi, Ending Balance). Neraca, Laba Rugi, & Arus Kas Metode Langsung periode ini akan dihitung & diisi otomatis dari kode akun (1=Aset, 2=Kewajiban, 3=Ekuitas, 4=Pendapatan, 5=HPP, 6=Beban Operasional, 7=Pendapatan Lainnya, 8=Beban Lainnya, 9=Beban Pajak) & transaksi akun Kas/Bank.`;
-    if (templateBtn) templateBtn.style.display = 'none';
-  } else {
-    if (hint) hint.textContent = `File harus berisi sheet "Info" dan sheet data sesuai jenis yang dipilih di atas`;
-    if (templateBtn) {
-      templateBtn.style.display = '';
-      templateBtn.href = type.templateFile;
-      templateBtn.textContent = `Unduh Template ${type.label}`;
-    }
-  }
+  if (hint) hint.textContent = `Unggah Buku Besar apa adanya, hasil export langsung dari software akuntansi Anda (per akun: Saldo Awal, daftar transaksi, Ending Balance). Neraca, Laba Rugi, Arus Kas Metode Langsung, & Perubahan Modal periode ini akan dihitung & diisi otomatis dari kode akun (1=Aset, 2=Kewajiban, 3=Ekuitas, 4=Pendapatan, 5=HPP, 6=Beban Operasional, 7=Pendapatan Lainnya, 8=Beban Lainnya, 9=Beban Pajak) & transaksi akun Kas/Bank.`;
 }
 
 function resetPreview() {
@@ -3743,13 +3800,14 @@ async function loadImportStatus() {
   tableEl.innerHTML = `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Periode</th><th>Neraca</th><th>Laba Rugi</th><th>Arus Kas</th><th>Buku Besar</th></tr></thead>
+        <thead><tr><th>Periode</th><th>Neraca</th><th>Laba Rugi</th><th>Arus Kas</th><th>Perubahan Modal</th><th>Buku Besar</th></tr></thead>
         <tbody>
           ${statements.map(s => `<tr>
             <td>${s.periodLabel}</td>
             <td>${mark(hasSectionData(s.neraca))}</td>
             <td>${mark(hasSectionData(s.labaRugi))}</td>
             <td>${mark(hasSectionData(s.arusKas))}</td>
+            <td>${mark(hasSectionData(s.perubahanModal))}</td>
             <td>${mark(hasSectionData(s.bukuBesar))}</td>
           </tr>`).join('')}
         </tbody>
@@ -3773,8 +3831,6 @@ async function handleImportFile(file) {
     const result = parseSingleTypeExcel(buffer, state.importType);
     pendingImport = result;
 
-    const isLedger = result.statementKey === 'bukuBesar';
-
     panel.innerHTML = `
       <div class="section-title">Pratinjau Data</div>
       <div style="font-size:13px;margin-bottom:10px;">
@@ -3783,25 +3839,20 @@ async function handleImportFile(file) {
       </div>
       <div class="badge ${result.badge}">${result.typeLabel}</div>
       ${result.warnings.length ? `<div class="ratio-note" style="margin-top:8px;">${result.warnings.join('<br>')}</div>` : ''}
-      ${isLedger ? `
-        <div class="section-title" style="margin-top:16px;font-size:14px;">Neraca (diturunkan otomatis — saldo akhir periode)</div>
-        <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu baris untuk melihat akun buku besar yang menyusun angka tersebut.</div>
-        <div class="card" style="padding:2px 12px;">${derivedNeracaGrouped(result.data.neraca, result.data.contributions)}</div>
-        <div class="section-title" style="margin-top:16px;font-size:14px;">Laba Rugi (diturunkan otomatis — mutasi periode)</div>
-        <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu baris untuk melihat akun buku besar yang menyusun angka tersebut.</div>
-        <div class="card" style="padding:2px 12px;">${derivedSectionDetails(result.data.labaRugi, result.data.contributions, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS, LABA_RUGI_ORDER)}</div>
-        <div class="section-title" style="margin-top:16px;font-size:14px;">Arus Kas Metode Langsung (diturunkan otomatis — transaksi akun Kas/Bank)</div>
-        <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu pos untuk melihat transaksi kas yang menyusun angka tersebut.</div>
-        <div class="card" style="padding:2px 12px;">${arusKasTable(result.data.arusKas)}</div>
-      ` : `
-        <table style="margin-top:10px;">
-          <tbody>${Object.entries(result.data).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('') || '<tr><td colspan="2">Tidak ada data terbaca</td></tr>'}</tbody>
-        </table>
-      `}
+      <div class="section-title" style="margin-top:16px;font-size:14px;">Neraca (diturunkan otomatis — saldo akhir periode)</div>
+      <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu baris untuk melihat akun buku besar yang menyusun angka tersebut.</div>
+      <div class="card" style="padding:2px 12px;">${derivedNeracaGrouped(result.data.neraca, result.data.contributions)}</div>
+      <div class="section-title" style="margin-top:16px;font-size:14px;">Laba Rugi (diturunkan otomatis — mutasi periode)</div>
+      <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu baris untuk melihat akun buku besar yang menyusun angka tersebut.</div>
+      <div class="card" style="padding:2px 12px;">${derivedSectionDetails(result.data.labaRugi, result.data.contributions, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS, LABA_RUGI_ORDER)}</div>
+      <div class="section-title" style="margin-top:16px;font-size:14px;">Arus Kas Metode Langsung (diturunkan otomatis — transaksi akun Kas/Bank)</div>
+      <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu pos untuk melihat transaksi kas yang menyusun angka tersebut.</div>
+      <div class="card" style="padding:2px 12px;">${arusKasTable(result.data.arusKas)}</div>
+      <div class="section-title" style="margin-top:16px;font-size:14px;">Perubahan Modal (diturunkan otomatis — mutasi akun Ekuitas &amp; Arus Kas Pendanaan)</div>
+      <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Baris Laba Ditahan Awal Periode baru muncul di Detail Perusahaan (butuh riwayat periode sebelumnya).</div>
+      <div class="card" style="padding:2px 12px;">${perubahanModalTable(result.data.perubahanModal)}</div>
       <div class="ratio-note" style="margin-top:12px;">
-        ${isLedger
-          ? `Data ini akan disimpan sebagai <strong>Buku Besar</strong>, dan otomatis mengisi bagian <strong>Neraca</strong> &amp; <strong>Laba Rugi</strong> untuk periode <strong>${result.period.periodLabel}</strong>. Neraca/Laba Rugi periode ini yang sudah pernah diimpor manual sebelumnya (jika ada) akan tertimpa oleh hasil turunan Buku Besar ini.`
-          : `Data ini akan disimpan sebagai bagian <strong>${result.typeLabel}</strong> untuk periode <strong>${result.period.periodLabel}</strong>. Jenis data lain yang sudah pernah diimpor untuk periode yang sama (jika ada) tidak akan tertimpa.`}
+        Data ini akan disimpan sebagai <strong>Buku Besar</strong>, dan otomatis mengisi bagian <strong>Neraca</strong>, <strong>Laba Rugi</strong>, <strong>Arus Kas</strong>, &amp; <strong>Perubahan Modal</strong> untuk periode <strong>${result.period.periodLabel}</strong>. Data periode ini yang sudah pernah diimpor sebelumnya (jika ada) akan tertimpa oleh hasil turunan Buku Besar ini.
       </div>
       <button class="btn primary" id="confirm-import" style="margin-top:16px;width:100%;justify-content:center;">Simpan ke Sistem</button>
     `;
@@ -3814,16 +3865,12 @@ async function handleImportFile(file) {
 async function confirmImport() {
   const companyId = state.importCompanyId;
   if (!pendingImport) return;
-  if (pendingImport.statementKey === 'bukuBesar') {
-    await DB.saveStatementSection(companyId, pendingImport.period, 'bukuBesar', pendingImport.data.ledger);
-    await DB.saveStatementSection(companyId, pendingImport.period, 'neraca', pendingImport.data.neraca);
-    await DB.saveStatementSection(companyId, pendingImport.period, 'labaRugi', pendingImport.data.labaRugi);
-    await DB.saveStatementSection(companyId, pendingImport.period, 'arusKas', pendingImport.data.arusKas);
-    toast(`Buku Besar tersimpan — Neraca, Laba Rugi & Arus Kas otomatis diperbarui`, 'success');
-  } else {
-    await DB.saveStatementSection(companyId, pendingImport.period, pendingImport.statementKey, pendingImport.data);
-    toast(`Data ${pendingImport.typeLabel} berhasil disimpan`, 'success');
-  }
+  await DB.saveStatementSection(companyId, pendingImport.period, 'bukuBesar', pendingImport.data.ledger);
+  await DB.saveStatementSection(companyId, pendingImport.period, 'neraca', pendingImport.data.neraca);
+  await DB.saveStatementSection(companyId, pendingImport.period, 'labaRugi', pendingImport.data.labaRugi);
+  await DB.saveStatementSection(companyId, pendingImport.period, 'arusKas', pendingImport.data.arusKas);
+  await DB.saveStatementSection(companyId, pendingImport.period, 'perubahanModal', pendingImport.data.perubahanModal);
+  toast(`Buku Besar tersimpan — Neraca, Laba Rugi, Arus Kas & Perubahan Modal otomatis diperbarui`, 'success');
   pendingImport = null;
   renderImport();
 }

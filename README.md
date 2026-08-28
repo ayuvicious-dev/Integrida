@@ -109,14 +109,18 @@ firebase deploy
 2. Buka menu **Perusahaan** → tambahkan perusahaan yang akan dikonsolidasikan.
 3. Buka menu **Impor Data** → unggah file Excel **Buku Besar** (hasil
    export apa adanya dari software akuntansi: per akun ada Saldo Awal,
-   daftar transaksi, dan Saldo Akhir). **Neraca** & **Laba Rugi** untuk
-   periode tersebut akan **otomatis diturunkan** dari Buku Besar ini
-   berdasarkan kode akun (1=Aset, 2=Kewajiban, 3=Ekuitas, 4=Pendapatan,
-   5=HPP, 6=Beban Operasional, 7=Pendapatan Lainnya, 8=Beban Lainnya,
-   9=Beban Pajak) — tidak perlu diimpor terpisah. Jenis **Arus Kas**
-   masih diimpor terpisah dengan cara yang sama (unggah laporan Arus
-   Kas apa adanya). Setiap file mewakili **satu perusahaan pada satu
-   periode** (bulanan/triwulan/semester/tahunan).
+   daftar transaksi, dan Saldo Akhir). **Neraca**, **Laba Rugi**, **Arus
+   Kas**, dan **Perubahan Modal** untuk periode tersebut akan **otomatis
+   diturunkan** dari Buku Besar ini berdasarkan kode akun (1=Aset,
+   2=Kewajiban, 3=Ekuitas, 4=Pendapatan, 5=HPP, 6=Beban Operasional,
+   7=Pendapatan Lainnya, 8=Beban Lainnya, 9=Beban Pajak) — tidak perlu
+   diimpor terpisah. Laporan Perubahan Modal merekonsiliasi mutasi akun
+   Ekuitas dengan Setoran Modal Pemilik & Penarikan Modal
+   Pemilik/Dividen yang dikenali dari transaksi kas, ditambah Laba
+   Bersih periode berjalan. Buku Besar kini menjadi **satu-satunya jenis
+   impor** (tidak ada lagi impor manual terpisah untuk Neraca, Laba
+   Rugi, Arus Kas, atau Perubahan Modal). Setiap file mewakili **satu
+   perusahaan pada satu periode** (bulanan/triwulan/semester/tahunan).
 4. Buka menu **Perbandingan** untuk membandingkan beberapa perusahaan pada
    jenis periode yang sama (grafik + tabel).
 5. Buka menu **Analisis Rasio** untuk melihat rasio likuiditas (Current

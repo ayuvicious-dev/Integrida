@@ -35,7 +35,24 @@
 //      akun Kas & Setara Kas (dikelompokkan ke Aktivitas Operasi/
 //      Investasi/Pendanaan berdasarkan kata kunci pada Keterangan),
 //      ditampilkan di Pratinjau Impor & Detail Perusahaan.
-const CACHE_NAME = 'integrida-cache-v11';
+// v12: index.html diperbarui (baris Kas Bersih dari Aktivitas Operasi/
+//      Investasi/Pendanaan & Kas & Setara Kas Akhir Periode pada Arus
+//      Kas kini diberi highlight hijau seperti subtotal pada Neraca,
+//      berlaku di Detail Perusahaan maupun Pratinjau Impor Buku Besar).
+// v13: index.html diperbarui — impor Buku Besar kini juga menurunkan
+//      Laporan Perubahan Modal secara otomatis (mutasi akun Ekuitas
+//      direkonsiliasi dengan Setoran Modal Pemilik & Penarikan Modal
+//      Pemilik/Dividen dari Arus Kas, ditambah Laba Bersih periode
+//      berjalan), ditampilkan di Pratinjau Impor & Detail Perusahaan.
+// v14: index.html diperbarui — di Detail Perusahaan, kartu Arus Kas &
+//      Perubahan Modal kini sejajar berdampingan (grid 2 kolom, sama
+//      seperti Neraca & Laba Rugi), bukan lagi ditumpuk penuh lebar.
+// v15: index.html diperbarui — jenis impor manual "Arus Kas" dihapus
+//      dari halaman Impor Data (Neraca, Laba Rugi, Arus Kas, & Perubahan
+//      Modal semuanya sudah diturunkan otomatis dari impor Buku Besar).
+//      Jenis impor yang tersisa hanya Buku Besar; langkah "Pilih Jenis
+//      Data" pada Impor Data ikut dihapus karena tidak relevan lagi.
+const CACHE_NAME = 'integrida-cache-v15';
 const APP_SHELL = [
   './',
   './index.html',
