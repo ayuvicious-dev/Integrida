@@ -144,10 +144,18 @@ tbody tr:hover{background:#fafcfb;}
 
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
 .field label{font-size:12.5px;color:var(--slate);font-weight:500;}
-.field input,.field select{
+.field input,.field select,.field textarea{
   padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:13.5px;background:#fff;
 }
-.field input:focus,.field select:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:var(--teal);}
+.field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:var(--teal);}
+.field textarea{font-family:inherit;resize:vertical;min-height:56px;}
+.ownership-row{display:grid;grid-template-columns:1fr 110px 34px;gap:8px;align-items:center;margin-bottom:8px;}
+.ownership-row input[type="text"],.ownership-row select{padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:#fff;width:100%;}
+.ownership-row .pct-wrap{position:relative;}
+.ownership-row .pct-wrap input{padding:8px 22px 8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;width:100%;text-align:right;}
+.ownership-row .pct-wrap span{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--slate);pointer-events:none;}
+.ownership-row .remove-ownership{background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--slate);cursor:pointer;height:34px;}
+.ownership-row .remove-ownership:hover{color:#c0392b;border-color:#c0392b;}
 
 .combo-wrap{position:relative;}
 .combo-dropdown{
@@ -403,6 +411,16 @@ const DB = {
 
   async updateCompanyParent(companyId, parentId) {
     await db.collection('companies').doc(companyId).update({ parentId: parentId || null });
+  },
+
+  // ownership: array of { type: 'company'|'external', companyId (utk 'company'),
+  // name (utk 'external'), percentage (number) } — kepemilikan saham perusahaan
+  // ini oleh pihak lain (bisa perusahaan lain yang terdaftar, bisa pihak luar).
+  async updateCompanyBusinessInfo(companyId, { address, ownership }) {
+    await db.collection('companies').doc(companyId).update({
+      address: address || '',
+      ownership: Array.isArray(ownership) ? ownership : []
+    });
   },
 
   async deleteCompany(companyId) {
@@ -1494,6 +1512,12 @@ function formatIDR(v) {
   return 'Rp ' + Math.round(v).toLocaleString('id-ID');
 }
 
+function escapeHTML(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function toast(message, type = 'default') {
   const wrap = document.getElementById('toast-wrap');
   const el = document.createElement('div');
@@ -2244,6 +2268,167 @@ function openCompanyDetail(companyId) {
   renderCompanyDetail();
 }
 
+// ---------- Informasi Bisnis (alamat & kepemilikan saham) ----------
+
+// Label pihak pemegang saham: kalau pihak itu perusahaan yang terdaftar di
+// tabel, ambil nama terbarunya dari state.companies (supaya tetap sinkron
+// kalau nama perusahaan itu diubah); kalau pihak eksternal, pakai nama yang
+// diketik langsung saat pengisian.
+function ownershipRowLabel(entry) {
+  if (entry && entry.type === 'company') {
+    const c = state.companies.find(x => x.id === entry.companyId);
+    return c ? companyDisplayLabel(c) : (entry.name ? `${escapeHTML(entry.name)} (perusahaan tidak ditemukan)` : '— perusahaan tidak ditemukan —');
+  }
+  return entry && entry.name ? escapeHTML(entry.name) : '—';
+}
+
+function businessInfoHTML(company) {
+  const ownership = Array.isArray(company.ownership) ? company.ownership : [];
+  const total = ownership.reduce((sum, o) => sum + (Number(o.percentage) || 0), 0);
+  return `
+    <div class="section-block">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Informasi Bisnis</span>
+        <button class="btn ghost" id="edit-business-info" style="font-size:12px;">Edit Info Bisnis</button>
+      </div>
+      <div class="card">
+        <div style="margin-bottom:16px;">
+          <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px;">Alamat</div>
+          <div style="font-size:13.5px;${company.address ? '' : 'color:var(--slate-light);font-style:italic;'}">${company.address ? escapeHTML(company.address).replace(/\n/g, '<br>') : '+ tambahkan alamat'}</div>
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:6px;">Kepemilikan Saham</div>
+          ${ownership.length === 0 ? '<div style="color:var(--slate-light);font-style:italic;font-size:13px;">Belum ada data kepemilikan.</div>' : `
+          <table><tbody>
+            ${ownership.map(o => `<tr><td style="text-align:left;">${ownershipRowLabel(o)}</td><td class="num">${(Number(o.percentage) || 0).toLocaleString('id-ID')}%</td></tr>`).join('')}
+            <tr style="font-weight:700;"><td style="text-align:left;">Total</td><td class="num">${total.toLocaleString('id-ID')}%</td></tr>
+          </tbody></table>
+          ${total > 100 ? `<div style="font-size:12px;color:#c0392b;margin-top:6px;">Total kepemilikan melebihi 100%.</div>` : ''}`}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function ownershipRowFormHTML(entry, idx, ownerOptions) {
+  const type = entry && entry.type === 'external' ? 'external' : 'company';
+  const isExternal = type === 'external';
+  return `
+    <div class="ownership-row" data-row="${idx}">
+      <div>
+        <select class="ownership-select" data-idx="${idx}">
+          <option value="__external__" ${isExternal ? 'selected' : ''}>Pihak eksternal (ketik nama)…</option>
+          ${ownerOptions.map(c => `<option value="${c.id}" ${!isExternal && entry.companyId === c.id ? 'selected' : ''}>${companyDisplayLabel(c)}</option>`).join('')}
+        </select>
+        <input type="text" class="ownership-external-name" data-idx="${idx}" placeholder="Nama pihak eksternal (contoh: Perorangan / PT Lain)" value="${isExternal ? escapeHTML(entry.name || '') : ''}" style="margin-top:6px;${isExternal ? '' : 'display:none;'}">
+      </div>
+      <div class="pct-wrap">
+        <input type="number" class="ownership-pct" data-idx="${idx}" min="0" max="100" step="0.01" value="${entry && entry.percentage != null ? entry.percentage : ''}" placeholder="0">
+        <span>%</span>
+      </div>
+      <button type="button" class="remove-ownership" data-idx="${idx}" title="Hapus baris">✕</button>
+    </div>
+  `;
+}
+
+function openEditBusinessInfoModal(companyId) {
+  const company = state.companies.find(c => c.id === companyId);
+  if (!company) return;
+  // Pihak yang bisa dipilih sebagai perusahaan: seluruh perusahaan terdaftar
+  // selain perusahaan ini sendiri.
+  const ownerOptions = state.companies.filter(c => c.id !== companyId);
+  let rows = (Array.isArray(company.ownership) ? company.ownership : []).map(o => ({ ...o }));
+  if (rows.length === 0) rows = [{ type: 'external', name: '', percentage: null }];
+
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="max-width:520px;">
+    <h3>Info Bisnis Perusahaan</h3>
+    <div class="modal-sub">Alamat &amp; kepemilikan saham untuk <strong>${escapeHTML(company.name)}</strong>.</div>
+    <div class="field">
+      <label>Alamat</label>
+      <textarea id="edit-business-address" placeholder="Alamat kantor / operasional perusahaan">${escapeHTML(company.address || '')}</textarea>
+    </div>
+    <div class="field">
+      <label>Kepemilikan Saham (pihak &amp; persentase kepemilikan atas perusahaan ini)</label>
+      <div id="ownership-rows"></div>
+      <button type="button" class="btn ghost" id="add-ownership-row" style="align-self:flex-start;font-size:12.5px;">+ Tambah Pihak</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="cancel-modal">Batal</button>
+      <button class="btn primary" id="save-business-info">Simpan</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+
+  function paintRows() {
+    backdrop.querySelector('#ownership-rows').innerHTML = rows.map((r, i) => ownershipRowFormHTML(r, i, ownerOptions)).join('');
+    wireRowEvents();
+  }
+
+  function wireRowEvents() {
+    const container = backdrop.querySelector('#ownership-rows');
+    container.querySelectorAll('.ownership-select').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const idx = Number(sel.dataset.idx);
+        if (sel.value === '__external__') {
+          rows[idx] = { type: 'external', name: rows[idx].name || '', percentage: rows[idx].percentage };
+        } else {
+          rows[idx] = { type: 'company', companyId: sel.value, percentage: rows[idx].percentage };
+        }
+        paintRows();
+      });
+    });
+    container.querySelectorAll('.ownership-external-name').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const idx = Number(inp.dataset.idx);
+        rows[idx].name = inp.value;
+      });
+    });
+    container.querySelectorAll('.ownership-pct').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const idx = Number(inp.dataset.idx);
+        rows[idx].percentage = inp.value === '' ? null : Number(inp.value);
+      });
+    });
+    container.querySelectorAll('.remove-ownership').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.idx);
+        rows.splice(idx, 1);
+        if (rows.length === 0) rows.push({ type: 'external', name: '', percentage: null });
+        paintRows();
+      });
+    });
+  }
+
+  paintRows();
+
+  backdrop.querySelector('#add-ownership-row').addEventListener('click', () => {
+    rows.push({ type: 'external', name: '', percentage: null });
+    paintRows();
+  });
+
+  backdrop.querySelector('#cancel-modal').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+
+  backdrop.querySelector('#save-business-info').addEventListener('click', async () => {
+    const address = backdrop.querySelector('#edit-business-address').value.trim();
+    const cleaned = rows
+      .filter(r => (r.type === 'company' && r.companyId) || (r.type === 'external' && r.name && r.name.trim()))
+      .map(r => r.type === 'company'
+        ? { type: 'company', companyId: r.companyId, percentage: Number(r.percentage) || 0 }
+        : { type: 'external', name: r.name.trim(), percentage: Number(r.percentage) || 0 });
+    try {
+      await DB.updateCompanyBusinessInfo(companyId, { address, ownership: cleaned });
+      company.address = address;
+      company.ownership = cleaned;
+      backdrop.remove();
+      toast('Info bisnis perusahaan diperbarui', 'success');
+      if (state.view === 'company-detail' && state.companyDetailId === companyId) renderCompanyDetail();
+    } catch (err) {
+      toast('Gagal menyimpan info bisnis: ' + err.message, 'error');
+    }
+  });
+}
+
 function humanizeKey(key) {
   const withSpaces = String(key || '').replace(/([a-z0-9])([A-Z])/g, '$1 $2');
   return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1);
@@ -2499,15 +2684,22 @@ function renderCompanyDetail() {
 function paintCompanyDetail(statements) {
   const content = document.getElementById('company-detail-content');
   if (!content) return;
+  const company = state.companies.find(c => c.id === state.companyDetailId);
+  const wireBusinessInfoButton = () => {
+    const btn = document.getElementById('edit-business-info');
+    if (btn) btn.addEventListener('click', () => openEditBusinessInfoModal(state.companyDetailId));
+  };
 
   if (statements.length === 0) {
     content.innerHTML = `
+      ${company ? businessInfoHTML(company) : ''}
       <div class="card" style="color:var(--slate);margin-bottom:20px;">Belum ada data laporan keuangan untuk perusahaan ini. Silakan impor data terlebih dahulu di menu <strong>Impor Data</strong>.</div>
       <div class="section-block">
         <div class="section-title">Riwayat Impor</div>
         <div class="card" style="color:var(--slate);">Belum ada riwayat impor.</div>
       </div>
     `;
+    wireBusinessInfoButton();
     return;
   }
 
@@ -2524,6 +2716,7 @@ function paintCompanyDetail(statements) {
   const bbContribs = contributionsFromLedger(selected.bukuBesar);
 
   content.innerHTML = `
+    ${company ? businessInfoHTML(company) : ''}
     <div class="section-block">
       <div class="section-title">Pilih Periode</div>
       <div class="pill-row" id="detail-period-pills">
@@ -2574,6 +2767,8 @@ function paintCompanyDetail(statements) {
       </div>
     </div>
   `;
+
+  wireBusinessInfoButton();
 
   document.querySelectorAll('#detail-period-pills .pill').forEach(p => {
     p.addEventListener('click', () => {
