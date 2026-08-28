@@ -381,11 +381,12 @@ const DB = {
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   },
 
-  async addCompany(uid, name, code, parentId) {
+  async addCompany(uid, name, code, parentId, category) {
     const ref = await db.collection('companies').add({
       name,
       code: code || '',
       parentId: parentId || null,
+      category: category || '',
       ownerUid: uid,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
@@ -394,6 +395,10 @@ const DB = {
 
   async updateCompanyCode(companyId, code) {
     await db.collection('companies').doc(companyId).update({ code: code || '' });
+  },
+
+  async updateCompanyCategory(companyId, category) {
+    await db.collection('companies').doc(companyId).update({ category: category || '' });
   },
 
   async updateCompanyParent(companyId, parentId) {
@@ -733,6 +738,22 @@ const TOTAL_MATCHERS = {
 
 // Label baris "jenis laporan" (baris ke-2) yang dikenali per statementKey.
 const REPORT_TYPE_LABELS = { neraca: 'neraca', labaRugi: 'laba rugi', arusKas: 'arus kas' };
+
+// ---------- Klasifikasi Perusahaan ----------
+const CATEGORY_OPTIONS = [
+  { value: 'FnB', label: 'FnB', badge: 'gold' },
+  { value: 'Jasa', label: 'Jasa', badge: 'blue' },
+  { value: 'Manufaktur', label: 'Manufaktur', badge: 'purple' },
+  { value: 'Dagang', label: 'Dagang', badge: 'teal' },
+];
+function categoryMeta(value) {
+  return CATEGORY_OPTIONS.find(c => c.value === value) || null;
+}
+function categoryBadgeHTML(value) {
+  const meta = categoryMeta(value);
+  if (!meta) return '<span style="color:var(--slate-light);font-style:italic;">+ klasifikasi</span>';
+  return `<span class="badge ${meta.badge}">${meta.label}</span>`;
+}
 
 const CASH_NAME_RE = /\b(kas|bank|cash)\b/i;
 const INVENTORY_NAME_RE = /\b(persediaan|inventory|stok|stock)\b/i;
@@ -1816,7 +1837,7 @@ function renderCompaniesTableView() {
     ${state.companies.length === 0 ? emptyState('Belum ada perusahaan', 'Mulai dengan menambahkan perusahaan pertama Anda.', '', '') : `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Kode</th><th>Nama Perusahaan</th><th>Induk Perusahaan</th><th class="num">Jumlah Periode Tersimpan</th><th></th></tr></thead>
+        <thead><tr><th>Kode</th><th>Nama Perusahaan</th><th>Klasifikasi</th><th>Induk Perusahaan</th><th class="num">Jumlah Periode Tersimpan</th><th></th></tr></thead>
         <tbody id="company-rows"></tbody>
       </table>
     </div>
@@ -1829,7 +1850,8 @@ function renderCompaniesTableView() {
       const q = searchInput.value.trim().toLowerCase();
       const filtered = !q ? state.companies : state.companies.filter(c =>
         String(c.code || '').toLowerCase().includes(q) ||
-        String(c.name || '').toLowerCase().includes(q)
+        String(c.name || '').toLowerCase().includes(q) ||
+        String(c.category || '').toLowerCase().includes(q)
       );
       document.getElementById('company-search-empty').style.display = filtered.length === 0 ? '' : 'none';
       fillCompanyRows(filtered);
@@ -1848,13 +1870,14 @@ async function fillCompanyRows(list) {
   tbody.innerHTML = companies.map(c => `<tr data-id="${c.id}">
     <td><a href="#" class="company-code-edit" data-code="${c.id}" style="color:var(--slate);text-decoration:none;" title="Klik untuk mengubah kode">${c.code ? c.code : '<span style="color:var(--slate-light);font-style:italic;">+ kode</span>'}</a></td>
     <td><a href="#" class="company-link" data-open="${c.id}" style="color:var(--ink);font-weight:600;text-decoration:none;">${c.name}</a></td>
+    <td><a href="#" class="company-category-edit" data-category="${c.id}" style="text-decoration:none;" title="Klik untuk mengubah klasifikasi">${categoryBadgeHTML(c.category)}</a></td>
     <td><a href="#" class="company-parent-edit" data-parent="${c.id}" style="color:var(--slate);text-decoration:none;" title="Klik untuk mengubah induk perusahaan">${parentLabel(c)}</a></td>
     <td class="num">…</td>
     <td style="text-align:right;"><button class="btn ghost" data-del="${c.id}">Hapus</button></td>
   </tr>`).join('');
   for (const c of companies) {
     const statements = await DB.getStatements(c.id);
-    const row = tbody.querySelector(`tr[data-id="${c.id}"] td:nth-child(4)`);
+    const row = tbody.querySelector(`tr[data-id="${c.id}"] td:nth-child(5)`);
     if (row) row.textContent = statements.length;
   }
   tbody.querySelectorAll('[data-open]').forEach(link => {
@@ -1885,6 +1908,13 @@ async function fillCompanyRows(list) {
       openEditParentModal(link.dataset.parent);
     });
   });
+  tbody.querySelectorAll('[data-category]').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openEditCategoryModal(link.dataset.category);
+    });
+  });
   tbody.querySelectorAll('[data-del]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -1907,6 +1937,12 @@ function openAddCompanyModal() {
     <div class="modal-sub">Perusahaan yang akan dikonsolidasikan laporan keuangannya.</div>
     <div class="field"><label>Nama Perusahaan</label><input type="text" id="new-company-name" placeholder="Contoh: PT Sumber Makmur"></div>
     <div class="field"><label>Kode Perusahaan (opsional)</label><input type="text" id="new-company-code" placeholder="Contoh: PSM"></div>
+    <div class="field"><label>Klasifikasi (opsional)</label>
+      <select id="new-company-category">
+        <option value="">— Tidak ditentukan —</option>
+        ${CATEGORY_OPTIONS.map(c => `<option value="${c.value}">${c.label}</option>`).join('')}
+      </select>
+    </div>
     <div class="field"><label>Induk Perusahaan (opsional)</label>
       <select id="new-company-parent">
         <option value="">— Tidak ada (jadi Induk) —</option>
@@ -1924,9 +1960,10 @@ function openAddCompanyModal() {
   backdrop.querySelector('#save-company').addEventListener('click', async () => {
     const name = backdrop.querySelector('#new-company-name').value.trim();
     const code = backdrop.querySelector('#new-company-code').value.trim();
+    const category = backdrop.querySelector('#new-company-category').value || null;
     const parentId = backdrop.querySelector('#new-company-parent').value || null;
     if (!name) { toast('Nama perusahaan wajib diisi', 'error'); return; }
-    await DB.addCompany(state.user.uid, name, code, parentId);
+    await DB.addCompany(state.user.uid, name, code, parentId, category);
     backdrop.remove();
     toast('Perusahaan ditambahkan', 'success');
     await reloadCompanies();
@@ -1963,6 +2000,37 @@ function openEditParentModal(companyId) {
     company.parentId = parentId;
     backdrop.remove();
     toast('Induk perusahaan diperbarui', 'success');
+    renderCompaniesTableView();
+  });
+}
+
+function openEditCategoryModal(companyId) {
+  const company = state.companies.find(c => c.id === companyId);
+  if (!company) return;
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal">
+    <h3>Klasifikasi Perusahaan</h3>
+    <div class="modal-sub">Pilih klasifikasi untuk <strong>${company.name}</strong>, atau kosongkan jika belum ditentukan.</div>
+    <div class="field">
+      <label>Klasifikasi</label>
+      <select id="edit-category-select">
+        <option value="">— Tidak ditentukan —</option>
+        ${CATEGORY_OPTIONS.map(c => `<option value="${c.value}" ${c.value === company.category ? 'selected' : ''}>${c.label}</option>`).join('')}
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="cancel-modal">Batal</button>
+      <button class="btn primary" id="save-category">Simpan</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#cancel-modal').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelector('#save-category').addEventListener('click', async () => {
+    const category = backdrop.querySelector('#edit-category-select').value || null;
+    await DB.updateCompanyCategory(companyId, category);
+    company.category = category;
+    backdrop.remove();
+    toast('Klasifikasi perusahaan diperbarui', 'success');
     renderCompaniesTableView();
   });
 }
