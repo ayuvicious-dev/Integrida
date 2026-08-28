@@ -129,6 +129,9 @@ input,select{font-family:inherit;}
 .report-title{margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);text-align:center;}
 .report-title-line{font-weight:700;font-size:13px;color:var(--ink);line-height:1.55;letter-spacing:.2px;}
 .report-title-line.muted{font-weight:500;color:var(--slate);font-size:12px;}
+.verify-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#fff;background:var(--teal);padding:2px 9px;border-radius:999px;margin-left:8px;vertical-align:middle;white-space:nowrap;}
+.verify-checkbox-label{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12.5px;color:var(--slate);user-select:none;}
+.verify-checkbox-label input{width:16px;height:16px;accent-color:var(--teal);cursor:pointer;}
 
 .kpi-card{display:flex;flex-direction:column;gap:6px;}
 .kpi-label{font-size:12px;color:var(--slate);text-transform:uppercase;letter-spacing:.5px;}
@@ -516,6 +519,12 @@ const DB = {
 
   async deleteStatement(companyId, statementId) {
     await db.collection('companies').doc(companyId).collection('statements').doc(statementId).delete();
+  },
+
+  // verified: true/false — menandai laporan keuangan periode ini sudah
+  // diverifikasi/divalidasi kebenarannya (mis. oleh akuntan/pemilik).
+  async updateStatementVerified(companyId, statementId, verified) {
+    await db.collection('companies').doc(companyId).collection('statements').doc(statementId).update({ verified: !!verified });
   },
 
   // ===========================================================
@@ -3671,15 +3680,16 @@ function paintCompanyDetail(statements) {
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Periode</th><th>Neraca</th><th>Laba Rugi</th><th>Arus Kas</th><th>Perubahan Modal</th><th>Buku Besar</th><th></th></tr></thead>
+          <thead><tr><th>Periode</th><th>Neraca</th><th>Laba Rugi</th><th>Arus Kas</th><th>Perubahan Modal</th><th>Buku Besar</th><th>Verifikasi</th><th></th></tr></thead>
           <tbody>
             ${statements.slice().reverse().map(s => `<tr data-statement-id="${s.id}">
-              <td>${s.periodLabel}</td>
+              <td data-period-cell="${s.id}">${s.periodLabel}${s.verified ? '<span class="verify-badge">✓ Terverifikasi</span>' : ''}</td>
               <td>${hasSectionData(s.neraca) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${hasSectionData(s.labaRugi) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${hasSectionData(s.arusKas) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${hasSectionData(s.perubahanModal) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${hasSectionData(s.bukuBesar) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
+              <td><label class="verify-checkbox-label"><input type="checkbox" data-verify-statement="${s.id}" data-label="${s.periodLabel}" ${s.verified ? 'checked' : ''}>${s.verified ? 'Terverifikasi' : 'Tandai valid'}</label></td>
               <td style="text-align:right;"><button class="btn danger" data-del-statement="${s.id}" data-label="${s.periodLabel}">Hapus</button></td>
             </tr>`).join('')}
           </tbody>
@@ -3694,6 +3704,32 @@ function paintCompanyDetail(statements) {
     p.addEventListener('click', () => {
       state.companyDetailPeriodId = p.dataset.periodId;
       paintCompanyDetail(statements);
+    });
+  });
+
+  document.querySelectorAll('[data-verify-statement]').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      const statementId = cb.dataset.verifyStatement;
+      const label = cb.dataset.label;
+      const verified = cb.checked;
+      cb.disabled = true;
+      try {
+        await DB.updateStatementVerified(state.companyDetailId, statementId, verified);
+        const s = statements.find(x => x.id === statementId);
+        if (s) s.verified = verified;
+        toast(verified ? `Periode "${label}" ditandai terverifikasi` : `Verifikasi periode "${label}" dibatalkan`, 'success');
+        // Tampilan akan otomatis diperbarui lewat listener realtime, tapi
+        // update juga secara langsung supaya badge & label terasa instan.
+        const cell = document.querySelector(`[data-period-cell="${statementId}"]`);
+        if (cell) cell.innerHTML = `${escapeHTML(label)}${verified ? '<span class="verify-badge">✓ Terverifikasi</span>' : ''}`;
+        const wrapLabel = cb.closest('.verify-checkbox-label');
+        if (wrapLabel) wrapLabel.lastChild.textContent = verified ? 'Terverifikasi' : 'Tandai valid';
+      } catch (err) {
+        cb.checked = !verified;
+        toast('Gagal memperbarui status verifikasi: ' + err.message, 'error');
+      } finally {
+        cb.disabled = false;
+      }
     });
   });
 

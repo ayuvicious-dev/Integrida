@@ -70,7 +70,12 @@
 //      (mis. "01/08/2026 - 31/08/2026"), dihitung otomatis dari
 //      year/periodType/periodIndex, menggantikan baris "Untuk Periode
 //      ...". Kop Neraca tidak berubah (tetap "Per [label periode]").
-const CACHE_NAME = 'integrida-cache-v19';
+// v20: index.html diperbarui — tabel Riwayat Impor (Detail Perusahaan)
+//      kini punya kolom "Verifikasi": checkbox per periode yang saat
+//      dicentang menandai laporan periode itu "Terverifikasi" (field
+//      `verified` pada dokumen statement) dan menampilkan badge hijau
+//      "✓ Terverifikasi" di sebelah nama periode.
+const CACHE_NAME = 'integrida-cache-v20';
 const APP_SHELL = [
   './',
   './index.html',
