@@ -161,6 +161,55 @@ tbody tr:hover{background:#fafcfb;}
 .combo-option .combo-name{color:var(--ink);}
 .combo-empty{padding:10px 12px;font-size:13px;color:var(--slate);}
 
+/* ---------- Bagan Struktur Perusahaan (Induk / Anak / Cucu) ---------- */
+.org-chart-toolbar-hint{font-size:11.5px;color:var(--slate);line-height:1.6;}
+.org-chart-legend-dot{display:inline-block;width:10px;height:10px;border-radius:3px;vertical-align:-1px;margin:0 4px 0 8px;}
+.org-chart-viewport{
+  position:relative;width:100%;height:560px;overflow:hidden;
+  border:1px solid var(--border);border-radius:var(--radius);
+  background:
+    linear-gradient(90deg, rgba(20,30,50,.045) 1px, transparent 1px) 0 0/26px 26px,
+    linear-gradient(rgba(20,30,50,.045) 1px, transparent 1px) 0 0/26px 26px,
+    #fafbfb;
+  cursor:grab;touch-action:none;
+}
+.org-chart-viewport.dragging{cursor:grabbing;}
+.org-chart-canvas{position:absolute;top:0;left:0;transform-origin:0 0;padding:36px;will-change:transform;}
+
+.org-tree{text-align:center;}
+.org-tree, .org-tree ul{list-style:none;margin:0;padding:0;}
+.org-tree ul{padding-top:24px;position:relative;}
+.org-tree ul::after{content:'';display:table;clear:both;}
+.org-tree li{
+  float:left;text-align:center;list-style-type:none;position:relative;
+  padding:24px 8px 0 8px;transition:all .2s;
+}
+.org-tree li::before,.org-tree li::after{
+  content:'';position:absolute;top:0;right:50%;
+  border-top:2px solid var(--border);width:50%;height:24px;
+}
+.org-tree li::after{right:auto;left:50%;border-left:2px solid var(--border);}
+.org-tree li:only-child::after,.org-tree li:only-child::before{display:none;}
+.org-tree li:only-child{padding-top:0;}
+.org-tree li:first-child::before,.org-tree li:last-child::after{border:0 none;}
+.org-tree li:last-child::before{border-right:2px solid var(--border);border-radius:0 6px 0 0;}
+.org-tree li:first-child::after{border-radius:6px 0 0 0;}
+.org-tree ul ul::before{
+  content:'';position:absolute;top:0;left:50%;
+  border-left:2px solid var(--border);width:0;height:24px;
+}
+.org-node{
+  border:1.5px solid var(--border);border-radius:8px;padding:10px 16px;
+  display:inline-block;background:#fff;font-size:13px;line-height:1.4;
+  box-shadow:0 1px 3px rgba(20,30,50,.06);white-space:nowrap;cursor:pointer;
+  transition:box-shadow .15s,transform .15s;
+}
+.org-node:hover{box-shadow:0 4px 10px rgba(20,30,50,.12);transform:translateY(-1px);}
+.org-node .org-code{display:block;font-family:var(--font-mono);font-size:10.5px;opacity:.75;margin-bottom:2px;}
+.org-node.level-0{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:600;}
+.org-node.level-1{background:var(--teal-light);border-color:var(--teal);font-weight:600;color:var(--teal);}
+.org-node.level-2{background:#fff;color:var(--ink);}
+
 .badge{display:inline-block;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:600;}
 .badge.teal{background:var(--teal-light);color:var(--teal);}
 .badge.gold{background:var(--gold-light);color:#8a611f;}
@@ -266,6 +315,8 @@ tbody tr:hover{background:#fafcfb;}
 <!-- Utilitas -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
 <!-- ===========================================================
      Seluruh kode aplikasi (config Firebase, akses data, parsing
@@ -314,7 +365,7 @@ db.enablePersistence().catch(() => {
 // =============================================================
 // DB.JS - Lapisan akses data Firestore untuk Integrida
 // Struktur data:
-// companies/{companyId}            { name, code, ownerUid, createdAt }
+// companies/{companyId}            { name, code, parentId, ownerUid, createdAt }
 // companies/{companyId}/statements/{statementId}
 //   {
 //     year, periodType ('bulanan'|'triwulan'|'semester'|'tahunan'),
@@ -330,10 +381,11 @@ const DB = {
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   },
 
-  async addCompany(uid, name, code) {
+  async addCompany(uid, name, code, parentId) {
     const ref = await db.collection('companies').add({
       name,
       code: code || '',
+      parentId: parentId || null,
       ownerUid: uid,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
@@ -344,11 +396,19 @@ const DB = {
     await db.collection('companies').doc(companyId).update({ code: code || '' });
   },
 
+  async updateCompanyParent(companyId, parentId) {
+    await db.collection('companies').doc(companyId).update({ parentId: parentId || null });
+  },
+
   async deleteCompany(companyId) {
     const statements = await db.collection('companies').doc(companyId).collection('statements').get();
     const batch = db.batch();
     statements.docs.forEach(d => batch.delete(d.ref));
     batch.delete(db.collection('companies').doc(companyId));
+    // Anak perusahaan yang induknya dihapus otomatis menjadi induk tersendiri
+    // (parentId dikosongkan) alih-alih menunjuk ke perusahaan yang sudah tidak ada.
+    const children = await db.collection('companies').where('parentId', '==', companyId).get();
+    children.docs.forEach(d => batch.update(d.ref, { parentId: null }));
     await batch.commit();
   },
 
@@ -1696,23 +1756,72 @@ function bindEmptyStateNav(root) {
 }
 
 // ---------- Perusahaan ----------
+function companyDisplayLabel(c) {
+  return c.code ? `${c.code} — ${c.name}` : c.name;
+}
+
+// Mengumpulkan seluruh id keturunan (anak, cucu, dst) sebuah perusahaan —
+// dipakai untuk mencegah relasi induk melingkar (circular reference) saat
+// memilih induk perusahaan.
+function getDescendantIds(companyId) {
+  const result = new Set();
+  const stack = [companyId];
+  while (stack.length) {
+    const id = stack.pop();
+    state.companies.forEach(c => {
+      if (c.parentId === id && !result.has(c.id)) {
+        result.add(c.id);
+        stack.push(c.id);
+      }
+    });
+  }
+  return result;
+}
+
 function renderCompanies() {
   const root = document.getElementById('view-root');
+  const view = state.companiesView === 'chart' ? 'chart' : 'table';
   root.innerHTML = `
     <div class="section-block" style="display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;">
-      <input type="text" id="company-search" placeholder="Cari kode atau nama perusahaan…" style="flex:1;min-width:220px;max-width:360px;" ${state.companies.length === 0 ? 'disabled' : ''}>
+      <div class="pill-row" id="companies-view-tabs" style="margin-bottom:0;">
+        <div class="pill ${view === 'table' ? 'active' : ''}" data-tab="table">Tabel</div>
+        <div class="pill ${view === 'chart' ? 'active' : ''}" data-tab="chart">Bagan Struktur</div>
+      </div>
       <button class="btn primary" id="add-company-btn">+ Tambah Perusahaan</button>
+    </div>
+    <div id="companies-view-body"></div>
+  `;
+  document.getElementById('add-company-btn').addEventListener('click', openAddCompanyModal);
+  document.querySelectorAll('#companies-view-tabs .pill').forEach(p => {
+    p.addEventListener('click', () => {
+      if (state.companiesView === p.dataset.tab) return;
+      state.companiesView = p.dataset.tab;
+      renderCompanies();
+    });
+  });
+  if (view === 'chart') {
+    renderCompaniesChartView();
+  } else {
+    renderCompaniesTableView();
+  }
+}
+
+function renderCompaniesTableView() {
+  const body = document.getElementById('companies-view-body');
+  if (!body) return;
+  body.innerHTML = `
+    <div class="section-block" style="display:flex;gap:10px;">
+      <input type="text" id="company-search" placeholder="Cari kode atau nama perusahaan…" style="flex:1;min-width:220px;max-width:360px;" ${state.companies.length === 0 ? 'disabled' : ''}>
     </div>
     ${state.companies.length === 0 ? emptyState('Belum ada perusahaan', 'Mulai dengan menambahkan perusahaan pertama Anda.', '', '') : `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Kode</th><th>Nama Perusahaan</th><th class="num">Jumlah Periode Tersimpan</th><th></th></tr></thead>
+        <thead><tr><th>Kode</th><th>Nama Perusahaan</th><th>Induk Perusahaan</th><th class="num">Jumlah Periode Tersimpan</th><th></th></tr></thead>
         <tbody id="company-rows"></tbody>
       </table>
     </div>
     <div id="company-search-empty" class="card" style="display:none;color:var(--slate);margin-top:10px;">Tidak ada perusahaan yang cocok dengan pencarian.</div>`}
   `;
-  document.getElementById('add-company-btn').addEventListener('click', openAddCompanyModal);
   if (state.companies.length) {
     fillCompanyRows(state.companies);
     const searchInput = document.getElementById('company-search');
@@ -1731,15 +1840,21 @@ function renderCompanies() {
 async function fillCompanyRows(list) {
   const companies = list || state.companies;
   const tbody = document.getElementById('company-rows');
+  const parentLabel = (c) => {
+    if (!c.parentId) return '<span style="color:var(--slate-light);font-style:italic;">+ induk</span>';
+    const parent = state.companies.find(p => p.id === c.parentId);
+    return parent ? companyDisplayLabel(parent) : '<span style="color:var(--slate-light);font-style:italic;">+ induk</span>';
+  };
   tbody.innerHTML = companies.map(c => `<tr data-id="${c.id}">
     <td><a href="#" class="company-code-edit" data-code="${c.id}" style="color:var(--slate);text-decoration:none;" title="Klik untuk mengubah kode">${c.code ? c.code : '<span style="color:var(--slate-light);font-style:italic;">+ kode</span>'}</a></td>
     <td><a href="#" class="company-link" data-open="${c.id}" style="color:var(--ink);font-weight:600;text-decoration:none;">${c.name}</a></td>
+    <td><a href="#" class="company-parent-edit" data-parent="${c.id}" style="color:var(--slate);text-decoration:none;" title="Klik untuk mengubah induk perusahaan">${parentLabel(c)}</a></td>
     <td class="num">…</td>
     <td style="text-align:right;"><button class="btn ghost" data-del="${c.id}">Hapus</button></td>
   </tr>`).join('');
   for (const c of companies) {
     const statements = await DB.getStatements(c.id);
-    const row = tbody.querySelector(`tr[data-id="${c.id}"] td:nth-child(3)`);
+    const row = tbody.querySelector(`tr[data-id="${c.id}"] td:nth-child(4)`);
     if (row) row.textContent = statements.length;
   }
   tbody.querySelectorAll('[data-open]').forEach(link => {
@@ -1763,11 +1878,23 @@ async function fillCompanyRows(list) {
       toast('Kode perusahaan diperbarui', 'success');
     });
   });
+  tbody.querySelectorAll('[data-parent]').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openEditParentModal(link.dataset.parent);
+    });
+  });
   tbody.querySelectorAll('[data-del]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (!confirm('Hapus perusahaan ini beserta seluruh data laporannya?')) return;
-      await DB.deleteCompany(btn.dataset.del);
+      const id = btn.dataset.del;
+      const hasChildren = state.companies.some(c => c.parentId === id);
+      const msg = hasChildren
+        ? 'Hapus perusahaan ini beserta seluruh data laporannya? Anak perusahaan yang terhubung akan menjadi induk tersendiri.'
+        : 'Hapus perusahaan ini beserta seluruh data laporannya?';
+      if (!confirm(msg)) return;
+      await DB.deleteCompany(id);
       toast('Perusahaan dihapus', 'success');
       await reloadCompanies();
     });
@@ -1780,6 +1907,12 @@ function openAddCompanyModal() {
     <div class="modal-sub">Perusahaan yang akan dikonsolidasikan laporan keuangannya.</div>
     <div class="field"><label>Nama Perusahaan</label><input type="text" id="new-company-name" placeholder="Contoh: PT Sumber Makmur"></div>
     <div class="field"><label>Kode Perusahaan (opsional)</label><input type="text" id="new-company-code" placeholder="Contoh: PSM"></div>
+    <div class="field"><label>Induk Perusahaan (opsional)</label>
+      <select id="new-company-parent">
+        <option value="">— Tidak ada (jadi Induk) —</option>
+        ${state.companies.map(c => `<option value="${c.id}">${companyDisplayLabel(c)}</option>`).join('')}
+      </select>
+    </div>
     <div class="modal-actions">
       <button class="btn ghost" id="cancel-modal">Batal</button>
       <button class="btn primary" id="save-company">Simpan</button>
@@ -1791,12 +1924,243 @@ function openAddCompanyModal() {
   backdrop.querySelector('#save-company').addEventListener('click', async () => {
     const name = backdrop.querySelector('#new-company-name').value.trim();
     const code = backdrop.querySelector('#new-company-code').value.trim();
+    const parentId = backdrop.querySelector('#new-company-parent').value || null;
     if (!name) { toast('Nama perusahaan wajib diisi', 'error'); return; }
-    await DB.addCompany(state.user.uid, name, code);
+    await DB.addCompany(state.user.uid, name, code, parentId);
     backdrop.remove();
     toast('Perusahaan ditambahkan', 'success');
     await reloadCompanies();
   });
+}
+
+function openEditParentModal(companyId) {
+  const company = state.companies.find(c => c.id === companyId);
+  if (!company) return;
+  const excluded = getDescendantIds(companyId);
+  excluded.add(companyId);
+  const options = state.companies.filter(c => !excluded.has(c.id));
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal">
+    <h3>Induk Perusahaan</h3>
+    <div class="modal-sub">Pilih induk untuk <strong>${company.name}</strong>, atau kosongkan jika perusahaan ini berada di level paling atas (Induk).</div>
+    <div class="field">
+      <label>Perusahaan Induk</label>
+      <select id="edit-parent-select">
+        <option value="">— Tidak ada (jadi Induk) —</option>
+        ${options.map(c => `<option value="${c.id}" ${c.id === company.parentId ? 'selected' : ''}>${companyDisplayLabel(c)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="cancel-modal">Batal</button>
+      <button class="btn primary" id="save-parent">Simpan</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#cancel-modal').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelector('#save-parent').addEventListener('click', async () => {
+    const parentId = backdrop.querySelector('#edit-parent-select').value || null;
+    await DB.updateCompanyParent(companyId, parentId);
+    company.parentId = parentId;
+    backdrop.remove();
+    toast('Induk perusahaan diperbarui', 'success');
+    renderCompaniesTableView();
+  });
+}
+
+// ---------- Bagan Struktur (Induk / Anak / Cucu) ----------
+function buildCompanyTree() {
+  const byId = {};
+  state.companies.forEach(c => { byId[c.id] = { ...c, children: [] }; });
+  const roots = [];
+  state.companies.forEach(c => {
+    if (c.parentId && byId[c.parentId]) {
+      byId[c.parentId].children.push(byId[c.id]);
+    } else {
+      roots.push(byId[c.id]);
+    }
+  });
+  const sortRec = (node) => {
+    node.children.sort((a, b) => a.name.localeCompare(b.name));
+    node.children.forEach(sortRec);
+  };
+  roots.sort((a, b) => a.name.localeCompare(b.name));
+  roots.forEach(sortRec);
+  return roots;
+}
+
+function orgNodeHTML(node, depth) {
+  const levelClass = depth === 0 ? 'level-0' : depth === 1 ? 'level-1' : 'level-2';
+  return `
+    <li>
+      <div class="org-node ${levelClass}" data-open="${node.id}" title="Klik untuk membuka detail perusahaan">
+        ${node.code ? `<span class="org-code">${node.code}</span>` : ''}
+        ${node.name}
+      </div>
+      ${node.children.length ? `<ul>${node.children.map(c => orgNodeHTML(c, depth + 1)).join('')}</ul>` : ''}
+    </li>`;
+}
+
+function renderCompaniesChartView() {
+  const body = document.getElementById('companies-view-body');
+  if (!body) return;
+  const roots = buildCompanyTree();
+  if (roots.length === 0) {
+    body.innerHTML = emptyState('Belum ada perusahaan', 'Tambahkan perusahaan untuk melihat bagan strukturnya.', '', '');
+    return;
+  }
+  body.innerHTML = `
+    <div class="card" style="padding:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+        <div class="org-chart-toolbar-hint">
+          Tarik (geser) bagan untuk menggeser, gunakan tombol zoom atau scroll mouse untuk memperbesar/memperkecil.
+          <span class="org-chart-legend-dot" style="background:var(--ink);"></span>Induk
+          <span class="org-chart-legend-dot" style="background:var(--teal-light);border:1px solid var(--teal);"></span>Anak
+          <span class="org-chart-legend-dot" style="background:#fff;border:1.5px solid var(--border);"></span>Cucu
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <button class="btn ghost" id="org-zoom-out" title="Perkecil">&minus;</button>
+          <span id="org-chart-zoom-label" style="font-size:12.5px;color:var(--slate);min-width:42px;text-align:center;">100%</span>
+          <button class="btn ghost" id="org-zoom-in" title="Perbesar">+</button>
+          <button class="btn ghost" id="org-zoom-reset" title="Reset tampilan">Reset</button>
+          <button class="btn primary" id="org-export-pdf">Ekspor PDF</button>
+        </div>
+      </div>
+      <div class="org-chart-viewport" id="org-chart-viewport">
+        <div class="org-chart-canvas" id="org-chart-canvas">
+          <ul class="org-tree">${roots.map(r => orgNodeHTML(r, 0)).join('')}</ul>
+        </div>
+      </div>
+    </div>
+  `;
+  body.querySelectorAll('.org-node[data-open]').forEach(n => {
+    n.addEventListener('click', () => {
+      if (orgChartState.didDrag) { orgChartState.didDrag = false; return; }
+      openCompanyDetail(n.dataset.open);
+    });
+  });
+  setupOrgChartPanZoom();
+  document.getElementById('org-export-pdf').addEventListener('click', exportOrgChartPDF);
+}
+
+let orgChartState = { scale: 1, x: 24, y: 16, dragging: false, startX: 0, startY: 0, didDrag: false };
+let _orgChartMouseMoveHandler = null;
+let _orgChartMouseUpHandler = null;
+
+function applyOrgChartTransform() {
+  const canvas = document.getElementById('org-chart-canvas');
+  if (canvas) canvas.style.transform = `translate(${orgChartState.x}px, ${orgChartState.y}px) scale(${orgChartState.scale})`;
+  const label = document.getElementById('org-chart-zoom-label');
+  if (label) label.textContent = Math.round(orgChartState.scale * 100) + '%';
+}
+
+function zoomOrgChart(delta) {
+  const next = Math.min(2, Math.max(0.3, Math.round((orgChartState.scale + delta) * 100) / 100));
+  orgChartState.scale = next;
+  applyOrgChartTransform();
+}
+
+function setupOrgChartPanZoom() {
+  const viewport = document.getElementById('org-chart-viewport');
+  const canvas = document.getElementById('org-chart-canvas');
+  if (!viewport || !canvas) return;
+
+  orgChartState = { scale: 1, x: 24, y: 16, dragging: false, startX: 0, startY: 0, didDrag: false };
+  applyOrgChartTransform();
+
+  // Bersihkan listener drag global dari render bagan sebelumnya (mis. saat
+  // pindah tab Tabel <-> Bagan berkali-kali) agar tidak menumpuk.
+  if (_orgChartMouseMoveHandler) window.removeEventListener('mousemove', _orgChartMouseMoveHandler);
+  if (_orgChartMouseUpHandler) window.removeEventListener('mouseup', _orgChartMouseUpHandler);
+
+  const startDrag = (clientX, clientY) => {
+    orgChartState.dragging = true;
+    orgChartState.didDrag = false;
+    orgChartState.startX = clientX - orgChartState.x;
+    orgChartState.startY = clientY - orgChartState.y;
+    viewport.classList.add('dragging');
+  };
+  const moveDrag = (clientX, clientY) => {
+    if (!orgChartState.dragging) return;
+    const nx = clientX - orgChartState.startX;
+    const ny = clientY - orgChartState.startY;
+    if (Math.abs(nx - orgChartState.x) > 2 || Math.abs(ny - orgChartState.y) > 2) orgChartState.didDrag = true;
+    orgChartState.x = nx;
+    orgChartState.y = ny;
+    applyOrgChartTransform();
+  };
+  const endDrag = () => {
+    orgChartState.dragging = false;
+    viewport.classList.remove('dragging');
+  };
+
+  viewport.addEventListener('mousedown', (e) => { e.preventDefault(); startDrag(e.clientX, e.clientY); });
+  _orgChartMouseMoveHandler = (e) => moveDrag(e.clientX, e.clientY);
+  _orgChartMouseUpHandler = () => endDrag();
+  window.addEventListener('mousemove', _orgChartMouseMoveHandler);
+  window.addEventListener('mouseup', _orgChartMouseUpHandler);
+
+  viewport.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    startDrag(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  viewport.addEventListener('touchmove', (e) => {
+    if (!orgChartState.dragging || e.touches.length !== 1) return;
+    moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  viewport.addEventListener('touchend', endDrag);
+
+  viewport.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    zoomOrgChart(e.deltaY < 0 ? 0.1 : -0.1);
+  }, { passive: false });
+
+  document.getElementById('org-zoom-in').addEventListener('click', () => zoomOrgChart(0.15));
+  document.getElementById('org-zoom-out').addEventListener('click', () => zoomOrgChart(-0.15));
+  document.getElementById('org-zoom-reset').addEventListener('click', () => {
+    orgChartState.scale = 1; orgChartState.x = 24; orgChartState.y = 16;
+    applyOrgChartTransform();
+  });
+}
+
+async function exportOrgChartPDF() {
+  const canvasEl = document.getElementById('org-chart-canvas');
+  const btn = document.getElementById('org-export-pdf');
+  if (!canvasEl) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Menyiapkan PDF…'; }
+  const prevTransform = canvasEl.style.transform;
+  try {
+    // Lepas transform pan/zoom sementara supaya seluruh bagan (bukan cuma
+    // area yang sedang terlihat di viewport) ter-capture penuh & rapi.
+    canvasEl.style.transform = 'none';
+    const shot = await html2canvas(canvasEl, { scale: 2, backgroundColor: '#ffffff' });
+    canvasEl.style.transform = prevTransform;
+
+    const imgData = shot.toDataURL('image/png');
+    const { jsPDF } = window.jspdf;
+    const isLandscape = shot.width >= shot.height;
+    const pdf = new jsPDF({ orientation: isLandscape ? 'landscape' : 'portrait', unit: 'pt', format: 'a4' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 28;
+    pdf.setFontSize(12);
+    pdf.text('Bagan Struktur Perusahaan — Integrida', margin, margin);
+    const topOffset = margin + 14;
+    const maxW = pageW - margin * 2;
+    const maxH = pageH - topOffset - margin;
+    const ratio = Math.min(maxW / shot.width, maxH / shot.height);
+    const imgW = shot.width * ratio;
+    const imgH = shot.height * ratio;
+    const x = (pageW - imgW) / 2;
+    const y = topOffset + (maxH - imgH) / 2;
+    pdf.addImage(imgData, 'PNG', x, y, imgW, imgH);
+    pdf.save('struktur-perusahaan.pdf');
+    toast('Bagan berhasil diekspor ke PDF', 'success');
+  } catch (err) {
+    canvasEl.style.transform = prevTransform;
+    toast('Gagal mengekspor PDF: ' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Ekspor PDF'; }
+  }
 }
 
 // ---------- Rincian Perusahaan ----------
@@ -2168,10 +2532,6 @@ function paintCompanyDetail(statements) {
 }
 
 // ---------- Import ----------
-function companyDisplayLabel(c) {
-  return c.code ? `${c.code} — ${c.name}` : c.name;
-}
-
 function selectImportCompany(companyId) {
   const company = state.companies.find(c => c.id === companyId);
   if (!company) return;
