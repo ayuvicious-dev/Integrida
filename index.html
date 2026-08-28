@@ -149,6 +149,18 @@ tbody tr:hover{background:#fafcfb;}
 }
 .field input:focus,.field select:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:var(--teal);}
 
+.combo-wrap{position:relative;}
+.combo-dropdown{
+  position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:30;
+  background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(20,30,50,.12);
+  max-height:220px;overflow-y:auto;
+}
+.combo-option{padding:9px 12px;cursor:pointer;font-size:13.5px;display:flex;gap:8px;align-items:baseline;}
+.combo-option:hover,.combo-option.active{background:var(--teal-light);}
+.combo-option .combo-code{font-weight:600;color:var(--teal);min-width:20px;}
+.combo-option .combo-name{color:var(--ink);}
+.combo-empty{padding:10px 12px;font-size:13px;color:var(--slate);}
+
 .badge{display:inline-block;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:600;}
 .badge.teal{background:var(--teal-light);color:var(--teal);}
 .badge.gold{background:var(--gold-light);color:#8a611f;}
@@ -302,7 +314,7 @@ db.enablePersistence().catch(() => {
 // =============================================================
 // DB.JS - Lapisan akses data Firestore untuk Integrida
 // Struktur data:
-// companies/{companyId}            { name, ownerUid, createdAt }
+// companies/{companyId}            { name, code, ownerUid, createdAt }
 // companies/{companyId}/statements/{statementId}
 //   {
 //     year, periodType ('bulanan'|'triwulan'|'semester'|'tahunan'),
@@ -318,13 +330,18 @@ const DB = {
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   },
 
-  async addCompany(uid, name) {
+  async addCompany(uid, name, code) {
     const ref = await db.collection('companies').add({
       name,
+      code: code || '',
       ownerUid: uid,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     return ref.id;
+  },
+
+  async updateCompanyCode(companyId, code) {
+    await db.collection('companies').doc(companyId).update({ code: code || '' });
   },
 
   async deleteCompany(companyId) {
@@ -1682,37 +1699,68 @@ function bindEmptyStateNav(root) {
 function renderCompanies() {
   const root = document.getElementById('view-root');
   root.innerHTML = `
-    <div class="section-block" style="display:flex;justify-content:flex-end;">
+    <div class="section-block" style="display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;">
+      <input type="text" id="company-search" placeholder="Cari kode atau nama perusahaan…" style="flex:1;min-width:220px;max-width:360px;" ${state.companies.length === 0 ? 'disabled' : ''}>
       <button class="btn primary" id="add-company-btn">+ Tambah Perusahaan</button>
     </div>
     ${state.companies.length === 0 ? emptyState('Belum ada perusahaan', 'Mulai dengan menambahkan perusahaan pertama Anda.', '', '') : `
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Nama Perusahaan</th><th class="num">Jumlah Periode Tersimpan</th><th></th></tr></thead>
+        <thead><tr><th>Kode</th><th>Nama Perusahaan</th><th class="num">Jumlah Periode Tersimpan</th><th></th></tr></thead>
         <tbody id="company-rows"></tbody>
       </table>
-    </div>`}
+    </div>
+    <div id="company-search-empty" class="card" style="display:none;color:var(--slate);margin-top:10px;">Tidak ada perusahaan yang cocok dengan pencarian.</div>`}
   `;
   document.getElementById('add-company-btn').addEventListener('click', openAddCompanyModal);
-  if (state.companies.length) fillCompanyRows();
+  if (state.companies.length) {
+    fillCompanyRows(state.companies);
+    const searchInput = document.getElementById('company-search');
+    searchInput.addEventListener('input', () => {
+      const q = searchInput.value.trim().toLowerCase();
+      const filtered = !q ? state.companies : state.companies.filter(c =>
+        String(c.code || '').toLowerCase().includes(q) ||
+        String(c.name || '').toLowerCase().includes(q)
+      );
+      document.getElementById('company-search-empty').style.display = filtered.length === 0 ? '' : 'none';
+      fillCompanyRows(filtered);
+    });
+  }
 }
 
-async function fillCompanyRows() {
+async function fillCompanyRows(list) {
+  const companies = list || state.companies;
   const tbody = document.getElementById('company-rows');
-  tbody.innerHTML = state.companies.map(c => `<tr data-id="${c.id}">
+  tbody.innerHTML = companies.map(c => `<tr data-id="${c.id}">
+    <td><a href="#" class="company-code-edit" data-code="${c.id}" style="color:var(--slate);text-decoration:none;" title="Klik untuk mengubah kode">${c.code ? c.code : '<span style="color:var(--slate-light);font-style:italic;">+ kode</span>'}</a></td>
     <td><a href="#" class="company-link" data-open="${c.id}" style="color:var(--ink);font-weight:600;text-decoration:none;">${c.name}</a></td>
     <td class="num">…</td>
     <td style="text-align:right;"><button class="btn ghost" data-del="${c.id}">Hapus</button></td>
   </tr>`).join('');
-  for (const c of state.companies) {
+  for (const c of companies) {
     const statements = await DB.getStatements(c.id);
-    const row = tbody.querySelector(`tr[data-id="${c.id}"] td:nth-child(2)`);
+    const row = tbody.querySelector(`tr[data-id="${c.id}"] td:nth-child(3)`);
     if (row) row.textContent = statements.length;
   }
   tbody.querySelectorAll('[data-open]').forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
       openCompanyDetail(link.dataset.open);
+    });
+  });
+  tbody.querySelectorAll('[data-code]').forEach(link => {
+    link.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = link.dataset.code;
+      const current = companies.find(c => c.id === id);
+      const next = prompt('Kode perusahaan:', current ? (current.code || '') : '');
+      if (next === null) return;
+      const trimmed = next.trim();
+      await DB.updateCompanyCode(id, trimmed);
+      if (current) current.code = trimmed;
+      link.innerHTML = trimmed ? trimmed : '<span style="color:var(--slate-light);font-style:italic;">+ kode</span>';
+      toast('Kode perusahaan diperbarui', 'success');
     });
   });
   tbody.querySelectorAll('[data-del]').forEach(btn => {
@@ -1731,6 +1779,7 @@ function openAddCompanyModal() {
     <h3>Tambah Perusahaan</h3>
     <div class="modal-sub">Perusahaan yang akan dikonsolidasikan laporan keuangannya.</div>
     <div class="field"><label>Nama Perusahaan</label><input type="text" id="new-company-name" placeholder="Contoh: PT Sumber Makmur"></div>
+    <div class="field"><label>Kode Perusahaan (opsional)</label><input type="text" id="new-company-code" placeholder="Contoh: PSM"></div>
     <div class="modal-actions">
       <button class="btn ghost" id="cancel-modal">Batal</button>
       <button class="btn primary" id="save-company">Simpan</button>
@@ -1741,8 +1790,9 @@ function openAddCompanyModal() {
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
   backdrop.querySelector('#save-company').addEventListener('click', async () => {
     const name = backdrop.querySelector('#new-company-name').value.trim();
+    const code = backdrop.querySelector('#new-company-code').value.trim();
     if (!name) { toast('Nama perusahaan wajib diisi', 'error'); return; }
-    await DB.addCompany(state.user.uid, name);
+    await DB.addCompany(state.user.uid, name, code);
     backdrop.remove();
     toast('Perusahaan ditambahkan', 'success');
     await reloadCompanies();
@@ -2109,6 +2159,49 @@ function paintCompanyDetail(statements) {
 }
 
 // ---------- Import ----------
+function companyDisplayLabel(c) {
+  return c.code ? `${c.code} — ${c.name}` : c.name;
+}
+
+function selectImportCompany(companyId) {
+  const company = state.companies.find(c => c.id === companyId);
+  if (!company) return;
+  state.importCompanyId = companyId;
+  const input = document.getElementById('import-company');
+  if (input) input.value = companyDisplayLabel(company);
+  closeImportCompanyDropdown();
+  resetPreview();
+  loadImportStatus();
+}
+
+function closeImportCompanyDropdown() {
+  const dd = document.getElementById('import-company-dropdown');
+  if (dd) { dd.style.display = 'none'; dd.innerHTML = ''; }
+}
+
+function renderImportCompanyDropdown(query) {
+  const dd = document.getElementById('import-company-dropdown');
+  if (!dd) return;
+  const q = query.trim().toLowerCase();
+  const matches = !q ? state.companies : state.companies.filter(c =>
+    String(c.code || '').toLowerCase().includes(q) ||
+    String(c.name || '').toLowerCase().includes(q)
+  );
+  dd.innerHTML = matches.length === 0
+    ? `<div class="combo-empty">Tidak ada perusahaan yang cocok.</div>`
+    : matches.map(c => `<div class="combo-option" data-id="${c.id}">
+        ${c.code ? `<span class="combo-code">${c.code}</span>` : ''}
+        <span class="combo-name">${c.name}</span>
+      </div>`).join('');
+  dd.querySelectorAll('.combo-option').forEach(opt => {
+    opt.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      selectImportCompany(opt.dataset.id);
+    });
+  });
+  dd.style.display = '';
+}
+
 function renderImport() {
   const root = document.getElementById('view-root');
   if (state.companies.length === 0) {
@@ -2116,19 +2209,18 @@ function renderImport() {
     bindEmptyStateNav(root);
     return;
   }
-  if (!state.importCompanyId || !state.companies.find(c => c.id === state.importCompanyId)) {
-    state.importCompanyId = state.companies[0].id;
+  if (state.importCompanyId && !state.companies.find(c => c.id === state.importCompanyId)) {
+    state.importCompanyId = null;
   }
 
   root.innerHTML = `
     <div class="grid grid-2" style="align-items:start;">
       <div class="card">
         <div class="section-title">1. Pilih Perusahaan Tujuan</div>
-        <div class="field">
+        <div class="field combo-wrap">
           <label>Perusahaan</label>
-          <select id="import-company">
-            ${state.companies.map(c => `<option value="${c.id}" ${c.id === state.importCompanyId ? 'selected' : ''}>${c.name}</option>`).join('')}
-          </select>
+          <input type="text" id="import-company" placeholder="Ketik kode atau nama perusahaan…" autocomplete="off">
+          <div id="import-company-dropdown" class="combo-dropdown" style="display:none;"></div>
         </div>
 
         <div class="section-title" style="margin-top:20px;">2. Pilih Jenis Data</div>
@@ -2165,10 +2257,22 @@ function renderImport() {
   updateDropzoneAndTemplate();
   loadImportStatus();
 
-  document.getElementById('import-company').addEventListener('change', (e) => {
-    state.importCompanyId = e.target.value;
-    resetPreview();
-    loadImportStatus();
+  const companyInput = document.getElementById('import-company');
+  const initialCompany = state.companies.find(c => c.id === state.importCompanyId);
+  if (companyInput && initialCompany) companyInput.value = companyDisplayLabel(initialCompany);
+
+  companyInput.addEventListener('focus', () => renderImportCompanyDropdown(''));
+  companyInput.addEventListener('input', () => renderImportCompanyDropdown(companyInput.value));
+  companyInput.addEventListener('blur', () => {
+    // Delay agar klik pada opsi dropdown (mousedown) sempat diproses sebelum ditutup.
+    setTimeout(() => {
+      closeImportCompanyDropdown();
+      const current = state.companies.find(c => c.id === state.importCompanyId);
+      if (current && companyInput) companyInput.value = companyDisplayLabel(current);
+    }, 120);
+  });
+  companyInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') companyInput.blur();
   });
 
   document.querySelectorAll('#import-type-pills .pill').forEach(p => {
@@ -2182,7 +2286,10 @@ function renderImport() {
 
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('file-input');
-  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('click', () => {
+    if (!state.importCompanyId) { toast('Pilih perusahaan terlebih dahulu', 'error'); return; }
+    fileInput.click();
+  });
   ['dragenter', 'dragover'].forEach(evt => dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('drag'); }));
   ['dragleave', 'drop'].forEach(evt => dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove('drag'); }));
   dropzone.addEventListener('drop', (e) => { if (e.dataTransfer.files[0]) handleImportFile(e.dataTransfer.files[0]); });
@@ -2230,6 +2337,10 @@ async function loadImportStatus() {
   if (nameEl) nameEl.textContent = company ? company.name : '';
   const tableEl = document.getElementById('import-status-table');
   if (!tableEl) return;
+  if (!state.importCompanyId) {
+    tableEl.innerHTML = `<div class="card" style="color:var(--slate);">Pilih perusahaan terlebih dahulu untuk melihat status data.</div>`;
+    return;
+  }
   const statements = (await DB.getStatements(state.importCompanyId)).sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex);
   if (statements.length === 0) {
     tableEl.innerHTML = `<div class="card" style="color:var(--slate);">Belum ada data yang diimpor untuk perusahaan ini.</div>`;
@@ -2257,6 +2368,12 @@ async function loadImportStatus() {
 let pendingImport = null;
 
 async function handleImportFile(file) {
+  if (!state.importCompanyId) {
+    toast('Pilih perusahaan terlebih dahulu sebelum mengunggah file', 'error');
+    const input = document.getElementById('file-input');
+    if (input) input.value = '';
+    return;
+  }
   const panel = document.getElementById('preview-panel');
   try {
     const buffer = await file.arrayBuffer();
@@ -2299,7 +2416,7 @@ async function handleImportFile(file) {
 }
 
 async function confirmImport() {
-  const companyId = document.getElementById('import-company').value;
+  const companyId = state.importCompanyId;
   if (!pendingImport) return;
   if (pendingImport.statementKey === 'bukuBesar') {
     await DB.saveStatementSection(companyId, pendingImport.period, 'bukuBesar', pendingImport.data.ledger);
