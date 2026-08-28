@@ -11,7 +11,8 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" crossorigin="anonymous">
 <style>
 :root{
   --ink:#16213A;
@@ -2257,73 +2258,207 @@ function setupOrgChartPanZoom() {
   });
 }
 
-async function exportOrgChartPDF() {
-  const canvasEl = document.getElementById('org-chart-canvas');
-  const btn = document.getElementById('org-export-pdf');
-  if (!canvasEl) return;
-  if (btn) { btn.disabled = true; btn.textContent = 'Menyiapkan PDF…'; }
-  const prevTransform = canvasEl.style.transform;
-  try {
-    // Lepas transform pan/zoom sementara supaya seluruh bagan (bukan cuma
-    // area yang sedang terlihat di viewport) ter-capture penuh & rapi.
-    canvasEl.style.transform = 'none';
+function hexToRgb(hex) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+  return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 27, g: 122, b: 107 };
+}
 
-    // Pastikan seluruh logo perusahaan (elemen <img>) benar-benar sudah
-    // selesai dimuat sebelum di-capture. Kalau di-capture saat gambar
-    // belum siap, hasilnya bisa jadi kartu kosong (logo & nama tidak
-    // ikut ter-render).
-    const images = Array.from(canvasEl.querySelectorAll('img'));
-    await Promise.all(images.map((img) => {
-      if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-      return new Promise((resolve) => {
-        img.addEventListener('load', resolve, { once: true });
-        img.addEventListener('error', resolve, { once: true });
+// Menghitung tata letak (posisi & ukuran tiap kartu) bagan struktur untuk
+// digambar langsung sebagai vektor di PDF — TANPA melalui screenshot
+// html2canvas. Pendekatan screenshot terbukti tidak bisa diandalkan untuk
+// layout bagan ini (kartu <li> yang di-float + lebar "max-content"), dan
+// bahkan sesudah dicoba diperbaiki tetap ada kartu yang gagal ter-render
+// (blank) secara acak tergantung browser. Menggambar langsung dengan
+// jsPDF membuat hasilnya selalu konsisten, teksnya tetap tajam pada
+// perbesaran berapa pun (bukan raster), dan tidak tergantung sama sekali
+// pada bagaimana html2canvas menafsirkan ulang CSS.
+function layoutOrgTree(pdfMeasure, roots) {
+  const BOX_W = 168, PAD = 10, LOGO_SIZE = 40;
+  const NAME_SIZE = 9.5, SUB_SIZE = 7.6, LABEL_SIZE = 6.6, NAME_LH = 12, SUB_LH = 10, LABEL_LH = 9;
+  const H_GAP = 22, V_GAP = 46;
+  const contentW = BOX_W - PAD * 2;
+
+  function prep(node) {
+    pdfMeasure.setFont('helvetica', 'bold'); pdfMeasure.setFontSize(NAME_SIZE);
+    const nameLines = pdfMeasure.splitTextToSize(node.name || '(Tanpa nama)', contentW);
+    const ownershipLines = ownershipSummaryLines(node);
+    const foundedRaw = node.foundedDate ? `${formatDateID(node.foundedDate)} · ${companyAgeLabel(node.foundedDate)}` : '';
+    pdfMeasure.setFont('helvetica', 'normal'); pdfMeasure.setFontSize(SUB_SIZE);
+    const foundedLines = foundedRaw ? pdfMeasure.splitTextToSize(foundedRaw, contentW) : [];
+
+    let h = PAD + LOGO_SIZE + 6 + nameLines.length * NAME_LH;
+    if (ownershipLines.length || foundedLines.length) h += 9;
+    if (ownershipLines.length) h += LABEL_LH;
+    h += ownershipLines.length * SUB_LH + foundedLines.length * SUB_LH + PAD;
+
+    node._box = { w: BOX_W, h, nameLines, ownershipLines, foundedLines };
+    node.children.forEach(prep);
+  }
+  roots.forEach(prep);
+
+  function measureWidth(node) {
+    if (!node.children.length) { node._subW = BOX_W; return BOX_W; }
+    let sum = 0;
+    node.children.forEach((c, i) => { sum += measureWidth(c); if (i < node.children.length - 1) sum += H_GAP; });
+    node._subW = Math.max(BOX_W, sum);
+    return node._subW;
+  }
+  let totalW = 0;
+  roots.forEach((r, i) => { totalW += measureWidth(r); if (i < roots.length - 1) totalW += H_GAP * 2; });
+
+  const rowHeights = [];
+  function collectDepth(node, depth) {
+    rowHeights[depth] = Math.max(rowHeights[depth] || 0, node._box.h);
+    node.children.forEach(c => collectDepth(c, depth + 1));
+  }
+  roots.forEach(r => collectDepth(r, 0));
+
+  const rowY = [];
+  let cursorY = 0;
+  rowHeights.forEach((h, i) => { rowY[i] = cursorY; cursorY += h + V_GAP; });
+  const totalH = Math.max(0, cursorY - V_GAP);
+
+  function place(node, leftX, depth) {
+    if (!node.children.length) {
+      node._x = leftX;
+    } else {
+      let cx = leftX;
+      const centers = [];
+      node.children.forEach((c) => {
+        place(c, cx, depth + 1);
+        centers.push(c._x + c._box.w / 2);
+        cx += c._subW + H_GAP;
       });
-    }));
-    if (document.fonts && document.fonts.ready) {
-      try { await document.fonts.ready; } catch (e) { /* abaikan */ }
+      node._x = (centers[0] + centers[centers.length - 1]) / 2 - node._box.w / 2;
     }
-    // Beri jeda satu frame supaya browser sempat repaint setelah transform
-    // dilepas & gambar dipastikan siap sebelum di-capture.
-    await new Promise((r) => requestAnimationFrame(r));
+    node._y = rowY[depth];
+  }
+  let curX = 0;
+  roots.forEach(r => { place(r, curX, 0); curX += r._subW + H_GAP * 2; });
 
-    // foreignObjectRendering:true membuat html2canvas mendelegasikan
-    // rendering ke mesin render browser sendiri (lewat SVG <foreignObject>)
-    // alih-alih menginterpretasikan ulang CSS secara manual — ini yang
-    // memperbaiki kartu yang sebelumnya tampil kosong di PDF, karena
-    // layout logo (object-fit, flexbox) tidak selalu didukung penuh oleh
-    // mesin render bawaan html2canvas. Kalau browser tidak mendukungnya
-    // (mis. Safari lama), otomatis dicoba ulang tanpa opsi ini.
-    let shot;
-    try {
-      shot = await html2canvas(canvasEl, { scale: 2, backgroundColor: '#ffffff', useCORS: true, imageTimeout: 15000, foreignObjectRendering: true });
-    } catch (foErr) {
-      shot = await html2canvas(canvasEl, { scale: 2, backgroundColor: '#ffffff', useCORS: true, imageTimeout: 15000 });
-    }
-    canvasEl.style.transform = prevTransform;
+  return { totalW, totalH, H_GAP, V_GAP, LOGO_SIZE, PAD, NAME_SIZE, SUB_SIZE, LABEL_SIZE, NAME_LH, SUB_LH, LABEL_LH };
+}
 
-    const imgData = shot.toDataURL('image/png');
+async function exportOrgChartPDF() {
+  const btn = document.getElementById('org-export-pdf');
+  if (btn) { btn.disabled = true; btn.textContent = 'Menyiapkan PDF…'; }
+  try {
+    const roots = buildCompanyTree();
+    if (!roots.length) { toast('Belum ada perusahaan untuk diekspor.', 'error'); return; }
+
     const { jsPDF } = window.jspdf;
-    const isLandscape = shot.width >= shot.height;
-    const pdf = new jsPDF({ orientation: isLandscape ? 'landscape' : 'portrait', unit: 'pt', format: 'a4' });
-    const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
-    const margin = 28;
-    pdf.setFontSize(12);
-    pdf.text('Bagan Struktur Perusahaan — Integrida', margin, margin);
-    const topOffset = margin + 14;
+    // Instance sementara hanya untuk mengukur teks (ukuran/orientasi
+    // halaman tidak memengaruhi metrik font, jadi aman dipakai di sini).
+    const measure = new jsPDF({ unit: 'pt' });
+    const L = layoutOrgTree(measure, roots);
+
+    const margin = 24;
+    const A4_PORTRAIT = { w: 595.28, h: 841.89 };
+    const isLandscape = L.totalW >= L.totalH;
+    const pageW = isLandscape ? A4_PORTRAIT.h : A4_PORTRAIT.w;
+    const pageH = isLandscape ? A4_PORTRAIT.w : A4_PORTRAIT.h;
     const maxW = pageW - margin * 2;
-    const maxH = pageH - topOffset - margin;
-    const ratio = Math.min(maxW / shot.width, maxH / shot.height);
-    const imgW = shot.width * ratio;
-    const imgH = shot.height * ratio;
-    const x = (pageW - imgW) / 2;
-    const y = topOffset + (maxH - imgH) / 2;
-    pdf.addImage(imgData, 'PNG', x, y, imgW, imgH);
+    const maxH = pageH - margin * 2;
+    const ratio = L.totalW > 0 && L.totalH > 0 ? Math.min(maxW / L.totalW, maxH / L.totalH) : 1;
+
+    const pdf = new jsPDF({ orientation: isLandscape ? 'landscape' : 'portrait', unit: 'pt', format: 'a4' });
+
+    const offsetX = (pageW - L.totalW * ratio) / 2;
+    const offsetY = (pageH - L.totalH * ratio) / 2;
+    const S = (v) => v * ratio;
+
+    // Warna disamakan persis dengan design token aplikasi (lihat :root
+    // di <style>): --ink:#16213A, --border:#E4E6E9, --slate:#5B6472.
+    const INK = [22, 33, 58];
+    const BORDER = [228, 230, 233];
+    const BORDER_SOFT = [236, 238, 240];
+    const SLATE = [91, 100, 114];
+
+    function drawNode(node) {
+      const x = offsetX + S(node._x), y = offsetY + S(node._y);
+      const w = S(node._box.w), h = S(node._box.h), pad = S(L.PAD);
+
+      if (node.children.length) {
+        const busY = y + h + S(L.V_GAP) / 2;
+        const cx = x + w / 2;
+        pdf.setDrawColor(...BORDER);
+        pdf.setLineWidth(Math.max(0.6, ratio));
+        pdf.line(cx, y + h, cx, busY);
+        const childCenters = node.children.map(c => offsetX + S(c._x + c._box.w / 2));
+        if (childCenters.length > 1) pdf.line(childCenters[0], busY, childCenters[childCenters.length - 1], busY);
+        childCenters.forEach((ccx, i) => {
+          const cy = offsetY + S(node.children[i]._y);
+          pdf.line(ccx, busY, ccx, cy);
+        });
+      }
+
+      // Kartu: latar putih, border tipis abu-abu, sudut membulat — sama
+      // seperti kelas CSS .org-node di tampilan aplikasi.
+      pdf.setDrawColor(...BORDER);
+      pdf.setFillColor(255, 255, 255);
+      pdf.setLineWidth(Math.max(0.6, ratio));
+      pdf.roundedRect(x, y, w, h, S(8), S(8), 'FD');
+
+      let cy2 = y + pad;
+      const logoSize = S(L.LOGO_SIZE);
+      const logoX = x + (w - logoSize) / 2;
+      let logoDrawn = false;
+      if (node.logoUrl && /^data:image\/(png|jpe?g)/i.test(node.logoUrl)) {
+        try {
+          const fmt = /^data:image\/jpe?g/i.test(node.logoUrl) ? 'JPEG' : 'PNG';
+          pdf.addImage(node.logoUrl, fmt, logoX, cy2, logoSize, logoSize, undefined, 'FAST');
+          logoDrawn = true;
+        } catch (e) { logoDrawn = false; }
+      }
+      if (!logoDrawn) {
+        const rgb = hexToRgb(avatarColor(node.id || node.name));
+        pdf.setFillColor(rgb.r, rgb.g, rgb.b);
+        pdf.roundedRect(logoX, cy2, logoSize, logoSize, S(6), S(6), 'F');
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(Math.max(6, S(14)));
+        pdf.text(companyInitials(node.name), logoX + logoSize / 2, cy2 + logoSize / 2 + S(4), { align: 'center' });
+      }
+      cy2 += logoSize + S(6);
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(Math.max(6, S(L.NAME_SIZE)));
+      pdf.setTextColor(...INK);
+      node._box.nameLines.forEach((line) => {
+        pdf.text(line, x + w / 2, cy2 + S(8), { align: 'center' });
+        cy2 += S(L.NAME_LH);
+      });
+
+      if (node._box.ownershipLines.length || node._box.foundedLines.length) {
+        cy2 += S(3);
+        pdf.setDrawColor(...BORDER_SOFT);
+        pdf.setLineWidth(Math.max(0.3, S(0.6)));
+        pdf.line(x + pad, cy2, x + w - pad, cy2);
+        cy2 += S(7);
+      }
+
+      if (node._box.ownershipLines.length) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(Math.max(4.5, S(L.LABEL_SIZE)));
+        pdf.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
+        pdf.text('PEMEGANG SAHAM', x + pad, cy2 + S(6));
+        cy2 += S(L.LABEL_LH);
+      }
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(Math.max(5.5, S(L.SUB_SIZE)));
+      pdf.setTextColor(...INK);
+      node._box.ownershipLines.forEach((line) => { pdf.text(line, x + pad, cy2 + S(7)); cy2 += S(L.SUB_LH); });
+      pdf.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
+      node._box.foundedLines.forEach((line) => { pdf.text(line, x + pad, cy2 + S(7)); cy2 += S(L.SUB_LH); });
+
+      node.children.forEach(drawNode);
+    }
+    roots.forEach(drawNode);
+
     pdf.save('struktur-perusahaan.pdf');
     toast('Bagan berhasil diekspor ke PDF', 'success');
   } catch (err) {
-    canvasEl.style.transform = prevTransform;
     toast('Gagal mengekspor PDF: ' + err.message, 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Ekspor PDF'; }
