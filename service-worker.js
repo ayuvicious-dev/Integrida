@@ -9,7 +9,10 @@
 //     (navigasi), supaya pembaruan index.html langsung terlihat tanpa
 //     perlu menaikkan versi CACHE_NAME setiap kali. Aset statis lain
 //     (manifest, ikon) tetap cache-first agar tetap cepat & bisa offline.
-const CACHE_NAME = 'integrida-cache-v4';
+// v5: index.html diperbarui (fitur logo perusahaan) — cache lama tetap
+//     tergantikan otomatis lewat strategi network-first di atas, tapi
+//     versi dinaikkan sebagai penanda revisi.
+const CACHE_NAME = 'integrida-cache-v5';
 const APP_SHELL = [
   './',
   './index.html',
