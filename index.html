@@ -1003,6 +1003,164 @@ function deriveStatementsFromLedgerAccounts(accounts) {
   return { neraca, labaRugi, warnings, contributions };
 }
 
+// ---------- Arus Kas Metode Langsung (diturunkan dari Buku Besar) ----------
+// Buku Besar hanya berisi mutasi PER AKUN (bukan jurnal berpasangan dengan
+// akun lawan), jadi tidak ada cara pasti untuk tahu akun lawan tiap
+// transaksi kas. Pendekatan yang dipakai di sini: baca transaksi milik
+// akun Kas & Setara Kas itu sendiri (tanggal, keterangan, debit/kredit),
+// lalu klasifikasikan tiap baris ke pos Arus Kas (Operasi/Investasi/
+// Pendanaan) berdasarkan kata kunci pada kolom Keterangan — mirip cara
+// classifyLedgerAccount mengenali kategori akun dari nama akun. Ini
+// menghasilkan Laporan Arus Kas Metode Langsung yang otomatis balance
+// (Kas Awal + Kenaikan Kas Bersih = Kas Akhir) karena seluruh angka
+// berasal dari transaksi kas yang sama persis dengan yang membentuk
+// saldo akun Kas & Setara Kas pada Neraca.
+//
+// Urutan array di bawah penting: dicek dari atas ke bawah, kata kunci
+// yang lebih spesifik ditaruh lebih dulu supaya tidak "tertangkap" duluan
+// oleh kata kunci generik (mis. "beban") sebelum sempat dicek "gaji" atau
+// "pajak". `labelIn`/`labelOut` bisa null untuk melewatkan arah tersebut
+// ke pemeriksa berikutnya (mis. kata "beban" hampir selalu berarti kas
+// keluar, jadi labelIn dibiarkan null supaya transaksi debit dengan kata
+// "beban" tetap dicek pemeriksa lain, bukan langsung dianggap "Penerimaan
+// Beban" yang janggal).
+const CASHFLOW_DIRECT_CATEGORIES = [
+  {
+    key: 'pemasok', activity: 'operasi',
+    regex: /pembelian|supplier|pemasok|bahan baku/,
+    labelIn: 'Retur/Penerimaan dari Pemasok', labelOut: 'Pembayaran ke Pemasok'
+  },
+  {
+    key: 'gaji', activity: 'operasi',
+    regex: /\bgaji\b|\bupah\b|payroll|karyawan|\bthr\b|\bhonor\b|lembur/,
+    labelIn: null, labelOut: 'Pembayaran Gaji & Karyawan'
+  },
+  {
+    key: 'pajak', activity: 'operasi',
+    regex: /\bpajak\b|\bpph\b|\bppn\b/,
+    labelIn: 'Restitusi/Penerimaan Pajak', labelOut: 'Pembayaran Pajak'
+  },
+  {
+    key: 'bunga', activity: 'operasi',
+    regex: /\bbunga\b/,
+    labelIn: 'Penerimaan Bunga', labelOut: 'Pembayaran Bunga'
+  },
+  {
+    key: 'bebanOperasional', activity: 'operasi',
+    regex: /\bbeban\b|\bsewa\b|\blistrik\b|internet|operasional|\biklan\b|promosi|utilitas|langganan|maintenance|perawatan|transport|\bbensin\b|\bparkir\b|\batk\b|perlengkapan/,
+    labelIn: null, labelOut: 'Pembayaran Beban Operasional'
+  },
+  {
+    key: 'penjualan', activity: 'operasi',
+    regex: /penjualan|pelanggan|customer|invoice|faktur|piutang/,
+    labelIn: 'Penerimaan dari Pelanggan', labelOut: 'Retur Penjualan (Kas Keluar)'
+  },
+  {
+    key: 'asetTetap', activity: 'investasi',
+    regex: /aset tetap|\bmesin\b|kendaraan|peralatan|\btanah\b|\bbangunan\b|\bgedung\b|renovasi|inventaris/,
+    labelIn: 'Penjualan Aset Tetap', labelOut: 'Pembelian Aset Tetap'
+  },
+  {
+    key: 'pinjaman', activity: 'pendanaan',
+    regex: /pinjaman|kredit bank|utang bank|\bloan\b|\bkur\b|cicilan|angsuran/,
+    labelIn: 'Penerimaan Pinjaman', labelOut: 'Pembayaran/Angsuran Pinjaman'
+  },
+  {
+    key: 'modal', activity: 'pendanaan',
+    regex: /\bmodal\b|setoran pemilik|investasi pemilik|\bprive\b|dividen|deviden|penarikan pemilik/,
+    labelIn: 'Setoran Modal Pemilik', labelOut: 'Penarikan Modal Pemilik/Dividen'
+  }
+];
+
+// Urutan tampilan pos Arus Kas — kategori di atas sesuai definisinya,
+// lalu pos "Lainnya" (transaksi yang tidak cocok kata kunci mana pun)
+// selalu di baris paling akhir tiap kelompok aktivitas.
+const CASHFLOW_DIRECT_ORDER = CASHFLOW_DIRECT_CATEGORIES
+  .flatMap(c => [`${c.key}_masuk`, `${c.key}_keluar`])
+  .concat(['lainnya_masuk', 'lainnya_keluar']);
+
+// Urutan PEMERIKSAAN kata kunci (beda dari urutan tampilan di atas):
+// kategori Investasi & Pendanaan yang kata kuncinya lebih spesifik (mis.
+// "mesin", "pinjaman", "modal") diperiksa LEBIH DULU, supaya tidak
+// "tertangkap" duluan oleh kata kunci generik pada kategori Operasi (mis.
+// "pembelian mesin produksi" harus jatuh ke Pembelian Aset Tetap, bukan
+// Pembayaran ke Pemasok, meski kategori Pemasok juga mengenali kata
+// "pembelian").
+const CASHFLOW_MATCH_PRIORITY = ['asetTetap', 'pinjaman', 'modal', 'pemasok', 'gaji', 'pajak', 'bunga', 'bebanOperasional', 'penjualan'];
+const CASHFLOW_MATCH_LIST = CASHFLOW_MATCH_PRIORITY.map(k => CASHFLOW_DIRECT_CATEGORIES.find(c => c.key === k));
+
+const ARUS_KAS_ACTIVITY_LABELS = {
+  operasi: 'Aktivitas Operasi', investasi: 'Aktivitas Investasi', pendanaan: 'Aktivitas Pendanaan'
+};
+
+/**
+ * Menurunkan Laporan Arus Kas Metode Langsung dari transaksi akun Kas &
+ * Setara Kas pada Buku Besar. Lihat catatan di atas CASHFLOW_DIRECT_CATEGORIES
+ * untuk penjelasan pendekatannya.
+ */
+function deriveArusKasLangsungFromLedger(accounts) {
+  const cashAccounts = (accounts || []).filter(a => classifyLedgerAccount(a.code, a.name).field === 'kasSetaraKas');
+
+  const buckets = {};
+  const ensureBucket = (key, label, activity) => {
+    if (!buckets[key]) buckets[key] = { key, label, activity, masuk: 0, keluar: 0, items: [] };
+    return buckets[key];
+  };
+
+  cashAccounts.forEach(acc => {
+    (acc.transaksi || []).forEach(t => {
+      const debit = t.debit || 0, kredit = t.kredit || 0;
+      if (!debit && !kredit) return;
+      const isMasuk = debit > 0;
+      const amount = isMasuk ? debit : kredit;
+      const n = normalizeKey(t.keterangan);
+
+      let matched = null;
+      for (const cat of CASHFLOW_MATCH_LIST) {
+        const label = isMasuk ? cat.labelIn : cat.labelOut;
+        if (label && cat.regex.test(n)) { matched = { key: `${cat.key}_${isMasuk ? 'masuk' : 'keluar'}`, label, activity: cat.activity }; break; }
+      }
+      if (!matched) {
+        matched = isMasuk
+          ? { key: 'lainnya_masuk', label: 'Penerimaan Operasional Lainnya', activity: 'operasi' }
+          : { key: 'lainnya_keluar', label: 'Pembayaran Operasional Lainnya', activity: 'operasi' };
+      }
+
+      const bucket = ensureBucket(matched.key, matched.label, matched.activity);
+      if (isMasuk) bucket.masuk += amount; else bucket.keluar += amount;
+      bucket.items.push({ tanggal: t.tanggal, keterangan: t.keterangan, akun: acc.name, debit, kredit });
+    });
+  });
+
+  const byActivity = (activity) => {
+    const list = Object.entries(buckets).filter(([, b]) => b.activity === activity);
+    return sortEntriesByOrder(list, CASHFLOW_DIRECT_ORDER).map(([, b]) => b);
+  };
+
+  const kasAwal = cashAccounts.reduce((s, a) => s + (a.saldoAwal || 0), 0);
+  const kasAkhir = cashAccounts.reduce((s, a) => s + (a.saldoAkhir || 0), 0);
+  const netOf = (activity) => Object.values(buckets).filter(b => b.activity === activity).reduce((s, b) => s + b.masuk - b.keluar, 0);
+  const totalOperasi = netOf('operasi'), totalInvestasi = netOf('investasi'), totalPendanaan = netOf('pendanaan');
+  const kenaikanKasBersih = totalOperasi + totalInvestasi + totalPendanaan;
+
+  const warnings = [];
+  if (cashAccounts.length === 0) {
+    warnings.push('Tidak ditemukan akun Kas/Bank (kode akun 1, nama mengandung "kas"/"bank") pada Buku Besar, sehingga Laporan Arus Kas Metode Langsung tidak dapat diturunkan.');
+  } else {
+    const selisih = (kasAwal + kenaikanKasBersih) - kasAkhir;
+    if (Math.abs(selisih) > 1) {
+      warnings.push(`Terdapat selisih ${formatIDR(selisih)} antara hasil perhitungan Kas Akhir pada Arus Kas dan saldo akhir akun Kas/Bank — kemungkinan ada baris transaksi kas yang tidak terbaca lengkap.`);
+    }
+  }
+
+  return {
+    kasAwal, kasAkhir, kenaikanKasBersih,
+    totalOperasi, totalInvestasi, totalPendanaan,
+    rincian: { operasi: byActivity('operasi'), investasi: byActivity('investasi'), pendanaan: byActivity('pendanaan') },
+    warnings
+  };
+}
+
 /**
  * Merekonstruksi klasifikasi (contributions) dari daftar akun Buku Besar
  * yang SUDAH tersimpan di Firestore (statement.bukuBesar) — dipakai di
@@ -1086,6 +1244,7 @@ function parseBukuBesarSheet(sheet) {
   });
 
   const derived = deriveStatementsFromLedgerAccounts(accounts);
+  const arusKas = deriveArusKasLangsungFromLedger(accounts);
 
   return {
     companyName,
@@ -1093,7 +1252,8 @@ function parseBukuBesarSheet(sheet) {
     accounts,
     neraca: derived.neraca,
     labaRugi: derived.labaRugi,
-    warnings: derived.warnings,
+    arusKas,
+    warnings: derived.warnings.concat(arusKas.warnings),
     contributions: derived.contributions
   };
 }
@@ -1212,8 +1372,12 @@ function parseAccountingReportSheet(sheet, statementKey) {
 // diimpor terpisah di sini — keduanya diturunkan otomatis dari impor
 // Buku Besar (lihat deriveStatementsFromLedgerAccounts), supaya tidak
 // ada dua sumber data yang bisa saling tidak sinkron untuk periode yang
-// sama. Yang tersisa sebagai jenis impor mandiri hanya Arus Kas (belum
-// bisa diturunkan dari Buku Besar) dan Buku Besar itu sendiri.
+// sama. Arus Kas kini JUGA diturunkan otomatis dari impor Buku Besar
+// (metode langsung, lihat deriveArusKasLangsungFromLedger) — jenis impor
+// "Arus Kas" di bawah ini dipertahankan sebagai opsi manual/cadangan
+// (mis. bila software akuntansi sumbernya tidak diekspor lewat Buku
+// Besar), dan hasilnya akan TERTIMPA otomatis begitu Buku Besar periode
+// yang sama diimpor.
 const IMPORT_TYPES = {
   arusKas: {
     label: 'Arus Kas',
@@ -1276,7 +1440,7 @@ function parseSingleTypeExcel(arrayBuffer, typeKey) {
           statementKey: type.statementKey,
           companyName: parsed.companyName,
           period: parsed.period,
-          data: { ledger: parsed.accounts, neraca: parsed.neraca, labaRugi: parsed.labaRugi, contributions: parsed.contributions },
+          data: { ledger: parsed.accounts, neraca: parsed.neraca, labaRugi: parsed.labaRugi, arusKas: parsed.arusKas, contributions: parsed.contributions },
           warnings: parsed.warnings
         };
       } catch (err) {
@@ -2914,6 +3078,70 @@ function keyValueTable(obj, order, labels) {
   return `<table><tbody>${entries.map(([k, v]) => `<tr><td>${(labels && labels[k]) || humanizeKey(k)}</td><td class="num">${formatIDR(v)}</td></tr>`).join('')}</tbody></table>`;
 }
 
+// ---------- Tampilan Arus Kas Metode Langsung (turunan Buku Besar) ----------
+// Dipakai baik di pratinjau impor maupun Detail Perusahaan. Berbeda dari
+// derivedFieldRow (yang rinciannya berupa AKUN buku besar), di sini
+// rinciannya berupa TRANSAKSI kas individual — jadi ditampilkan langsung
+// inline di dalam <details>, bukan lewat modal.
+function arusKasLangsungItemsHtml(items) {
+  if (!items || !items.length) return `<div style="color:var(--slate-light);font-size:12px;padding:4px 8px;">Tidak ada transaksi.</div>`;
+  return items.map(it => `
+    <div style="display:flex;justify-content:space-between;gap:10px;padding:4px 8px;font-size:12px;color:var(--slate);">
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${it.tanggal ? escapeHTML(it.tanggal) + ' &middot; ' : ''}${escapeHTML(it.keterangan) || '(tanpa keterangan)'} <span style="color:var(--slate-light);">(${escapeHTML(it.akun)})</span></span>
+      <span class="num" style="font-family:var(--font-mono);flex-shrink:0;">${it.debit ? formatIDR(it.debit) : '(' + formatIDR(it.kredit) + ')'}</span>
+    </div>`).join('');
+}
+
+function arusKasLangsungLineRow(bucket) {
+  const net = bucket.masuk - bucket.keluar;
+  return `
+    <details style="border-bottom:1px solid var(--border);">
+      <summary style="display:flex;justify-content:space-between;align-items:center;padding:7px 2px;cursor:pointer;font-size:13px;">
+        <span>${escapeHTML(bucket.label)}<span style="font-weight:400;color:var(--slate-light);margin-left:6px;">(${bucket.items.length} transaksi)</span></span>
+        <span class="num" style="font-family:var(--font-mono);">${net < 0 ? '(' + formatIDR(Math.abs(net)) + ')' : formatIDR(net)}</span>
+      </summary>
+      <div style="padding:2px 2px 10px 12px;">${arusKasLangsungItemsHtml(bucket.items)}</div>
+    </details>`;
+}
+
+function arusKasLangsungActivityBlock(label, buckets, total) {
+  if (!buckets || !buckets.length) return '';
+  return `
+    <div style="font-weight:600;color:var(--slate);font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:12px 2px 4px 2px;">${label}</div>
+    ${buckets.map(arusKasLangsungLineRow).join('')}
+    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600;padding:6px 2px;border-top:1px dashed var(--border);margin-top:2px;">
+      <span>Kas Bersih dari ${label}</span>
+      <span class="num" style="font-family:var(--font-mono);">${total < 0 ? '(' + formatIDR(Math.abs(total)) + ')' : formatIDR(total)}</span>
+    </div>`;
+}
+
+// Laporan Arus Kas Metode Langsung — diturunkan otomatis dari transaksi
+// akun Kas & Setara Kas pada Buku Besar (deriveArusKasLangsungFromLedger).
+// Mendeteksi bentuk lama (hasil impor manual, field datar seperti
+// kasAwal/arusKasOperasi/kasAkhir) lewat absennya `rincian` dan tetap
+// menampilkannya lewat keyValueTable supaya data lama tidak rusak.
+function arusKasTable(arusKas) {
+  if (!arusKas || !arusKas.rincian) return keyValueTable(arusKas);
+  const kasAwalRow = `
+    <div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 2px;">
+      <span>Kas &amp; Setara Kas Awal Periode</span><span class="num" style="font-family:var(--font-mono);">${formatIDR(arusKas.kasAwal)}</span>
+    </div>`;
+  const kenaikanRow = `
+    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding:8px 2px;margin-top:6px;border-top:1px solid var(--border);">
+      <span>Kenaikan (Penurunan) Kas Bersih</span>
+      <span class="num" style="font-family:var(--font-mono);">${arusKas.kenaikanKasBersih < 0 ? '(' + formatIDR(Math.abs(arusKas.kenaikanKasBersih)) + ')' : formatIDR(arusKas.kenaikanKasBersih)}</span>
+    </div>`;
+  const kasAkhirRow = `
+    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding:5px 2px;color:var(--teal);">
+      <span>Kas &amp; Setara Kas Akhir Periode</span><span class="num" style="font-family:var(--font-mono);">${formatIDR(arusKas.kasAkhir)}</span>
+    </div>`;
+  return `
+    ${arusKasLangsungActivityBlock(ARUS_KAS_ACTIVITY_LABELS.operasi, arusKas.rincian.operasi, arusKas.totalOperasi)}
+    ${arusKasLangsungActivityBlock(ARUS_KAS_ACTIVITY_LABELS.investasi, arusKas.rincian.investasi, arusKas.totalInvestasi)}
+    ${arusKasLangsungActivityBlock(ARUS_KAS_ACTIVITY_LABELS.pendanaan, arusKas.rincian.pendanaan, arusKas.totalPendanaan)}
+    <div style="margin-top:10px;">${kasAwalRow}${kenaikanRow}${kasAkhirRow}</div>`;
+}
+
 // Baris satu akun di dalam kelompok klasifikasi Buku Besar — kode akun
 // (kalau ada) + nama di kiri, saldo akhir di kanan, seluruh baris bisa
 // diklik (delegated listener .bb-ledger-row) untuk membuka rincian
@@ -3269,9 +3497,12 @@ function paintCompanyDetail(statements) {
         </div>
         ${bbContribs ? derivedSectionDetails(selected.labaRugi, bbContribs, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS, LABA_RUGI_ORDER) : keyValueTable(selected.labaRugi, LABA_RUGI_ORDER, LABA_RUGI_LABELS)}
       </div>
-      <div class="card">
-        <div class="section-title"><span class="badge blue">Arus Kas</span></div>
-        ${keyValueTable(selected.arusKas)}
+      <div class="card" style="grid-column:1 / -1;">
+        <div class="section-title">
+          <span class="badge blue">Arus Kas (Metode Langsung)</span>
+          ${selected.arusKas && selected.arusKas.rincian ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik pos untuk rincian transaksi kas</span>' : ''}
+        </div>
+        ${arusKasTable(selected.arusKas)}
       </div>
     </div>
 
@@ -3468,7 +3699,7 @@ function updateDropzoneAndTemplate() {
     if (hint) hint.textContent = `Unggah laporan ${type.label} apa adanya, hasil export langsung dari software akuntansi Anda — kode & nama akun boleh berbeda-beda per perusahaan, sistem membacanya dari struktur laporan (akun header, sub-akun, dan baris total).`;
     if (templateBtn) templateBtn.style.display = 'none';
   } else if (type.mode === 'bukuBesarLedger') {
-    if (hint) hint.textContent = `Unggah Buku Besar apa adanya, hasil export langsung dari software akuntansi Anda (per akun: Saldo Awal, daftar transaksi, Ending Balance). Neraca & Laba Rugi periode ini akan dihitung & diisi otomatis dari kode akun (1=Aset, 2=Kewajiban, 3=Ekuitas, 4=Pendapatan, 5=HPP, 6=Beban Operasional, 7=Pendapatan Lainnya, 8=Beban Lainnya, 9=Beban Pajak).`;
+    if (hint) hint.textContent = `Unggah Buku Besar apa adanya, hasil export langsung dari software akuntansi Anda (per akun: Saldo Awal, daftar transaksi, Ending Balance). Neraca, Laba Rugi, & Arus Kas Metode Langsung periode ini akan dihitung & diisi otomatis dari kode akun (1=Aset, 2=Kewajiban, 3=Ekuitas, 4=Pendapatan, 5=HPP, 6=Beban Operasional, 7=Pendapatan Lainnya, 8=Beban Lainnya, 9=Beban Pajak) & transaksi akun Kas/Bank.`;
     if (templateBtn) templateBtn.style.display = 'none';
   } else {
     if (hint) hint.textContent = `File harus berisi sheet "Info" dan sheet data sesuai jenis yang dipilih di atas`;
@@ -3559,6 +3790,9 @@ async function handleImportFile(file) {
         <div class="section-title" style="margin-top:16px;font-size:14px;">Laba Rugi (diturunkan otomatis — mutasi periode)</div>
         <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu baris untuk melihat akun buku besar yang menyusun angka tersebut.</div>
         <div class="card" style="padding:2px 12px;">${derivedSectionDetails(result.data.labaRugi, result.data.contributions, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS, LABA_RUGI_ORDER)}</div>
+        <div class="section-title" style="margin-top:16px;font-size:14px;">Arus Kas Metode Langsung (diturunkan otomatis — transaksi akun Kas/Bank)</div>
+        <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu pos untuk melihat transaksi kas yang menyusun angka tersebut.</div>
+        <div class="card" style="padding:2px 12px;">${arusKasTable(result.data.arusKas)}</div>
       ` : `
         <table style="margin-top:10px;">
           <tbody>${Object.entries(result.data).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('') || '<tr><td colspan="2">Tidak ada data terbaca</td></tr>'}</tbody>
@@ -3584,7 +3818,8 @@ async function confirmImport() {
     await DB.saveStatementSection(companyId, pendingImport.period, 'bukuBesar', pendingImport.data.ledger);
     await DB.saveStatementSection(companyId, pendingImport.period, 'neraca', pendingImport.data.neraca);
     await DB.saveStatementSection(companyId, pendingImport.period, 'labaRugi', pendingImport.data.labaRugi);
-    toast(`Buku Besar tersimpan — Neraca & Laba Rugi otomatis diperbarui`, 'success');
+    await DB.saveStatementSection(companyId, pendingImport.period, 'arusKas', pendingImport.data.arusKas);
+    toast(`Buku Besar tersimpan — Neraca, Laba Rugi & Arus Kas otomatis diperbarui`, 'success');
   } else {
     await DB.saveStatementSection(companyId, pendingImport.period, pendingImport.statementKey, pendingImport.data);
     toast(`Data ${pendingImport.typeLabel} berhasil disimpan`, 'success');

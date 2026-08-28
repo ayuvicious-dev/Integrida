@@ -30,7 +30,12 @@
 //      dihapus dari halaman Impor Data — keduanya sudah otomatis
 //      diturunkan dari impor Buku Besar. Jenis impor yang tersisa:
 //      Arus Kas & Buku Besar).
-const CACHE_NAME = 'integrida-cache-v10';
+// v11: index.html diperbarui — impor Buku Besar kini juga menurunkan
+//      Laporan Arus Kas Metode Langsung secara otomatis dari transaksi
+//      akun Kas & Setara Kas (dikelompokkan ke Aktivitas Operasi/
+//      Investasi/Pendanaan berdasarkan kata kunci pada Keterangan),
+//      ditampilkan di Pratinjau Impor & Detail Perusahaan.
+const CACHE_NAME = 'integrida-cache-v11';
 const APP_SHELL = [
   './',
   './index.html',
