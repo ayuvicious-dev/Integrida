@@ -1208,19 +1208,13 @@ function parseAccountingReportSheet(sheet, statementKey) {
 // SENDIRI (bukan lagi digabung satu file banyak sheet) — jadi Anda bisa
 // mengimpor Neraca hari ini, lalu Laba Rugi menyusul di lain waktu, untuk
 // periode yang sama. Data akan digabung (merge) di dokumen periode yang sama.
+// Registri jenis data yang bisa diimpor. Neraca & Laba Rugi TIDAK lagi
+// diimpor terpisah di sini — keduanya diturunkan otomatis dari impor
+// Buku Besar (lihat deriveStatementsFromLedgerAccounts), supaya tidak
+// ada dua sumber data yang bisa saling tidak sinkron untuk periode yang
+// sama. Yang tersisa sebagai jenis impor mandiri hanya Arus Kas (belum
+// bisa diturunkan dari Buku Besar) dan Buku Besar itu sendiri.
 const IMPORT_TYPES = {
-  neraca: {
-    label: 'Neraca',
-    badge: 'teal',
-    statementKey: 'neraca',
-    mode: 'accountingReport'
-  },
-  labaRugi: {
-    label: 'Laba Rugi',
-    badge: 'gold',
-    statementKey: 'labaRugi',
-    mode: 'accountingReport'
-  },
   arusKas: {
     label: 'Arus Kas',
     badge: 'blue',
@@ -1426,7 +1420,7 @@ const state = {
   unsubCompanies: null,   // listener realtime daftar perusahaan (aktif sepanjang sesi)
   unsubData: null,        // listener realtime data view yang sedang aktif (dashboard/compare/ratios)
   importCompanyId: null,
-  importType: 'neraca',   // jenis data yang sedang dipilih di halaman Impor Data
+  importType: 'bukuBesar', // jenis data yang sedang dipilih di halaman Impor Data
   companyDetailId: null,      // perusahaan yang sedang dilihat rinciannya
   companyDetailPeriodId: null // periode (statementId) yang sedang dipilih di halaman rincian
 };
@@ -2813,12 +2807,67 @@ function humanizeKey(key) {
   return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1);
 }
 
+// Label khusus untuk baris Neraca hasil turunan/tambahan (bukan field
+// mentah hasil impor) — dipakai untuk menimpa label bawaan dari
+// humanizeKey() supaya istilahnya sesuai maksud aslinya.
+const NERACA_LABELS = {
+  pendapatanPeriodeIni: 'Pendapatan Periode Ini (Laba Rugi Tahun Berjalan)',
+  pendapatanSampaiTahunLalu: 'Pendapatan s.d. Tahun Lalu (Laba Ditahan)',
+  totalEkuitasTermasukLaba: 'Total Ekuitas (Termasuk Laba/Rugi)'
+};
+
+/**
+ * Menghitung akumulasi Laba/Rugi untuk melengkapi bagian Ekuitas pada
+ * Neraca. Total Ekuitas yang diimpor pengguna (dari Excel maupun Buku
+ * Besar) umumnya hanya berisi modal/setoran pemilik dan BELUM
+ * memasukkan laba/rugi tahun berjalan maupun laba ditahan dari
+ * tahun-tahun sebelumnya — akibatnya Total Aset sering tidak sama
+ * dengan Total Kewajiban + Total Ekuitas. Dua komponen berikut
+ * dihitung dari akumulasi Laba Bersih (labaRugi.labaBersih) seluruh
+ * periode milik perusahaan yang sama untuk menutup selisih tersebut:
+ *  - periodeIni: akumulasi Laba Bersih seluruh periode pada TAHUN YANG
+ *    SAMA dengan periode terpilih, dari awal tahun sampai periode
+ *    terpilih (laba/rugi tahun berjalan, year-to-date).
+ *  - sampaiTahunLalu: akumulasi Laba Bersih seluruh periode pada
+ *    tahun-tahun SEBELUM tahun periode terpilih (laba ditahan sejak
+ *    awal berdiri s.d. akhir tahun lalu).
+ * Diasumsikan tiap periode yang diimpor mewakili aktivitas periode itu
+ * sendiri (bukan angka kumulatif year-to-date), sesuai cara Laba Bersih
+ * diturunkan dari mutasi akun Buku Besar (lihat deriveStatementsFromLedgerAccounts).
+ */
+function computeRetainedEarnings(statements, selected) {
+  const list = Array.isArray(statements) ? statements : [];
+  const periodeIni = list
+    .filter(s => s.year === selected.year && s.periodIndex <= selected.periodIndex)
+    .reduce((sum, s) => sum + ((s.labaRugi && s.labaRugi.labaBersih) || 0), 0);
+  const sampaiTahunLalu = list
+    .filter(s => s.year < selected.year)
+    .reduce((sum, s) => sum + ((s.labaRugi && s.labaRugi.labaBersih) || 0), 0);
+  return { periodeIni, sampaiTahunLalu };
+}
+
+// Melengkapi objek Neraca dengan baris Pendapatan Periode Ini, Pendapatan
+// s.d. Tahun Lalu, dan Total Ekuitas (Termasuk Laba/Rugi) — hanya dihitung
+// di sisi tampilan (tidak mengubah data tersimpan) supaya Total Aset bisa
+// dicocokkan dengan Total Kewajiban + Total Ekuitas.
+function withRetainedEarnings(neraca, statements, selected) {
+  if (!neraca || !('totalEkuitas' in neraca)) return neraca;
+  const { periodeIni, sampaiTahunLalu } = computeRetainedEarnings(statements, selected);
+  return {
+    ...neraca,
+    pendapatanPeriodeIni: periodeIni,
+    pendapatanSampaiTahunLalu: sampaiTahunLalu,
+    totalEkuitasTermasukLaba: (neraca.totalEkuitas || 0) + periodeIni + sampaiTahunLalu
+  };
+}
+
 function neracaGroupedTable(neraca) {
   if (!neraca || Object.keys(neraca).length === 0) return `<div style="color:var(--slate-light);font-size:13px;padding:6px 2px;">Belum ada data.</div>`;
-  const row = (key) => key in neraca ? `<tr><td>${humanizeKey(key)}</td><td class="num">${formatIDR(neraca[key])}</td></tr>` : '';
-  const rowBold = (key) => key in neraca ? `<tr style="font-weight:600;"><td>${humanizeKey(key)}</td><td class="num">${formatIDR(neraca[key])}</td></tr>` : '';
-  const rowHighlight = (key) => key in neraca ? `<tr style="font-weight:700;background:var(--teal-light);"><td>${humanizeKey(key)}</td><td class="num">${formatIDR(neraca[key])}</td></tr>` : '';
-  const groupRow = (label) => `<tr><td colspan="2" style="font-weight:600;color:var(--slate);padding-top:10px;">${label}</td></tr>`;
+  const label = (key) => NERACA_LABELS[key] || humanizeKey(key);
+  const row = (key) => key in neraca ? `<tr><td>${label(key)}</td><td class="num">${formatIDR(neraca[key])}</td></tr>` : '';
+  const rowBold = (key) => key in neraca ? `<tr style="font-weight:600;"><td>${label(key)}</td><td class="num">${formatIDR(neraca[key])}</td></tr>` : '';
+  const rowHighlight = (key) => key in neraca ? `<tr style="font-weight:700;background:var(--teal-light);"><td>${label(key)}</td><td class="num">${formatIDR(neraca[key])}</td></tr>` : '';
+  const groupRow = (text) => `<tr><td colspan="2" style="font-weight:600;color:var(--slate);padding-top:10px;">${text}</td></tr>`;
   return `<table><tbody>
     ${groupRow('Aset Lancar')}
     ${row('kasSetaraKas')}${row('persediaan')}${rowBold('totalAsetLancar')}
@@ -2828,14 +2877,41 @@ function neracaGroupedTable(neraca) {
     ${groupRow('Liabilitas')}
     ${row('totalKewajibanLancar')}${row('totalKewajibanJangkaPanjang')}${rowBold('totalKewajiban')}
     ${groupRow('Ekuitas')}
-    ${rowBold('totalEkuitas')}
-  </tbody></table>`;
+    ${rowBold('totalEkuitas')}${row('pendapatanPeriodeIni')}${row('pendapatanSampaiTahunLalu')}${rowHighlight('totalEkuitasTermasukLaba')}
+  </tbody></table>${neracaBalanceSummary(neraca)}`;
 }
 
-function keyValueTable(obj) {
-  const entries = Object.entries(obj || {}).filter(([, v]) => v !== undefined && v !== null);
+// Ringkasan Total Aktiva (= Total Aset) vs Total Pasiva (= Total Kewajiban
+// + Total Ekuitas, memakai totalEkuitasTermasukLaba bila tersedia supaya
+// ikut memperhitungkan Pendapatan Periode Ini & Pendapatan s.d. Tahun
+// Lalu) — dipakai untuk langsung memperlihatkan apakah Neraca balance
+// atau tidak, tanpa pengguna perlu menjumlahkan manual.
+function neracaBalanceSummary(neraca) {
+  if (!neraca || !('totalAset' in neraca)) return '';
+  const totalAktiva = neraca.totalAset || 0;
+  const totalEkuitasForBalance = 'totalEkuitasTermasukLaba' in neraca ? neraca.totalEkuitasTermasukLaba : (neraca.totalEkuitas || 0);
+  const totalPasiva = (neraca.totalKewajiban || 0) + totalEkuitasForBalance;
+  const selisih = totalAktiva - totalPasiva;
+  const balanced = Math.round(Math.abs(selisih)) < 1;
+  return `
+    <div style="margin-top:14px;padding:10px 12px;border-radius:8px;background:${balanced ? 'var(--teal-light)' : '#FDECEC'};border:1px solid ${balanced ? 'var(--teal)' : '#D9534F'};">
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;">
+        <span>Total Aktiva</span><span class="num" style="font-family:var(--font-mono);">${formatIDR(totalAktiva)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;">
+        <span>Total Pasiva</span><span class="num" style="font-family:var(--font-mono);">${formatIDR(totalPasiva)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;padding-top:6px;margin-top:6px;border-top:1px dashed ${balanced ? 'var(--teal)' : '#D9534F'};color:${balanced ? 'var(--teal)' : '#D9534F'};">
+        <span>${balanced ? '✓ Balance' : '✗ Belum Balance'}</span>
+        ${balanced ? '' : `<span class="num" style="font-family:var(--font-mono);">Selisih ${formatIDR(selisih)}</span>`}
+      </div>
+    </div>`;
+}
+
+function keyValueTable(obj, order, labels) {
+  const entries = sortEntriesByOrder(Object.entries(obj || {}).filter(([, v]) => v !== undefined && v !== null), order);
   if (entries.length === 0) return `<div style="color:var(--slate-light);font-size:13px;padding:6px 2px;">Belum ada data.</div>`;
-  return `<table><tbody>${entries.map(([k, v]) => `<tr><td>${humanizeKey(k)}</td><td class="num">${formatIDR(v)}</td></tr>`).join('')}</tbody></table>`;
+  return `<table><tbody>${entries.map(([k, v]) => `<tr><td>${(labels && labels[k]) || humanizeKey(k)}</td><td class="num">${formatIDR(v)}</td></tr>`).join('')}</tbody></table>`;
 }
 
 // Baris satu akun di dalam kelompok klasifikasi Buku Besar — kode akun
@@ -2891,7 +2967,10 @@ function ledgerTable(accounts) {
 // dijumlah langsung dari akun).
 const NERACA_FORMULAS = {
   totalAset: (n) => `Total Aset Lancar (${formatIDR(n.totalAsetLancar)}) + Total Aset Tidak Lancar (${formatIDR(n.totalAsetTidakLancar)})`,
-  totalKewajiban: (n) => `Total Kewajiban Lancar (${formatIDR(n.totalKewajibanLancar)}) + Total Kewajiban Jangka Panjang (${formatIDR(n.totalKewajibanJangkaPanjang)})`
+  totalKewajiban: (n) => `Total Kewajiban Lancar (${formatIDR(n.totalKewajibanLancar)}) + Total Kewajiban Jangka Panjang (${formatIDR(n.totalKewajibanJangkaPanjang)})`,
+  pendapatanPeriodeIni: () => `Akumulasi Laba Bersih seluruh periode pada tahun yang sama, dari awal tahun sampai periode ini (laba/rugi tahun berjalan).`,
+  pendapatanSampaiTahunLalu: () => `Akumulasi Laba Bersih seluruh periode pada tahun-tahun sebelum tahun periode ini, sejak awal berdiri (laba ditahan s.d. akhir tahun lalu).`,
+  totalEkuitasTermasukLaba: (n) => `Total Ekuitas (${formatIDR(n.totalEkuitas)}) + Pendapatan Periode Ini (${formatIDR(n.pendapatanPeriodeIni)}) + Pendapatan s.d. Tahun Lalu (${formatIDR(n.pendapatanSampaiTahunLalu)})`
 };
 const LABA_RUGI_FORMULAS = {
   labaKotor: (l) => `Pendapatan (${formatIDR(l.pendapatan)}) − HPP (${formatIDR(l.hpp)})`,
@@ -2988,9 +3067,34 @@ function derivedFieldRow(key, value, contributions, formulaFn, formulaData, labe
 // Beban Operasional/Pendapatan Lainnya/Beban Lainnya/Beban Pajak).
 const LABA_RUGI_LABELS = { pajakPenghasilan: 'Beban Pajak' };
 
-function derivedSectionDetails(obj, contributions, formulas, labels, highlightKeys) {
+// Urutan baku baris Laba Rugi (Pendapatan → HPP → Laba Kotor → Beban
+// Operasional → Laba Operasional → Pendapatan Lainnya → Beban Lainnya →
+// Beban Pajak → Laba Bersih). Dipakai supaya susunan di layar Detail
+// Perusahaan SELALU sama dengan susunan di Pratinjau Impor — sebelumnya
+// keduanya memakai Object.entries() apa adanya, dan urutan objek yang
+// tersimpan/diambil dari Firestore bisa berbeda dari urutan objek yang
+// baru saja diturunkan dari Buku Besar saat pratinjau.
+const LABA_RUGI_ORDER = [
+  'pendapatan', 'hpp', 'labaKotor',
+  'bebanOperasional', 'labaOperasional',
+  'pendapatanLainnya', 'bebanLainnya', 'pajakPenghasilan',
+  'labaBersih'
+];
+
+// Mengurutkan entries [key, value] sesuai `order`; field yang tidak ada
+// di dalam `order` tetap disertakan, ditaruh di akhir dengan urutan asli.
+function sortEntriesByOrder(entries, order) {
+  if (!order) return entries;
+  const rank = (k) => { const i = order.indexOf(k); return i === -1 ? order.length : i; };
+  return entries
+    .map((entry, idx) => ({ entry, idx }))
+    .sort((a, b) => (rank(a.entry[0]) - rank(b.entry[0])) || (a.idx - b.idx))
+    .map(({ entry }) => entry);
+}
+
+function derivedSectionDetails(obj, contributions, formulas, labels, highlightKeys, order) {
   activeContributions = contributions;
-  const entries = Object.entries(obj || {});
+  const entries = sortEntriesByOrder(Object.entries(obj || {}), order);
   if (entries.length === 0) return `<div style="color:var(--slate-light);font-size:13px;">Tidak ada data.</div>`;
   return entries.map(([k, v]) => {
     const rowHtml = derivedFieldRow(k, v, contributions, formulas[k], obj, labels && labels[k]);
@@ -3016,9 +3120,9 @@ function neracaGroupHeader(label) {
 function derivedNeracaGrouped(neraca, contributions) {
   activeContributions = contributions;
   if (!neraca || Object.keys(neraca).length === 0) return `<div style="color:var(--slate-light);font-size:13px;">Tidak ada data.</div>`;
-  const row = (key) => key in neraca ? derivedFieldRow(key, neraca[key], contributions, NERACA_FORMULAS[key], neraca) : '';
+  const row = (key) => key in neraca ? derivedFieldRow(key, neraca[key], contributions, NERACA_FORMULAS[key], neraca, NERACA_LABELS[key]) : '';
   const highlight = (key) => key in neraca
-    ? `<div style="background:var(--teal-light);border-radius:6px;">${derivedFieldRow(key, neraca[key], contributions, NERACA_FORMULAS[key], neraca)}</div>`
+    ? `<div style="background:var(--teal-light);border-radius:6px;">${derivedFieldRow(key, neraca[key], contributions, NERACA_FORMULAS[key], neraca, NERACA_LABELS[key])}</div>`
     : '';
   return `
     ${neracaGroupHeader('Aset Lancar')}
@@ -3029,7 +3133,7 @@ function derivedNeracaGrouped(neraca, contributions) {
     ${neracaGroupHeader('Liabilitas')}
     ${row('totalKewajibanLancar')}${row('totalKewajibanJangkaPanjang')}${highlight('totalKewajiban')}
     ${neracaGroupHeader('Ekuitas')}
-    ${highlight('totalEkuitas')}
+    ${row('totalEkuitas')}${row('pendapatanPeriodeIni')}${row('pendapatanSampaiTahunLalu')}${highlight('totalEkuitasTermasukLaba')}
   `;
 }
 
@@ -3136,6 +3240,11 @@ function paintCompanyDetail(statements) {
   // impor, bukan cuma tabel angka datar.
   const bbContribs = contributionsFromLedger(selected.bukuBesar);
 
+  // Neraca yang ditampilkan dilengkapi baris Pendapatan Periode Ini &
+  // Pendapatan s.d. Tahun Lalu (lihat withRetainedEarnings) supaya Total
+  // Aset bisa dicocokkan dengan Total Kewajiban + Total Ekuitas.
+  const neracaDisplay = withRetainedEarnings(selected.neraca, statements, selected);
+
   content.innerHTML = `
     ${company ? businessInfoHTML(company) : ''}
     <div class="section-block">
@@ -3151,14 +3260,14 @@ function paintCompanyDetail(statements) {
           <span class="badge teal">Neraca</span>
           ${bbContribs ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik baris untuk rincian akun</span>' : ''}
         </div>
-        ${bbContribs ? derivedNeracaGrouped(selected.neraca, bbContribs) : neracaGroupedTable(selected.neraca)}
+        ${bbContribs ? derivedNeracaGrouped(neracaDisplay, bbContribs) + neracaBalanceSummary(neracaDisplay) : neracaGroupedTable(neracaDisplay)}
       </div>
       <div class="card">
         <div class="section-title">
           <span class="badge gold">Laba Rugi</span>
           ${bbContribs ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik baris untuk rincian akun</span>' : ''}
         </div>
-        ${bbContribs ? derivedSectionDetails(selected.labaRugi, bbContribs, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS) : keyValueTable(selected.labaRugi)}
+        ${bbContribs ? derivedSectionDetails(selected.labaRugi, bbContribs, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS, LABA_RUGI_ORDER) : keyValueTable(selected.labaRugi, LABA_RUGI_ORDER, LABA_RUGI_LABELS)}
       </div>
       <div class="card">
         <div class="section-title"><span class="badge blue">Arus Kas</span></div>
@@ -3449,7 +3558,7 @@ async function handleImportFile(file) {
         <div class="card" style="padding:2px 12px;">${derivedNeracaGrouped(result.data.neraca, result.data.contributions)}</div>
         <div class="section-title" style="margin-top:16px;font-size:14px;">Laba Rugi (diturunkan otomatis — mutasi periode)</div>
         <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu baris untuk melihat akun buku besar yang menyusun angka tersebut.</div>
-        <div class="card" style="padding:2px 12px;">${derivedSectionDetails(result.data.labaRugi, result.data.contributions, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS)}</div>
+        <div class="card" style="padding:2px 12px;">${derivedSectionDetails(result.data.labaRugi, result.data.contributions, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS, LABA_RUGI_ORDER)}</div>
       ` : `
         <table style="margin-top:10px;">
           <tbody>${Object.entries(result.data).map(([k, v]) => `<tr><td>${k}</td><td class="num">${formatIDR(v)}</td></tr>`).join('') || '<tr><td colspan="2">Tidak ada data terbaca</td></tr>'}</tbody>

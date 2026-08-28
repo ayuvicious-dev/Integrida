@@ -12,7 +12,25 @@
 // v5: index.html diperbarui (fitur logo perusahaan) — cache lama tetap
 //     tergantikan otomatis lewat strategi network-first di atas, tapi
 //     versi dinaikkan sebagai penanda revisi.
-const CACHE_NAME = 'integrida-cache-v5';
+// v6: index.html diperbarui (baris Ekuitas "Pendapatan Periode Ini" &
+//     "Pendapatan s.d. Tahun Lalu" pada Neraca, supaya Total Aset
+//     balance dengan Total Kewajiban + Total Ekuitas).
+// v7: index.html diperbarui (ringkasan Total Aktiva vs Total Pasiva +
+//     indikator Balance/Belum Balance pada tampilan Neraca).
+// v8: index.html diperbarui (susunan baris Laba Rugi di Detail
+//     Perusahaan disamakan urutannya dengan Pratinjau Impor: Pendapatan
+//     → HPP → Laba Kotor → Beban Operasional → Laba Operasional →
+//     Pendapatan Lainnya → Beban Lainnya → Beban Pajak → Laba Bersih).
+// v9: index.html diperbarui (ringkasan Total Aktiva/Pasiva & indikator
+//     Balance dihapus dari Pratinjau Impor Buku Besar — pratinjau belum
+//     memasukkan Pendapatan Periode Ini/s.d. Tahun Lalu sehingga selalu
+//     tampak "Belum Balance"; indikator tetap ada di Neraca pada fitur
+//     Detail Perusahaan yang sudah memasukkan kedua komponen tersebut).
+// v10: index.html diperbarui (jenis impor "Neraca" & "Laba Rugi"
+//      dihapus dari halaman Impor Data — keduanya sudah otomatis
+//      diturunkan dari impor Buku Besar. Jenis impor yang tersisa:
+//      Arus Kas & Buku Besar).
+const CACHE_NAME = 'integrida-cache-v10';
 const APP_SHELL = [
   './',
   './index.html',

@@ -21,8 +21,7 @@ integrida/
 ├── index.html                  # Halaman utama + seluruh CSS/JS aplikasi
 ├── manifest.json                # Konfigurasi PWA
 ├── service-worker.js            # Caching offline dasar (wajib file terpisah)
-├── icons/icon-192.png, icon-512.png
-└── template/Template_Import_Neraca_LabaRugi.xlsx   # Template impor untuk pengguna
+└── icons/icon-192.png, icon-512.png
 ```
 
 `manifest.json`, `service-worker.js`, dan file ikon **tidak bisa** ikut
@@ -108,9 +107,15 @@ firebase deploy
 
 1. **Daftar/Masuk** menggunakan email & kata sandi.
 2. Buka menu **Perusahaan** → tambahkan perusahaan yang akan dikonsolidasikan.
-3. Buka menu **Impor Data** → unduh **Template Excel** yang tersedia, isi
-   sesuai data neraca & laba rugi perusahaan pada periode tertentu, lalu
-   unggah kembali filenya. Setiap file mewakili **satu perusahaan pada satu
+3. Buka menu **Impor Data** → unggah file Excel **Buku Besar** (hasil
+   export apa adanya dari software akuntansi: per akun ada Saldo Awal,
+   daftar transaksi, dan Saldo Akhir). **Neraca** & **Laba Rugi** untuk
+   periode tersebut akan **otomatis diturunkan** dari Buku Besar ini
+   berdasarkan kode akun (1=Aset, 2=Kewajiban, 3=Ekuitas, 4=Pendapatan,
+   5=HPP, 6=Beban Operasional, 7=Pendapatan Lainnya, 8=Beban Lainnya,
+   9=Beban Pajak) — tidak perlu diimpor terpisah. Jenis **Arus Kas**
+   masih diimpor terpisah dengan cara yang sama (unggah laporan Arus
+   Kas apa adanya). Setiap file mewakili **satu perusahaan pada satu
    periode** (bulanan/triwulan/semester/tahunan).
 4. Buka menu **Perbandingan** untuk membandingkan beberapa perusahaan pada
    jenis periode yang sama (grafik + tabel).
@@ -119,20 +124,25 @@ firebase deploy
    Equity, Equity Multiplier), dan profitabilitas (Gross/Operating/Net
    Profit Margin, ROA, ROE) beserta tren antar periode.
 
-## 5. Format Template Excel
+Mengunggah ulang Buku Besar/Arus Kas dengan Perusahaan, Tahun, Jenis
+Periode, dan Label Periode yang sama akan **menimpa** data periode
+tersebut (bukan membuat duplikat).
 
-File template memiliki 3 sheet:
+## 5. Neraca Balance (Ekuitas Termasuk Laba/Rugi)
 
-- **Info** — Nama Perusahaan, Tahun, Jenis Periode, Label Periode.
-- **Neraca** — daftar akun neraca standar (jangan ubah nama akun di kolom
-  A; isi hanya kolom B). Baris **Total** sudah berisi formula otomatis.
-- **Laba Rugi** — daftar akun laba rugi standar dengan formula otomatis
-  pada baris Laba Kotor, Laba Operasional, Laba Sebelum Pajak, dan Laba
-  Bersih.
+Total Ekuitas yang diturunkan dari Buku Besar biasanya hanya berisi
+modal/setoran pemilik. Di layar **Perusahaan → Neraca**, aplikasi
+menambahkan otomatis dua baris ke bagian Ekuitas supaya Total Aset
+balance dengan Total Kewajiban + Total Ekuitas:
 
-Mengunggah ulang file dengan Perusahaan, Tahun, Jenis Periode, dan Label
-Periode yang sama akan **menimpa** data periode tersebut (bukan membuat
-duplikat).
+- **Pendapatan Periode Ini** — akumulasi Laba Bersih seluruh periode
+  pada tahun yang sama, dari awal tahun sampai periode yang dilihat.
+- **Pendapatan s.d. Tahun Lalu** — akumulasi Laba Bersih seluruh
+  periode pada tahun-tahun sebelumnya (laba ditahan sejak awal
+  berdiri).
+
+Kotak ringkasan **Total Aktiva vs Total Pasiva** di bawah tabel Neraca
+langsung menunjukkan status Balance/Belum Balance.
 
 ## 6. Status Sinkronisasi
 
