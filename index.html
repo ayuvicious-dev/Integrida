@@ -209,14 +209,17 @@ tbody tr:hover{background:#fafcfb;}
 .org-node{
   border:1.5px solid var(--border);border-radius:8px;padding:10px 16px;
   display:inline-block;background:#fff;font-size:13px;line-height:1.4;
-  box-shadow:0 1px 3px rgba(20,30,50,.06);white-space:nowrap;cursor:pointer;
-  transition:box-shadow .15s,transform .15s;
+  box-shadow:0 1px 3px rgba(20,30,50,.06);white-space:normal;cursor:pointer;
+  transition:box-shadow .15s,transform .15s;width:200px;text-align:left;
 }
 .org-node:hover{box-shadow:0 4px 10px rgba(20,30,50,.12);transform:translateY(-1px);}
 .org-node .org-code{display:block;font-family:var(--font-mono);font-size:10.5px;opacity:.75;margin-bottom:2px;}
 .org-node.level-0{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:600;}
 .org-node.level-1{background:var(--teal-light);border-color:var(--teal);font-weight:600;color:var(--teal);}
 .org-node.level-2{background:#fff;color:var(--ink);}
+.org-node-name{white-space:normal;}
+.org-node-sub{margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:5px;}
+.org-node-founded{font-size:10.5px;opacity:.75;font-weight:400;white-space:normal;}
 
 .badge{display:inline-block;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:600;}
 .badge.teal{background:var(--teal-light);color:var(--teal);}
@@ -416,10 +419,12 @@ const DB = {
   // ownership: array of { type: 'company'|'external', companyId (utk 'company'),
   // name (utk 'external'), percentage (number) } — kepemilikan saham perusahaan
   // ini oleh pihak lain (bisa perusahaan lain yang terdaftar, bisa pihak luar).
-  async updateCompanyBusinessInfo(companyId, { address, ownership }) {
+  // foundedDate: string tanggal berdiri perusahaan format 'YYYY-MM-DD' (opsional).
+  async updateCompanyBusinessInfo(companyId, { address, ownership, foundedDate }) {
     await db.collection('companies').doc(companyId).update({
       address: address || '',
-      ownership: Array.isArray(ownership) ? ownership : []
+      ownership: Array.isArray(ownership) ? ownership : [],
+      foundedDate: foundedDate || ''
     });
   },
 
@@ -2080,13 +2085,36 @@ function buildCompanyTree() {
   return roots;
 }
 
+// Ringkasan pemegang saham suatu perusahaan untuk ditampilkan di kartu bagan,
+// diambil langsung dari data Kepemilikan Saham (Informasi Bisnis) perusahaan
+// itu sendiri — jadi selalu sinkron & tidak peduli apakah pihaknya perusahaan
+// terdaftar atau perorangan/pihak eksternal.
+function ownershipSummaryLabel(node) {
+  const ownership = Array.isArray(node.ownership) ? node.ownership : [];
+  const withPct = ownership.filter(o => o.percentage != null && o.percentage !== '');
+  if (withPct.length === 0) return '';
+  const parts = withPct.map(o => `${ownershipRowLabel(o)} ${Number(o.percentage).toLocaleString('id-ID')}%`);
+  const MAX_SHOWN = 2;
+  if (parts.length > MAX_SHOWN) {
+    return `${parts.slice(0, MAX_SHOWN).join(' · ')} · +${parts.length - MAX_SHOWN} lainnya`;
+  }
+  return parts.join(' · ');
+}
+
 function orgNodeHTML(node, depth) {
   const levelClass = depth === 0 ? 'level-0' : depth === 1 ? 'level-1' : 'level-2';
+  const catMeta = categoryMeta(node.category);
+  const ownershipLine = ownershipSummaryLabel(node);
+  const foundedLine = node.foundedDate ? `${formatDateID(node.foundedDate)} · ${companyAgeLabel(node.foundedDate)}` : '';
+
   return `
     <li>
       <div class="org-node ${levelClass}" data-open="${node.id}" title="Klik untuk membuka detail perusahaan">
         ${node.code ? `<span class="org-code">${node.code}</span>` : ''}
-        ${node.name}
+        <div class="org-node-name">${node.name}</div>
+        ${catMeta ? `<div class="org-node-sub"><span class="badge ${catMeta.badge}" style="padding:2px 7px;font-size:10px;">${catMeta.label}</span></div>` : ''}
+        ${ownershipLine ? `<div class="org-node-founded">Pemegang Saham: ${ownershipLine}</div>` : ''}
+        ${foundedLine ? `<div class="org-node-founded">${foundedLine}</div>` : ''}
       </div>
       ${node.children.length ? `<ul>${node.children.map(c => orgNodeHTML(c, depth + 1)).join('')}</ul>` : ''}
     </li>`;
@@ -2105,6 +2133,7 @@ function renderCompaniesChartView() {
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
         <div class="org-chart-toolbar-hint">
           Tarik (geser) bagan untuk menggeser, gunakan tombol zoom atau scroll mouse untuk memperbesar/memperkecil.
+          Setiap kartu menampilkan klasifikasi, persentase kepemilikan saham oleh induk, serta tanggal berdiri &amp; masa existing (jika sudah diisi pada Info Bisnis).
           <span class="org-chart-legend-dot" style="background:var(--ink);"></span>Induk
           <span class="org-chart-legend-dot" style="background:var(--teal-light);border:1px solid var(--teal);"></span>Anak
           <span class="org-chart-legend-dot" style="background:#fff;border:1.5px solid var(--border);"></span>Cucu
@@ -2282,6 +2311,29 @@ function ownershipRowLabel(entry) {
   return entry && entry.name ? escapeHTML(entry.name) : '—';
 }
 
+// Format tanggal 'YYYY-MM-DD' menjadi format Indonesia, mis. "17 Agustus 1998".
+function formatDateID(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+// Hitung masa existing perusahaan (tanggal hari ini dikurangi tanggal berdiri)
+// dan mengembalikan label seperti "26 tahun 3 bulan" atau "8 bulan".
+function companyAgeLabel(dateStr) {
+  if (!dateStr) return '';
+  const founded = new Date(dateStr + 'T00:00:00');
+  if (isNaN(founded.getTime())) return '';
+  const today = new Date();
+  if (founded > today) return 'tanggal berdiri di masa depan';
+
+  const diffMs = today.getTime() - founded.getTime();
+  const years = diffMs / (365.25 * 24 * 60 * 60 * 1000);
+  const yearsLabel = years.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `usia ${yearsLabel} tahun`;
+}
+
 function businessInfoHTML(company) {
   const ownership = Array.isArray(company.ownership) ? company.ownership : [];
   const total = ownership.reduce((sum, o) => sum + (Number(o.percentage) || 0), 0);
@@ -2295,6 +2347,14 @@ function businessInfoHTML(company) {
         <div style="margin-bottom:16px;">
           <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px;">Alamat</div>
           <div style="font-size:13.5px;${company.address ? '' : 'color:var(--slate-light);font-style:italic;'}">${company.address ? escapeHTML(company.address).replace(/\n/g, '<br>') : '+ tambahkan alamat'}</div>
+        </div>
+        <div style="margin-bottom:16px;">
+          <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px;">Tanggal Berdiri</div>
+          <div style="font-size:13.5px;${company.foundedDate ? '' : 'color:var(--slate-light);font-style:italic;'}">
+            ${company.foundedDate
+              ? `${formatDateID(company.foundedDate)} <span style="color:var(--slate);">(${companyAgeLabel(company.foundedDate)})</span>`
+              : '+ tambahkan tanggal berdiri'}
+          </div>
         </div>
         <div>
           <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:6px;">Kepemilikan Saham</div>
@@ -2346,6 +2406,10 @@ function openEditBusinessInfoModal(companyId) {
     <div class="field">
       <label>Alamat</label>
       <textarea id="edit-business-address" placeholder="Alamat kantor / operasional perusahaan">${escapeHTML(company.address || '')}</textarea>
+    </div>
+    <div class="field">
+      <label>Tanggal Berdiri</label>
+      <input type="date" id="edit-business-founded" value="${escapeHTML(company.foundedDate || '')}">
     </div>
     <div class="field">
       <label>Kepemilikan Saham (pihak &amp; persentase kepemilikan atas perusahaan ini)</label>
@@ -2411,15 +2475,17 @@ function openEditBusinessInfoModal(companyId) {
 
   backdrop.querySelector('#save-business-info').addEventListener('click', async () => {
     const address = backdrop.querySelector('#edit-business-address').value.trim();
+    const foundedDate = backdrop.querySelector('#edit-business-founded').value || '';
     const cleaned = rows
       .filter(r => (r.type === 'company' && r.companyId) || (r.type === 'external' && r.name && r.name.trim()))
       .map(r => r.type === 'company'
         ? { type: 'company', companyId: r.companyId, percentage: Number(r.percentage) || 0 }
         : { type: 'external', name: r.name.trim(), percentage: Number(r.percentage) || 0 });
     try {
-      await DB.updateCompanyBusinessInfo(companyId, { address, ownership: cleaned });
+      await DB.updateCompanyBusinessInfo(companyId, { address, ownership: cleaned, foundedDate });
       company.address = address;
       company.ownership = cleaned;
+      company.foundedDate = foundedDate;
       backdrop.remove();
       toast('Info bisnis perusahaan diperbarui', 'success');
       if (state.view === 'company-detail' && state.companyDetailId === companyId) renderCompanyDetail();
