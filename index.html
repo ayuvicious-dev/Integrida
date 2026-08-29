@@ -119,8 +119,12 @@ input,select{font-family:inherit;}
 .company-card{
   display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;
   padding:26px 16px 20px;border:1px solid var(--border);border-radius:16px;background:var(--card);
-  cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease;
+  cursor:grab;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease,opacity .15s ease;
+  position:relative;
 }
+.company-card:active{cursor:grabbing;}
+.company-card.dragging{opacity:.35;}
+.company-card.drag-hover{border-color:var(--teal);box-shadow:0 0 0 2px var(--teal-light) inset;}
 .company-card:hover{border-color:var(--teal);box-shadow:0 6px 18px rgba(22,33,58,0.08);transform:translateY(-2px);}
 .company-card-name{font-weight:600;font-size:14px;color:var(--ink);line-height:1.35;word-break:break-word;}
 .company-card-code{font-size:12px;color:var(--slate);font-family:var(--font-mono);}
@@ -242,7 +246,8 @@ tbody tr:hover{background:#fafcfb;}
 .org-node-name{font-weight:700;font-size:14px;white-space:normal;text-align:center;width:100%;}
 .org-node-header{display:flex;flex-direction:column;gap:6px;}
 .org-node-logo-wrap{display:flex;justify-content:center;width:100%;}
-.org-node-sub{display:flex;align-items:center;flex-wrap:wrap;gap:5px;}
+.org-node-sub{display:flex;align-items:center;flex-wrap:wrap;gap:5px;justify-content:center;}
+.org-node-sub .org-code{font-size:11px;color:var(--slate);font-family:var(--font-mono);}
 .org-node-divider{border-top:1px solid currentColor;opacity:.14;margin:1px 0;}
 .org-node-label{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;opacity:.6;font-weight:700;margin-bottom:3px;}
 .org-node-ownership{display:flex;flex-direction:column;gap:2px;}
@@ -427,6 +432,7 @@ const DB = {
       parentId: parentId || null,
       category: category || '',
       ownerUid: uid,
+      sortOrder: Date.now(),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     return ref.id;
@@ -442,6 +448,17 @@ const DB = {
 
   async updateCompanyParent(companyId, parentId) {
     await db.collection('companies').doc(companyId).update({ parentId: parentId || null });
+  },
+
+  // Menyimpan urutan tampilan kartu perusahaan di menu Perusahaan (drag &
+  // drop) — orderedIds adalah seluruh id perusahaan sesuai urutan barunya,
+  // disimpan sebagai indeks 0..n-1 per dokumen lewat satu batch write.
+  async reorderCompanies(orderedIds) {
+    const batch = db.batch();
+    orderedIds.forEach((id, idx) => {
+      batch.update(db.collection('companies').doc(id), { sortOrder: idx });
+    });
+    await batch.commit();
   },
 
   // ownership: array of { type: 'company'|'external', companyId (utk 'company'),
@@ -1079,7 +1096,7 @@ function mergeLedgerPieces(pieces) {
 
 function deriveStatementsFromLedgerAccounts(accounts) {
   const neraca = {
-    kasSetaraKas: 0, persediaan: 0,
+    kasSetaraKas: 0, persediaan: 0, asetLancarLainnya: 0,
     totalAsetLancar: 0, totalAsetTidakLancar: 0, totalAset: 0,
     totalKewajibanLancar: 0, totalKewajibanJangkaPanjang: 0, totalKewajiban: 0,
     totalEkuitas: 0
@@ -1120,8 +1137,9 @@ function deriveStatementsFromLedgerAccounts(accounts) {
 
     if (c.group === 'aset') {
       if (c.field === 'kasSetaraKas') { neraca.kasSetaraKas += akhir; addContribution('kasSetaraKas', a, akhir); }
-      if (c.field === 'persediaan') { neraca.persediaan += akhir; addContribution('persediaan', a, akhir); }
-      if (c.bucket === 'lancar') { neraca.totalAsetLancar += akhir; addContribution('totalAsetLancar', a, akhir); }
+      else if (c.field === 'persediaan') { neraca.persediaan += akhir; addContribution('persediaan', a, akhir); }
+      else if (c.bucket === 'lancar') { neraca.asetLancarLainnya += akhir; addContribution('asetLancarLainnya', a, akhir); }
+      if (c.bucket === 'lancar') { neraca.totalAsetLancar += akhir; }
       else { neraca.totalAsetTidakLancar += akhir; addContribution('totalAsetTidakLancar', a, akhir); }
     } else if (c.group === 'kewajiban') {
       if (c.bucket === 'lancar') { neraca.totalKewajibanLancar += akhir; addContribution('totalKewajibanLancar', a, akhir); }
@@ -2262,15 +2280,16 @@ function renderCompaniesGridView() {
   const body = document.getElementById('companies-view-body');
   if (!body) return;
   body.innerHTML = `
-    <div class="section-block" style="display:flex;gap:10px;">
+    <div class="section-block" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <input type="text" id="company-search" placeholder="Cari kode atau nama perusahaan…" style="flex:1;min-width:220px;max-width:360px;" ${state.companies.length === 0 ? 'disabled' : ''}>
+      ${state.companies.length > 1 ? '<span style="font-size:12px;color:var(--slate-light);">Tarik (drag) kartu untuk mengubah urutan tampilan.</span>' : ''}
     </div>
     ${state.companies.length === 0 ? emptyState('Belum ada perusahaan', 'Mulai dengan menambahkan perusahaan pertama Anda.', '', '') : `
     <div class="company-grid" id="company-grid"></div>
     <div id="company-search-empty" class="card" style="display:none;color:var(--slate);margin-top:10px;">Tidak ada perusahaan yang cocok dengan pencarian.</div>`}
   `;
   if (state.companies.length) {
-    fillCompanyGrid(state.companies);
+    fillCompanyGrid(state.companies, { draggable: true });
     const searchInput = document.getElementById('company-search');
     searchInput.addEventListener('input', () => {
       const q = searchInput.value.trim().toLowerCase();
@@ -2280,24 +2299,98 @@ function renderCompaniesGridView() {
         String(c.category || '').toLowerCase().includes(q)
       );
       document.getElementById('company-search-empty').style.display = filtered.length === 0 ? '' : 'none';
-      fillCompanyGrid(filtered);
+      // Urutan hanya bisa diubah pada tampilan tanpa filter — saat sedang
+      // mencari, daftarnya sudah bukan daftar lengkap sehingga posisi
+      // "drop"-nya tidak mewakili urutan sebenarnya.
+      fillCompanyGrid(filtered, { draggable: !q });
     });
   }
 }
 
-function fillCompanyGrid(list) {
-  const companies = list || state.companies;
+// Mengurutkan perusahaan untuk tampilan grid: yang sudah punya `sortOrder`
+// (pernah diatur lewat drag & drop) diurutkan sesuai nilainya, sisanya
+// (belum pernah diatur) ditaruh di belakang secara alfabetis — supaya
+// perusahaan baru otomatis nongol di akhir grid, bukan menyisip acak.
+function sortCompaniesForGrid(list) {
+  return [...list].sort((a, b) => {
+    const av = a.sortOrder, bv = b.sortOrder;
+    if (av != null && bv != null) return av - bv;
+    if (av != null) return -1;
+    if (bv != null) return 1;
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
+}
+
+function fillCompanyGrid(list, opts) {
+  const draggableOn = !!(opts && opts.draggable);
+  const companies = sortCompaniesForGrid(list || state.companies);
   const grid = document.getElementById('company-grid');
   if (!grid) return;
   grid.innerHTML = companies.map(c => `
-    <div class="company-card" data-open="${c.id}" title="${escapeHTML(c.name)}">
+    <div class="company-card" data-open="${c.id}" title="${escapeHTML(c.name)}" ${draggableOn ? 'draggable="true"' : ''}>
       ${companyAvatarHTML(c, 108, 20)}
       <div class="company-card-name">${escapeHTML(c.name)}</div>
       ${c.code ? `<div class="company-card-code">${escapeHTML(c.code)}</div>` : ''}
     </div>
   `).join('');
-  grid.querySelectorAll('[data-open]').forEach(card => {
-    card.addEventListener('click', () => openCompanyDetail(card.dataset.open));
+
+  let dragging = null;
+  let didDrag = false;
+
+  grid.querySelectorAll('.company-card').forEach(card => {
+    card.addEventListener('click', () => {
+      // Klik yang sebenarnya adalah ujung dari drag (mouse sempat
+      // bergeser) tidak dianggap sebagai perintah membuka detail —
+      // supaya melepas kartu di posisi baru tidak ikut membuka halaman.
+      if (didDrag) { didDrag = false; return; }
+      openCompanyDetail(card.dataset.open);
+    });
+
+    if (!draggableOn) return;
+
+    card.addEventListener('dragstart', (e) => {
+      dragging = card;
+      didDrag = false;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', card.dataset.open); } catch (err) { /* Safari lama */ }
+    });
+
+    card.addEventListener('dragover', (e) => {
+      if (!dragging || dragging === card) return;
+      e.preventDefault();
+      didDrag = true;
+      // Sisipkan kartu yang ditarik sebelum/sesudah kartu yang sedang
+      // dilewati kursor, tergantung separuh mana dari kartu itu yang
+      // sedang dilewati — supaya terasa alami di layout grid multi-kolom
+      // (bukan cuma daftar satu kolom).
+      const rect = card.getBoundingClientRect();
+      const before = e.clientX < rect.left + rect.width / 2;
+      if (before) grid.insertBefore(dragging, card);
+      else grid.insertBefore(dragging, card.nextSibling);
+    });
+
+    card.addEventListener('dragenter', (e) => e.preventDefault());
+
+    card.addEventListener('drop', (e) => { e.preventDefault(); });
+
+    card.addEventListener('dragend', async () => {
+      card.classList.remove('dragging');
+      dragging = null;
+      const orderedIds = [...grid.querySelectorAll('.company-card[data-open]')].map(el => el.dataset.open);
+      // Perbarui state lokal dulu (biar responsif) sebelum menyimpan ke
+      // server, supaya render berikutnya (mis. dari listener realtime)
+      // tidak sempat mengembalikan urutan lama sekejap.
+      orderedIds.forEach((id, idx) => {
+        const comp = state.companies.find(x => x.id === id);
+        if (comp) comp.sortOrder = idx;
+      });
+      try {
+        await DB.reorderCompanies(orderedIds);
+      } catch (err) {
+        toast('Gagal menyimpan urutan perusahaan: ' + err.message, 'error');
+      }
+    });
   });
 }
 
@@ -2381,7 +2474,8 @@ function refreshCompaniesOrDetail() {
   if (state.view === 'company-detail') {
     renderCompanyDetail();
   } else if (document.getElementById('company-grid')) {
-    fillCompanyGrid(state.companies);
+    const searchInput = document.getElementById('company-search');
+    fillCompanyGrid(state.companies, { draggable: !(searchInput && searchInput.value.trim()) });
   }
 }
 
@@ -2455,6 +2549,7 @@ function orgNodeHTML(node, depth) {
   const levelClass = depth === 0 ? 'level-0' : depth === 1 ? 'level-1' : 'level-2';
   const ownershipLines = ownershipSummaryLines(node);
   const foundedLine = node.foundedDate ? `${formatDateID(node.foundedDate)} · ${companyAgeLabel(node.foundedDate)}` : '';
+  const hasSub = !!node.code || !!node.category;
   const hasDetails = ownershipLines.length > 0 || !!foundedLine;
 
   return `
@@ -2463,6 +2558,11 @@ function orgNodeHTML(node, depth) {
         <div class="org-node-header">
           <div class="org-node-logo-wrap">${companyAvatarHTML(node, 76, 0, { transparent: true, stretchWidth: true })}</div>
           <div class="org-node-name">${node.name}</div>
+          ${hasSub ? `
+            <div class="org-node-sub">
+              ${node.code ? `<span class="org-code">${escapeHTML(node.code)}</span>` : ''}
+              ${node.category ? categoryBadgeHTML(node.category) : ''}
+            </div>` : ''}
         </div>
         ${hasDetails ? '<div class="org-node-divider"></div>' : ''}
         ${ownershipLines.length ? `
@@ -2619,17 +2719,23 @@ function layoutOrgTree(pdfMeasure, roots) {
   function prep(node) {
     pdfMeasure.setFont('helvetica', 'bold'); pdfMeasure.setFontSize(NAME_SIZE);
     const nameLines = pdfMeasure.splitTextToSize(node.name || '(Tanpa nama)', contentW);
+    const catMeta = node.category ? categoryMeta(node.category) : null;
+    const subParts = [];
+    if (node.code) subParts.push(node.code);
+    if (catMeta) subParts.push(catMeta.label);
+    const subLine = subParts.join('   ·   ');
     const ownershipLines = ownershipSummaryLines(node);
     const foundedRaw = node.foundedDate ? `${formatDateID(node.foundedDate)} · ${companyAgeLabel(node.foundedDate)}` : '';
     pdfMeasure.setFont('helvetica', 'normal'); pdfMeasure.setFontSize(SUB_SIZE);
     const foundedLines = foundedRaw ? pdfMeasure.splitTextToSize(foundedRaw, contentW) : [];
 
     let h = PAD + LOGO_SIZE + 6 + nameLines.length * NAME_LH;
+    if (subLine) h += SUB_LH + 2;
     if (ownershipLines.length || foundedLines.length) h += 9;
     if (ownershipLines.length) h += LABEL_LH;
     h += ownershipLines.length * SUB_LH + foundedLines.length * SUB_LH + PAD;
 
-    node._box = { w: BOX_W, h, nameLines, ownershipLines, foundedLines };
+    node._box = { w: BOX_W, h, nameLines, subLine, ownershipLines, foundedLines };
     node.children.forEach(prep);
   }
   roots.forEach(prep);
@@ -2766,6 +2872,14 @@ async function exportOrgChartPDF() {
         pdf.text(line, x + w / 2, cy2 + S(8), { align: 'center' });
         cy2 += S(L.NAME_LH);
       });
+
+      if (node._box.subLine) {
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(Math.max(5.5, S(L.SUB_SIZE)));
+        pdf.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
+        pdf.text(node._box.subLine, x + w / 2, cy2 + S(7), { align: 'center' });
+        cy2 += S(L.SUB_LH) + S(2);
+      }
 
       if (node._box.ownershipLines.length || node._box.foundedLines.length) {
         cy2 += S(3);
@@ -3217,6 +3331,7 @@ function humanizeKey(key) {
 // mentah hasil impor) — dipakai untuk menimpa label bawaan dari
 // humanizeKey() supaya istilahnya sesuai maksud aslinya.
 const NERACA_LABELS = {
+  asetLancarLainnya: 'Aset Lancar Lainnya',
   penyesuaianSaldoAwalLabaRugi: 'Penyesuaian Saldo Awal Akun Laba Rugi (Belum Ditutup)',
   pendapatanPeriodeIni: 'Pendapatan Periode Ini (Laba Rugi Tahun Berjalan)',
   pendapatanSampaiTahunLalu: 'Pendapatan s.d. Tahun Lalu (Laba Ditahan)',
@@ -3297,7 +3412,7 @@ function neracaGroupedTable(neraca) {
   const groupRow = (text) => `<tr><td colspan="2" style="font-weight:600;color:var(--slate);padding-top:10px;">${text}</td></tr>`;
   return `<table><tbody>
     ${groupRow('Aset Lancar')}
-    ${row('kasSetaraKas')}${row('persediaan')}${rowBold('totalAsetLancar')}
+    ${row('kasSetaraKas')}${row('persediaan')}${row('asetLancarLainnya')}${rowBold('totalAsetLancar')}
     ${groupRow('Aset Tidak Lancar')}
     ${rowBold('totalAsetTidakLancar')}
     ${rowHighlight('totalAset')}
@@ -3494,6 +3609,7 @@ function ledgerTable(accounts) {
 // untuk baris yang merupakan hasil turunan dari baris lain (bukan
 // dijumlah langsung dari akun).
 const NERACA_FORMULAS = {
+  totalAsetLancar: (n) => `Kas &amp; Setara Kas (${formatIDR(n.kasSetaraKas)}) + Persediaan (${formatIDR(n.persediaan)}) + Aset Lancar Lainnya (${formatIDR(n.asetLancarLainnya)})`,
   totalAset: (n) => `Total Aset Lancar (${formatIDR(n.totalAsetLancar)}) + Total Aset Tidak Lancar (${formatIDR(n.totalAsetTidakLancar)})`,
   totalKewajiban: (n) => `Total Kewajiban Lancar (${formatIDR(n.totalKewajibanLancar)}) + Total Kewajiban Jangka Panjang (${formatIDR(n.totalKewajibanJangkaPanjang)})`,
   penyesuaianSaldoAwalLabaRugi: () => `Akun Pendapatan/Beban pada Buku Besar yang diimpor ternyata masih membawa Saldo Awal (semestinya sudah ditutup/dinolkan ke Laba Ditahan oleh software akuntansi asal setiap tutup buku). Karena nilai ini tidak masuk ke Aset/Kewajiban/Ekuitas manapun dan sengaja tidak dihitung sebagai Laba Rugi tahun berjalan, Integrida menutupnya otomatis ke Ekuitas di sini (klik baris ini untuk melihat akun sumbernya) supaya Total Aset = Total Kewajiban + Total Ekuitas persis sesuai Buku Besar yang diimpor.`,
@@ -3658,7 +3774,7 @@ function derivedNeracaGrouped(neraca, contributions) {
     : '';
   return `
     ${neracaGroupHeader('Aset Lancar')}
-    ${row('kasSetaraKas')}${row('persediaan')}${row('totalAsetLancar')}
+    ${row('kasSetaraKas')}${row('persediaan')}${row('asetLancarLainnya')}${row('totalAsetLancar')}
     ${neracaGroupHeader('Aset Tidak Lancar')}
     ${row('totalAsetTidakLancar')}
     ${highlight('totalAset')}
@@ -3811,9 +3927,20 @@ function paintCompanyDetail(statements) {
   // di-cache per periode; sambil menunggu, tabel tampil datar dulu (tanpa
   // bisa diklik) lalu otomatis diperbarui begitu rincian selesai dimuat.
   let bbContribs = null;
+  let neracaBase = selected.neraca;
+  let labaRugiBase = selected.labaRugi;
   if (selected.bukuBesarCount > 0) {
     if (Array.isArray(ledgerCache[selected.id])) {
-      bbContribs = contributionsFromLedger(ledgerCache[selected.id]);
+      // Neraca & Laba Rugi periode ini SELALU diturunkan ulang langsung dari
+      // akun Buku Besar tersimpan (bukan dipakai apa adanya dari snapshot
+      // yang disimpan saat impor) — supaya kalau logika pengelompokan akun
+      // diperbarui di kemudian hari (mis. kategori "Aset Lancar Lainnya"),
+      // periode yang datanya sudah diimpor lama ikut otomatis ter-update
+      // begitu dibuka lagi, tanpa perlu impor ulang file Buku Besar-nya.
+      const derivedLive = deriveStatementsFromLedgerAccounts(ledgerCache[selected.id]);
+      bbContribs = derivedLive.contributions;
+      neracaBase = derivedLive.neraca;
+      labaRugiBase = derivedLive.labaRugi;
     } else if (ledgerCache[selected.id] !== 'loading') {
       ledgerCache[selected.id] = 'loading';
       DB.getLedgerAccounts(state.companyDetailId, selected.id)
@@ -3831,7 +3958,7 @@ function paintCompanyDetail(statements) {
   // Neraca yang ditampilkan dilengkapi baris Pendapatan Periode Ini &
   // Pendapatan s.d. Tahun Lalu (lihat withRetainedEarnings) supaya Total
   // Aset bisa dicocokkan dengan Total Kewajiban + Total Ekuitas.
-  const neracaDisplay = withRetainedEarnings(selected.neraca, statements, selected);
+  const neracaDisplay = withRetainedEarnings(neracaBase, statements, selected);
   const modalDisplay = withPerubahanModal(selected.perubahanModal, neracaDisplay);
 
   content.innerHTML = `
@@ -3858,7 +3985,7 @@ function paintCompanyDetail(statements) {
           <span class="badge gold">Laba Rugi</span>
           ${bbContribs ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik baris untuk rincian akun</span>' : ''}
         </div>
-        ${bbContribs ? derivedSectionDetails(selected.labaRugi, bbContribs, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS, LABA_RUGI_ORDER) : keyValueTable(selected.labaRugi, LABA_RUGI_ORDER, LABA_RUGI_LABELS)}
+        ${bbContribs ? derivedSectionDetails(labaRugiBase, bbContribs, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS, LABA_RUGI_ORDER) : keyValueTable(labaRugiBase, LABA_RUGI_ORDER, LABA_RUGI_LABELS)}
       </div>
       <div class="card">
         ${company ? reportTitleHTML(company, 'Arus Kas', selected, false) : ''}
