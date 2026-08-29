@@ -84,7 +84,22 @@
 //      tengah proses simpan. confirmImport() juga kini menampilkan
 //      pesan error yang jelas via toast jika penyimpanan gagal, alih-
 //      alih gagal diam-diam.
-const CACHE_NAME = 'integrida-cache-v21';
+// v22: index.html diperbarui — perbaikan bug lanjutan: rincian mentah
+//      Buku Besar (per transaksi) ternyata bisa melebihi batas ukuran
+//      1 dokumen Firestore (1.048.576 byte) untuk perusahaan dengan
+//      banyak transaksi (mis. impor tahunan), menyebabkan penyimpanan
+//      gagal dengan pesan "...exceeds the maximum allowed size...".
+//      Sekarang Buku Besar disimpan TERPISAH dari dokumen statement, di
+//      subcollection `ledgerChunks`, dipecah otomatis jadi beberapa
+//      dokumen kecil (dan bila perlu, satu akun dengan transaksi sangat
+//      banyak ikut dipecah) — masing-masing jauh di bawah batas
+//      tersebut, lalu disatukan kembali otomatis saat dibutuhkan
+//      (rincian klik-baris di Detail Perusahaan dimuat sesuai
+//      kebutuhan/lazy). Dokumen statement sendiri jadi jauh lebih kecil
+//      (hanya berisi Neraca/Laba Rugi/Arus Kas/Perubahan Modal yang
+//      memang selalu ringkas), sekaligus mempercepat sinkronisasi
+//      realtime lintas perangkat.
+const CACHE_NAME = 'integrida-cache-v22';
 const APP_SHELL = [
   './',
   './index.html',

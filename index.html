@@ -500,30 +500,16 @@ const DB = {
     return statementId;
   },
 
-  // Menyimpan HANYA satu kategori data (neraca / labaRugi / arusKas / bukuBesar)
-  // untuk suatu periode, tanpa menimpa kategori lain yang sudah tersimpan
-  // sebelumnya di periode yang sama — dipakai karena tiap kategori sekarang
-  // diimpor dari file Excel yang terpisah, satu per satu.
-  async saveStatementSection(companyId, period, sectionKey, sectionData) {
-    const statementId = `${period.year}_${period.periodType}_${period.periodIndex}`;
-    await db.collection('companies').doc(companyId).collection('statements').doc(statementId).set({
-      year: period.year,
-      periodType: period.periodType,
-      periodIndex: period.periodIndex,
-      periodLabel: period.periodLabel,
-      [sectionKey]: sectionData,
-      uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
-    return statementId;
-  },
-
-  // Menyimpan BEBERAPA kategori data (mis. bukuBesar + neraca + labaRugi +
-  // arusKas + perubahanModal hasil satu kali impor Buku Besar) dalam SATU
-  // panggilan set() Firestore, bukan beberapa saveStatementSection terpisah
+  // Menyimpan BEBERAPA kategori data (mis. neraca + labaRugi + arusKas +
+  // perubahanModal hasil satu kali impor Buku Besar) dalam SATU panggilan
+  // set() Firestore, bukan beberapa saveStatementSection terpisah
   // berurutan. Ini memastikan penyimpanan bersifat "semua-atau-tidak-sama-
   // sekali": kalau terjadi gangguan (mis. jaringan terputus), tidak akan
   // ada kondisi sebagian kategori tersimpan dan sebagian lagi tidak untuk
   // periode yang sama.
+  // CATATAN: rincian mentah Buku Besar (per transaksi) TIDAK dititipkan
+  // di sini karena ukurannya bisa melebihi batas 1 dokumen Firestore
+  // (1 MB) — lihat saveLedgerAccounts/getLedgerAccounts di bawah.
   async saveStatementSections(companyId, period, sections) {
     const statementId = `${period.year}_${period.periodType}_${period.periodIndex}`;
     await db.collection('companies').doc(companyId).collection('statements').doc(statementId).set({
@@ -537,7 +523,42 @@ const DB = {
     return statementId;
   },
 
+  // ---- Buku Besar mentah (rincian per transaksi) ----
+  // Dokumen Firestore dibatasi maksimal 1.048.576 byte. Perusahaan dengan
+  // banyak transaksi (mis. impor Buku Besar tahunan) bisa menghasilkan
+  // rincian yang jauh melebihi itu kalau disimpan sebagai satu field di
+  // dokumen statement. Karena itu disimpan terpisah di subcollection
+  // `ledgerChunks`, dipecah otomatis oleh chunkLedgerPieces() jadi
+  // beberapa dokumen kecil yang masing-masing jauh di bawah batas itu.
+  async saveLedgerAccounts(companyId, statementId, accounts) {
+    const colRef = db.collection('companies').doc(companyId).collection('statements').doc(statementId).collection('ledgerChunks');
+    const existing = await colRef.get();
+    if (!existing.empty) {
+      const delBatch = db.batch();
+      existing.docs.forEach((d) => delBatch.delete(d.ref));
+      await delBatch.commit();
+    }
+    const chunks = chunkLedgerPieces(accounts || []);
+    for (let i = 0; i < chunks.length; i++) {
+      await colRef.doc(String(i)).set({ chunkIndex: i, items: chunks[i] });
+    }
+    return chunks.length;
+  },
+
+  async getLedgerAccounts(companyId, statementId) {
+    const snap = await db.collection('companies').doc(companyId).collection('statements').doc(statementId).collection('ledgerChunks').orderBy('chunkIndex', 'asc').get();
+    const pieces = snap.docs.flatMap((d) => (d.data().items || []));
+    return mergeLedgerPieces(pieces);
+  },
+
   async deleteStatement(companyId, statementId) {
+    const chunksRef = db.collection('companies').doc(companyId).collection('statements').doc(statementId).collection('ledgerChunks');
+    const chunkSnap = await chunksRef.get();
+    if (!chunkSnap.empty) {
+      const delBatch = db.batch();
+      chunkSnap.docs.forEach((d) => delBatch.delete(d.ref));
+      await delBatch.commit();
+    }
     await db.collection('companies').doc(companyId).collection('statements').doc(statementId).delete();
   },
 
@@ -976,6 +997,86 @@ function groupLedgerAccountsByClassification(accounts) {
  * pakai untuk perhitungan rasio, memakai kategori dari
  * classifyLedgerAccount di atas.
  */
+// ---------- Pemecahan Buku Besar untuk penyimpanan (chunking) ----------
+// Dokumen Firestore dibatasi maksimal 1.048.576 byte. Daftar akun mentah
+// Buku Besar (lengkap dengan rincian tiap transaksi per akun) untuk
+// perusahaan dengan banyak transaksi (mis. impor tahunan) bisa jauh
+// melebihi itu kalau disimpan sebagai satu field. Fungsi-fungsi di bawah
+// memecah daftar akun jadi beberapa "potongan" (dokumen) yang masing-
+// masing tetap jauh di bawah batas tersebut — dan bila satu akun SAJA
+// sudah melebihi budget (akun dengan transaksi sangat banyak, mis. akun
+// Kas), akun itu ikut dipecah jadi beberapa bagian, ditandai _acctIdx
+// (indeks akun asli) & _partIdx (urutan bagian) supaya bisa disatukan
+// kembali persis seperti semula saat dibaca (lihat mergeLedgerPieces).
+const LEDGER_CHUNK_BYTE_BUDGET = 700000; // jauh di bawah batas 1.048.576 byte/dokumen Firestore
+
+function byteSizeOf(value) {
+  return new Blob([JSON.stringify(value)]).size;
+}
+
+function splitLedgerAccountForStorage(account, acctIdx) {
+  const base = { code: account.code, name: account.name, saldoAwal: account.saldoAwal || 0, saldoAkhir: account.saldoAkhir || 0 };
+  const whole = { ...base, transaksi: account.transaksi || [], _acctIdx: acctIdx, _partIdx: 0 };
+  if (byteSizeOf(whole) <= LEDGER_CHUNK_BYTE_BUDGET) return [whole];
+
+  // Akun ini sendirian sudah melebihi budget -> pecah daftar transaksinya
+  // jadi beberapa bagian, masing-masing tetap membawa data akun (kode,
+  // nama, saldo) supaya tiap bagian tetap bisa berdiri sendiri.
+  const parts = [];
+  let current = [];
+  (account.transaksi || []).forEach((t) => {
+    current.push(t);
+    if (byteSizeOf({ ...base, transaksi: current }) > LEDGER_CHUNK_BYTE_BUDGET) {
+      const last = current.pop();
+      if (current.length) parts.push(current);
+      current = last ? [last] : [];
+    }
+  });
+  if (current.length) parts.push(current);
+  if (parts.length === 0) parts.push([]); // akun tanpa transaksi tapi field lain tetap besar (jarang terjadi)
+  return parts.map((transaksi, i) => ({ ...base, transaksi, _acctIdx: acctIdx, _partIdx: i }));
+}
+
+/** Mengelompokkan seluruh akun jadi beberapa dokumen (chunk) untuk disimpan. */
+function chunkLedgerPieces(accounts) {
+  const allPieces = (accounts || []).flatMap((a, idx) => splitLedgerAccountForStorage(a, idx));
+  const chunks = [];
+  let current = [];
+  allPieces.forEach((piece) => {
+    current.push(piece);
+    if (byteSizeOf(current) > LEDGER_CHUNK_BYTE_BUDGET) {
+      const last = current.pop();
+      if (current.length) chunks.push(current);
+      current = [last];
+    }
+  });
+  if (current.length) chunks.push(current);
+  return chunks;
+}
+
+/** Menyatukan kembali potongan-potongan akun (dari beberapa dokumen chunk) menjadi daftar akun utuh seperti semula. */
+function mergeLedgerPieces(pieces) {
+  const byAccount = {};
+  (pieces || []).forEach((p) => {
+    if (!byAccount[p._acctIdx]) byAccount[p._acctIdx] = [];
+    byAccount[p._acctIdx].push(p);
+  });
+  return Object.keys(byAccount)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((idx) => {
+      const parts = byAccount[idx].sort((a, b) => a._partIdx - b._partIdx);
+      const first = parts[0];
+      return {
+        code: first.code,
+        name: first.name,
+        saldoAwal: first.saldoAwal,
+        saldoAkhir: parts[parts.length - 1].saldoAkhir,
+        transaksi: parts.flatMap((p) => p.transaksi)
+      };
+    });
+}
+
 function deriveStatementsFromLedgerAccounts(accounts) {
   const neraca = {
     kasSetaraKas: 0, persediaan: 0,
@@ -3411,6 +3512,9 @@ const LABA_RUGI_FORMULAS = {
 // tahu transaksi mana yang harus ditampilkan saat sebuah baris akun diklik.
 let activeContributions = null;
 let activeLedgerAccounts = [];
+// Cache rincian Buku Besar per periode (statementId -> accounts[] | 'loading'),
+// dipakai oleh paintCompanyDetail untuk lazy-load (lihat DB.getLedgerAccounts).
+let ledgerCache = {};
 
 function openLedgerAccountModal(acc) {
   const backdrop = el(`<div class="modal-backdrop">
@@ -3701,8 +3805,28 @@ function paintCompanyDetail(statements) {
   // Kalau periode ini punya data Buku Besar, klasifikasi Neraca & Laba Rugi
   // direkonstruksi dari akun-akun tersimpan supaya baris-barisnya tetap bisa
   // diklik untuk melihat rincian transaksi — sama seperti di layar pratinjau
-  // impor, bukan cuma tabel angka datar.
-  const bbContribs = contributionsFromLedger(selected.bukuBesar);
+  // impor, bukan cuma tabel angka datar. Rincian Buku Besar disimpan
+  // terpisah dari dokumen statement (lihat DB.getLedgerAccounts) supaya
+  // dokumennya tetap kecil, jadi di sini dimuat sesuai kebutuhan (lazy) &
+  // di-cache per periode; sambil menunggu, tabel tampil datar dulu (tanpa
+  // bisa diklik) lalu otomatis diperbarui begitu rincian selesai dimuat.
+  let bbContribs = null;
+  if (selected.bukuBesarCount > 0) {
+    if (Array.isArray(ledgerCache[selected.id])) {
+      bbContribs = contributionsFromLedger(ledgerCache[selected.id]);
+    } else if (ledgerCache[selected.id] !== 'loading') {
+      ledgerCache[selected.id] = 'loading';
+      DB.getLedgerAccounts(state.companyDetailId, selected.id)
+        .then((accounts) => {
+          ledgerCache[selected.id] = accounts;
+          if (state.view === 'company-detail' && state.companyDetailId === company.id) paintCompanyDetail(statements);
+        })
+        .catch((err) => {
+          delete ledgerCache[selected.id];
+          console.error('Gagal memuat rincian Buku Besar:', err);
+        });
+    }
+  }
 
   // Neraca yang ditampilkan dilengkapi baris Pendapatan Periode Ini &
   // Pendapatan s.d. Tahun Lalu (lihat withRetainedEarnings) supaya Total
@@ -3768,7 +3892,7 @@ function paintCompanyDetail(statements) {
               <td>${hasSectionData(s.labaRugi) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${hasSectionData(s.arusKas) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${hasSectionData(s.perubahanModal) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
-              <td>${hasSectionData(s.bukuBesar) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
+              <td>${s.bukuBesarCount > 0 ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td><label class="verify-checkbox-label"><input type="checkbox" data-verify-statement="${s.id}" data-label="${s.periodLabel}" ${s.verified ? 'checked' : ''}>${s.verified ? 'Terverifikasi' : 'Tandai valid'}</label></td>
               <td style="text-align:right;"><button class="btn danger" data-del-statement="${s.id}" data-label="${s.periodLabel}">Hapus</button></td>
             </tr>`).join('')}
@@ -3997,7 +4121,7 @@ async function loadImportStatus() {
             <td>${mark(hasSectionData(s.labaRugi))}</td>
             <td>${mark(hasSectionData(s.arusKas))}</td>
             <td>${mark(hasSectionData(s.perubahanModal))}</td>
-            <td>${mark(hasSectionData(s.bukuBesar))}</td>
+            <td>${mark(s.bukuBesarCount > 0)}</td>
           </tr>`).join('')}
         </tbody>
       </table>
@@ -4057,17 +4181,23 @@ async function confirmImport() {
   const btn = document.getElementById('confirm-import');
   if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan...'; }
   try {
-    // Satu kali write gabungan (bukuBesar + neraca + labaRugi + arusKas +
-    // perubahanModal) — bukan 5 write terpisah berurutan — supaya kalau
-    // terjadi gangguan di tengah jalan, tidak ada kondisi tersimpan
-    // sebagian (mis. Buku Besar tersimpan tapi Neraca/Laba Rugi/Arus Kas/
-    // Perubahan Modal tidak, seperti yang pernah terjadi).
-    await DB.saveStatementSections(companyId, pendingImport.period, {
-      bukuBesar: pendingImport.data.ledger,
+    const accounts = pendingImport.data.ledger || [];
+    const period = pendingImport.period;
+    const statementId = `${period.year}_${period.periodType}_${period.periodIndex}`;
+    // Buku Besar (rincian per transaksi) disimpan LEBIH DULU, terpisah &
+    // dipecah otomatis jadi beberapa dokumen kecil (lihat
+    // DB.saveLedgerAccounts/chunkLedgerPieces) karena bisa melebihi batas
+    // ukuran 1 dokumen Firestore (1 MB) untuk perusahaan dengan banyak
+    // transaksi. Neraca/Laba Rugi/Arus Kas/Perubahan Modal (data ringkas,
+    // selalu kecil) baru disimpan setelahnya dalam satu write gabungan —
+    // kalau langkah manapun gagal, tidak ada kondisi tersimpan sebagian.
+    await DB.saveLedgerAccounts(companyId, statementId, accounts);
+    await DB.saveStatementSections(companyId, period, {
       neraca: pendingImport.data.neraca,
       labaRugi: pendingImport.data.labaRugi,
       arusKas: pendingImport.data.arusKas,
-      perubahanModal: pendingImport.data.perubahanModal
+      perubahanModal: pendingImport.data.perubahanModal,
+      bukuBesarCount: accounts.length
     });
     toast(`Buku Besar tersimpan — Neraca, Laba Rugi, Arus Kas & Perubahan Modal otomatis diperbarui`, 'success');
     pendingImport = null;
