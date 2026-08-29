@@ -517,6 +517,26 @@ const DB = {
     return statementId;
   },
 
+  // Menyimpan BEBERAPA kategori data (mis. bukuBesar + neraca + labaRugi +
+  // arusKas + perubahanModal hasil satu kali impor Buku Besar) dalam SATU
+  // panggilan set() Firestore, bukan beberapa saveStatementSection terpisah
+  // berurutan. Ini memastikan penyimpanan bersifat "semua-atau-tidak-sama-
+  // sekali": kalau terjadi gangguan (mis. jaringan terputus), tidak akan
+  // ada kondisi sebagian kategori tersimpan dan sebagian lagi tidak untuk
+  // periode yang sama.
+  async saveStatementSections(companyId, period, sections) {
+    const statementId = `${period.year}_${period.periodType}_${period.periodIndex}`;
+    await db.collection('companies').doc(companyId).collection('statements').doc(statementId).set({
+      year: period.year,
+      periodType: period.periodType,
+      periodIndex: period.periodIndex,
+      periodLabel: period.periodLabel,
+      ...sections,
+      uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    return statementId;
+  },
+
   async deleteStatement(companyId, statementId) {
     await db.collection('companies').doc(companyId).collection('statements').doc(statementId).delete();
   },
@@ -4034,14 +4054,29 @@ async function handleImportFile(file) {
 async function confirmImport() {
   const companyId = state.importCompanyId;
   if (!pendingImport) return;
-  await DB.saveStatementSection(companyId, pendingImport.period, 'bukuBesar', pendingImport.data.ledger);
-  await DB.saveStatementSection(companyId, pendingImport.period, 'neraca', pendingImport.data.neraca);
-  await DB.saveStatementSection(companyId, pendingImport.period, 'labaRugi', pendingImport.data.labaRugi);
-  await DB.saveStatementSection(companyId, pendingImport.period, 'arusKas', pendingImport.data.arusKas);
-  await DB.saveStatementSection(companyId, pendingImport.period, 'perubahanModal', pendingImport.data.perubahanModal);
-  toast(`Buku Besar tersimpan — Neraca, Laba Rugi, Arus Kas & Perubahan Modal otomatis diperbarui`, 'success');
-  pendingImport = null;
-  renderImport();
+  const btn = document.getElementById('confirm-import');
+  if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan...'; }
+  try {
+    // Satu kali write gabungan (bukuBesar + neraca + labaRugi + arusKas +
+    // perubahanModal) — bukan 5 write terpisah berurutan — supaya kalau
+    // terjadi gangguan di tengah jalan, tidak ada kondisi tersimpan
+    // sebagian (mis. Buku Besar tersimpan tapi Neraca/Laba Rugi/Arus Kas/
+    // Perubahan Modal tidak, seperti yang pernah terjadi).
+    await DB.saveStatementSections(companyId, pendingImport.period, {
+      bukuBesar: pendingImport.data.ledger,
+      neraca: pendingImport.data.neraca,
+      labaRugi: pendingImport.data.labaRugi,
+      arusKas: pendingImport.data.arusKas,
+      perubahanModal: pendingImport.data.perubahanModal
+    });
+    toast(`Buku Besar tersimpan — Neraca, Laba Rugi, Arus Kas & Perubahan Modal otomatis diperbarui`, 'success');
+    pendingImport = null;
+    renderImport();
+  } catch (err) {
+    console.error('Gagal menyimpan hasil impor Buku Besar:', err);
+    toast(`Gagal menyimpan data: ${err.message || err}. Periksa koneksi internet Anda lalu coba lagi.`, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'Simpan ke Sistem'; }
+  }
 }
 
 // ---------- Perbandingan ----------

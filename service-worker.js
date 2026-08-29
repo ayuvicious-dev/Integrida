@@ -75,7 +75,16 @@
 //      dicentang menandai laporan periode itu "Terverifikasi" (field
 //      `verified` pada dokumen statement) dan menampilkan badge hijau
 //      "✓ Terverifikasi" di sebelah nama periode.
-const CACHE_NAME = 'integrida-cache-v20';
+// v21: index.html diperbarui — perbaikan bug: hasil impor Buku Besar
+//      (bukuBesar, Neraca, Laba Rugi, Arus Kas, Perubahan Modal) kini
+//      disimpan dalam SATU kali write Firestore (DB.saveStatementSections)
+//      alih-alih 5 write terpisah berurutan, supaya tidak ada lagi
+//      kondisi "tersimpan sebagian" (mis. Buku Besar tersimpan tapi
+//      4 laporan turunannya tidak) saat terjadi gangguan koneksi di
+//      tengah proses simpan. confirmImport() juga kini menampilkan
+//      pesan error yang jelas via toast jika penyimpanan gagal, alih-
+//      alih gagal diam-diam.
+const CACHE_NAME = 'integrida-cache-v21';
 const APP_SHELL = [
   './',
   './index.html',
