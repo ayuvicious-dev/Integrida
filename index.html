@@ -6,6 +6,19 @@
 <title>Integrida — Konsolidasi Laporan Keuangan</title>
 <meta name="description" content="Aplikasi konsolidasi laporan keuangan multi-perusahaan: impor Excel, perbandingan antar periode, dan analisis rasio likuiditas, solvabilitas, profitabilitas.">
 <meta name="theme-color" content="#16213A">
+<script>
+// Anti-FOUC: terapkan tema tersimpan (atau preferensi sistem) SEBELUM CSS
+// & body dirender, supaya tidak ada kedipan terang sesaat pada dark mode.
+(function () {
+  try {
+    var saved = localStorage.getItem('integrida-theme');
+    var theme = saved === 'dark' || saved === 'light'
+      ? saved
+      : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', theme);
+  } catch (e) {}
+})();
+</script>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -15,23 +28,83 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" crossorigin="anonymous">
 <style>
 :root{
+  /* Warna aksen brand (tetap sama di light & dark mode, dipakai untuk
+     tombol utama, badge sinkron, toast, dsb — bukan warna teks/latar
+     konten yang perlu berganti antar tema). */
   --ink:#16213A;
   --ink-soft:#22314f;
   --teal:#1B7A6B;
   --teal-light:#e6f2f0;
   --gold:#C08A3E;
   --gold-light:#faf1e2;
-  --paper:#F5F6F4;
-  --card:#FFFFFF;
-  --slate:#5B6472;
-  --slate-light:#9aa3b2;
   --danger:#B5453B;
   --danger-light:#fbeceb;
+
+  /* Warna yang berganti antara light & dark mode. */
+  --paper:#F5F6F4;
+  --card:#FFFFFF;
+  --surface-2:#fafbfb;
+  --text:#16213A;
+  --slate:#5B6472;
+  --slate-light:#9aa3b2;
   --border:#E4E6E9;
+  --grid-line:rgba(20,30,50,.045);
+
+  /* Warna khusus sidebar — di light mode memakai palet terang senada
+     dengan latar aplikasi (bukan lagi navy gelap), di dark mode memakai
+     palet gelap senada dengan latar gelap (lihat override
+     [data-theme="dark"] di bawah). --sidebar-text-strong dipakai untuk
+     teks yang butuh kontras lebih (nama brand, item nav yang di-hover/
+     aktif). */
+  --sidebar-bg:#FFFFFF;
+  --sidebar-border:var(--border);
+  --sidebar-hover-bg:rgba(20,30,50,0.05);
+  --sidebar-active-bg:var(--teal-light);
+  --sidebar-active-border:rgba(27,122,107,0.35);
+  --sidebar-text:var(--slate);
+  --sidebar-text-muted:var(--slate-light);
+  --sidebar-text-strong:var(--text);
+
   --radius:10px;
   --font-body:'Inter',system-ui,sans-serif;
   --font-display:'Space Grotesk',var(--font-body);
   --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+
+/* ---------- Dark mode ---------- */
+/* Diaktifkan lewat atribut data-theme="dark" pada <html> (lihat script
+   anti-FOUC di <head> & applyTheme()/toggleTheme() pada bagian JS). */
+[data-theme="dark"]{
+  --paper:#0F1420;
+  --card:#161D2E;
+  --surface-2:#1B2338;
+  --text:#E7EAF2;
+  --slate:#A9B2C7;
+  --slate-light:#6E7890;
+  --border:#2A3450;
+  --grid-line:rgba(255,255,255,.05);
+
+  --ink:#2A3C63;
+  --ink-soft:#38507f;
+  --teal:#2CA893;
+  --teal-light:#123832;
+  --gold:#D9A65D;
+  --gold-light:#3A2C14;
+  --danger:#E2695D;
+  --danger-light:#3A1F1C;
+
+  /* Sidebar dark mode: sedikit lebih gelap dari --card supaya tetap
+     terasa sebagai panel navigasi tersendiri, tapi senada/menyatu dengan
+     latar gelap di sekelilingnya (bukan lagi navy terang di atas panel
+     terang seperti light mode). */
+  --sidebar-bg:#0B0F1C;
+  --sidebar-border:rgba(255,255,255,0.07);
+  --sidebar-hover-bg:rgba(255,255,255,0.05);
+  --sidebar-active-bg:rgba(44,168,147,0.2);
+  --sidebar-active-border:rgba(44,168,147,0.38);
+  --sidebar-text:#b7c0d6;
+  --sidebar-text-muted:#5c6785;
+  --sidebar-text-strong:#ffffff;
 }
 
 *{box-sizing:border-box;}
@@ -39,8 +112,9 @@ html,body{margin:0;padding:0;height:100%;}
 body{
   font-family:var(--font-body);
   background:var(--paper);
-  color:var(--ink);
+  color:var(--text);
   -webkit-font-smoothing:antialiased;
+  transition:background-color .15s ease,color .15s ease;
 }
 button{font-family:inherit;}
 input,select{font-family:inherit;}
@@ -51,19 +125,21 @@ input,select{font-family:inherit;}
 .sidebar{
   width:250px;
   flex-shrink:0;
-  background:var(--ink);
-  color:#cfd6e4;
+  background:var(--sidebar-bg);
+  color:var(--sidebar-text);
   display:flex;
   flex-direction:column;
   position:fixed;
   top:0;left:0;bottom:0;
   overflow-y:auto;
-  background-image:repeating-linear-gradient(to bottom, rgba(255,255,255,0.035) 0px, rgba(255,255,255,0.035) 1px, transparent 1px, transparent 28px);
+  border-right:1px solid var(--sidebar-border);
+  background-image:repeating-linear-gradient(to bottom, rgba(120,130,160,0.035) 0px, rgba(120,130,160,0.035) 1px, transparent 1px, transparent 28px);
+  transition:background-color .15s ease;
 }
 .sidebar-brand{
   display:flex;align-items:center;gap:10px;
   padding:22px 20px 18px 20px;
-  border-bottom:1px solid rgba(255,255,255,0.08);
+  border-bottom:1px solid var(--sidebar-border);
 }
 .sidebar-brand .mark{
   width:32px;height:32px;border-radius:8px;
@@ -71,29 +147,37 @@ input,select{font-family:inherit;}
   display:flex;align-items:center;justify-content:center;
   font-family:var(--font-display);font-weight:700;color:#fff;font-size:15px;
 }
-.sidebar-brand .name{font-family:var(--font-display);font-weight:600;font-size:18px;color:#fff;letter-spacing:.2px;}
-.sidebar-brand .tag{font-size:10.5px;color:var(--slate-light);letter-spacing:.6px;text-transform:uppercase;}
+.sidebar-brand .name{font-family:var(--font-display);font-weight:600;font-size:18px;color:var(--sidebar-text-strong);letter-spacing:.2px;}
+.sidebar-brand .tag{font-size:10.5px;color:var(--sidebar-text-muted);letter-spacing:.6px;text-transform:uppercase;}
 
 .sidebar-section{padding:16px 14px 4px 14px;}
 .sidebar-section-label{
   font-size:10.5px;letter-spacing:1px;text-transform:uppercase;
-  color:#6e7b93;margin:10px 10px 6px 10px;font-weight:600;
+  color:var(--sidebar-text-muted);margin:10px 10px 6px 10px;font-weight:600;
 }
 .nav-item{
   display:flex;align-items:center;gap:10px;
   padding:9px 12px;margin:2px 0;border-radius:8px;
-  color:#c4cbdb;text-decoration:none;font-size:14px;cursor:pointer;
+  color:var(--sidebar-text);text-decoration:none;font-size:14px;cursor:pointer;
   border:1px solid transparent;
 }
 .nav-item svg{width:17px;height:17px;flex-shrink:0;opacity:.85;}
-.nav-item:hover{background:rgba(255,255,255,0.06);color:#fff;}
-.nav-item.active{background:rgba(27,122,107,0.22);border-color:rgba(27,122,107,0.4);color:#fff;}
+.nav-item:hover{background:var(--sidebar-hover-bg);color:var(--sidebar-text-strong);}
+.nav-item.active{background:var(--sidebar-active-bg);border-color:var(--sidebar-active-border);color:var(--sidebar-text-strong);}
 
-.sidebar-footer{margin-top:auto;padding:14px;border-top:1px solid rgba(255,255,255,0.08);}
-.user-chip{display:flex;align-items:center;gap:9px;font-size:12.5px;color:#c4cbdb;}
+.sidebar-footer{margin-top:auto;padding:14px;border-top:1px solid var(--sidebar-border);}
+.user-chip{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--sidebar-text);}
 .user-chip .dot{width:26px;height:26px;border-radius:50%;background:var(--gold);color:#3a2a0f;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;}
-.logout-btn{margin-top:10px;width:100%;background:transparent;border:1px solid rgba(255,255,255,0.15);color:#c4cbdb;padding:7px;border-radius:7px;font-size:12.5px;cursor:pointer;}
-.logout-btn:hover{background:rgba(255,255,255,0.08);}
+.theme-toggle-topbar{
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  width:34px;height:34px;border-radius:50%;
+  border:1px solid var(--border);background:var(--surface-2);color:var(--slate);
+  cursor:pointer;
+}
+.theme-toggle-topbar:hover{background:var(--border);color:var(--text);}
+.theme-toggle-topbar svg{width:16px;height:16px;flex-shrink:0;}
+.logout-btn{margin-top:10px;width:100%;background:transparent;border:1px solid var(--sidebar-border);color:var(--sidebar-text);padding:7px;border-radius:7px;font-size:12.5px;cursor:pointer;}
+.logout-btn:hover{background:var(--sidebar-hover-bg);}
 
 .main{margin-left:250px;flex:1;display:flex;flex-direction:column;min-height:100vh;}
 .topbar{
@@ -126,7 +210,7 @@ input,select{font-family:inherit;}
 .company-card.dragging{opacity:.35;}
 .company-card.drag-hover{border-color:var(--teal);box-shadow:0 0 0 2px var(--teal-light) inset;}
 .company-card:hover{border-color:var(--teal);box-shadow:0 6px 18px rgba(22,33,58,0.08);transform:translateY(-2px);}
-.company-card-name{font-weight:600;font-size:14px;color:var(--ink);line-height:1.35;word-break:break-word;}
+.company-card-name{font-weight:600;font-size:14px;color:var(--text);line-height:1.35;word-break:break-word;}
 .company-card-code{font-size:12px;color:var(--slate);font-family:var(--font-mono);}
 .company-card-progress{width:100%;display:flex;flex-direction:column;gap:4px;margin-top:2px;}
 .company-card-progress-bar{height:5px;border-radius:999px;background:var(--border);overflow:hidden;width:100%;}
@@ -135,7 +219,7 @@ input,select{font-family:inherit;}
 
 /* ---------- Judul laporan (kop laporan keuangan) ---------- */
 .report-title{margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);text-align:center;}
-.report-title-line{font-weight:700;font-size:13px;color:var(--ink);line-height:1.55;letter-spacing:.2px;}
+.report-title-line{font-weight:700;font-size:13px;color:var(--text);line-height:1.55;letter-spacing:.2px;}
 .report-title-line.muted{font-weight:500;color:var(--slate);font-size:12px;}
 .verify-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#fff;background:var(--teal);padding:2px 9px;border-radius:999px;margin-left:8px;vertical-align:middle;white-space:nowrap;}
 .verify-checkbox-label{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12.5px;color:var(--slate);user-select:none;}
@@ -164,9 +248,9 @@ input,select{font-family:inherit;}
 table{width:100%;border-collapse:collapse;font-size:13.5px;}
 th,td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--border);}
 th:first-child,td:first-child{text-align:left;}
-thead th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--slate);font-weight:600;background:#fafbfb;position:sticky;top:0;}
+thead th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--slate);font-weight:600;background:var(--surface-2);position:sticky;top:0;}
 td.num,th.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
-tbody tr:hover{background:#fafcfb;}
+tbody tr:hover{background:var(--surface-2);}
 .table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);}
 
 .btn{
@@ -177,20 +261,20 @@ tbody tr:hover{background:#fafcfb;}
 .btn:hover{background:var(--ink-soft);}
 .btn.primary{background:var(--teal);}
 .btn.primary:hover{background:#156357;}
-.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--border);}
-.btn.ghost:hover{background:#f2f3f4;}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border);}
+.btn.ghost:hover{background:var(--surface-2);}
 .btn.danger{background:var(--danger);}
 .btn:disabled{opacity:.5;cursor:not-allowed;}
 
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
 .field label{font-size:12.5px;color:var(--slate);font-weight:500;}
 .field input,.field select,.field textarea{
-  padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:13.5px;background:#fff;
+  padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:13.5px;background:var(--card);color:var(--text);
 }
 .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:var(--teal);}
 .field textarea{font-family:inherit;resize:vertical;min-height:56px;}
 .ownership-row{display:grid;grid-template-columns:1fr 110px 34px;gap:8px;align-items:center;margin-bottom:8px;}
-.ownership-row input[type="text"],.ownership-row select{padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:#fff;width:100%;}
+.ownership-row input[type="text"],.ownership-row select{padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:var(--card);color:var(--text);width:100%;}
 .ownership-row .pct-wrap{position:relative;}
 .ownership-row .pct-wrap input{padding:8px 22px 8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;width:100%;text-align:right;}
 .ownership-row .pct-wrap span{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--slate);pointer-events:none;}
@@ -200,13 +284,13 @@ tbody tr:hover{background:#fafcfb;}
 .combo-wrap{position:relative;}
 .combo-dropdown{
   position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:30;
-  background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(20,30,50,.12);
+  background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);
   max-height:220px;overflow-y:auto;
 }
 .combo-option{padding:9px 12px;cursor:pointer;font-size:13.5px;display:flex;gap:8px;align-items:baseline;}
 .combo-option:hover,.combo-option.active{background:var(--teal-light);}
 .combo-option .combo-code{font-weight:600;color:var(--teal);min-width:20px;}
-.combo-option .combo-name{color:var(--ink);}
+.combo-option .combo-name{color:var(--text);}
 .combo-empty{padding:10px 12px;font-size:13px;color:var(--slate);}
 
 /* ---------- Bagan Struktur Perusahaan (Induk / Anak / Cucu) ---------- */
@@ -216,9 +300,9 @@ tbody tr:hover{background:#fafcfb;}
   position:relative;width:100%;height:560px;overflow:hidden;
   border:1px solid var(--border);border-radius:var(--radius);
   background:
-    linear-gradient(90deg, rgba(20,30,50,.045) 1px, transparent 1px) 0 0/26px 26px,
-    linear-gradient(rgba(20,30,50,.045) 1px, transparent 1px) 0 0/26px 26px,
-    #fafbfb;
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0/26px 26px,
+    linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0/26px 26px,
+    var(--surface-2);
   cursor:grab;touch-action:none;
 }
 .org-chart-viewport.dragging{cursor:grabbing;}
@@ -249,14 +333,14 @@ tbody tr:hover{background:#fafcfb;}
 .org-node{
   border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;
   display:inline-flex;flex-direction:column;gap:6px;
-  background:#fff;font-size:13px;line-height:1.45;
-  box-shadow:0 1px 3px rgba(20,30,50,.06);white-space:normal;cursor:pointer;
+  background:var(--card);font-size:13px;line-height:1.45;
+  box-shadow:0 1px 3px rgba(0,0,0,.12);white-space:normal;cursor:pointer;
   transition:box-shadow .15s,transform .15s;width:max-content;min-width:210px;max-width:340px;text-align:left;
 }
 .org-node:hover{box-shadow:0 4px 10px rgba(20,30,50,.12);transform:translateY(-1px);}
-.org-node.level-0{background:#fff;color:var(--ink);border-color:var(--border);}
-.org-node.level-1{background:#fff;color:var(--ink);border-color:var(--border);}
-.org-node.level-2{background:#fff;color:var(--ink);border-color:var(--border);}
+.org-node.level-0{background:var(--card);color:var(--text);border-color:var(--border);}
+.org-node.level-1{background:var(--card);color:var(--text);border-color:var(--border);}
+.org-node.level-2{background:var(--card);color:var(--text);border-color:var(--border);}
 .org-node-name{font-weight:700;font-size:14px;white-space:normal;text-align:center;width:100%;}
 .org-node-header{display:flex;flex-direction:column;gap:6px;}
 .org-node-logo-wrap{display:flex;justify-content:center;width:100%;}
@@ -274,10 +358,12 @@ tbody tr:hover{background:#fafcfb;}
 .badge.danger{background:var(--danger-light);color:var(--danger);}
 .badge.blue{background:#e9eef9;color:#3B5BA5;}
 .badge.purple{background:#f1ecfa;color:#6b46c1;}
+[data-theme="dark"] .badge.blue{background:#1c2a4a;color:#8fa8e8;}
+[data-theme="dark"] .badge.purple{background:#2c2247;color:#c3a6f2;}
 
 .pill-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
 .pill{
-  padding:7px 14px;border-radius:100px;border:1px solid var(--border);background:#fff;
+  padding:7px 14px;border-radius:100px;border:1px solid var(--border);background:var(--card);
   font-size:13px;cursor:pointer;color:var(--slate);
 }
 .pill.active{background:var(--ink);color:#fff;border-color:var(--ink);}
@@ -290,14 +376,14 @@ tbody tr:hover{background:#fafcfb;}
 .modal-backdrop{
   position:fixed;inset:0;background:rgba(15,20,30,0.55);display:flex;align-items:center;justify-content:center;z-index:50;
 }
-.modal{background:#fff;border-radius:12px;width:460px;max-width:92vw;padding:24px;max-height:88vh;overflow-y:auto;}
+.modal{background:var(--card);color:var(--text);border-radius:12px;width:460px;max-width:92vw;padding:24px;max-height:88vh;overflow-y:auto;}
 .modal h3{font-family:var(--font-display);margin:0 0 4px 0;}
 .modal .modal-sub{font-size:12.5px;color:var(--slate);margin-bottom:16px;}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
 
 .dropzone{
   border:2px dashed var(--border);border-radius:var(--radius);padding:34px 20px;text-align:center;
-  cursor:pointer;color:var(--slate);background:#fafbfb;
+  cursor:pointer;color:var(--slate);background:var(--surface-2);
 }
 .dropzone.drag{border-color:var(--teal);background:var(--teal-light);color:var(--teal);}
 .dropzone svg{width:30px;height:30px;margin-bottom:8px;opacity:.6;}
@@ -319,10 +405,10 @@ tbody tr:hover{background:#fafcfb;}
 .auth-error{background:var(--danger-light);color:var(--danger);font-size:12.5px;padding:9px 11px;border-radius:7px;margin-bottom:12px;}
 .auth-hint{font-size:11.5px;color:var(--slate-light);margin-top:14px;line-height:1.5;}
 
-.chart-box{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
+.chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
 .chart-box canvas{max-height:280px;}
 
-.ratio-note{font-size:12px;color:var(--slate);background:#fafbfb;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:10px;line-height:1.5;}
+.ratio-note{font-size:12px;color:var(--slate);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:10px;line-height:1.5;}
 .bb-akun-row:hover{background:var(--teal-light);}
 .bb-ledger-row:hover{background:var(--teal-light);}
 .ledger-group summary::-webkit-details-marker{display:none;}
@@ -336,7 +422,7 @@ tbody tr:hover{background:#fafcfb;}
 .sync-badge{
   display:flex;align-items:center;gap:7px;
   font-size:12.5px;color:var(--slate);
-  background:#fafbfb;border:1px solid var(--border);
+  background:var(--surface-2);border:1px solid var(--border);
   padding:6px 12px;border-radius:100px;
   cursor:default;user-select:none;white-space:nowrap;
 }
@@ -355,6 +441,27 @@ tbody tr:hover{background:#fafcfb;}
   .sidebar.open{transform:translateX(0);}
   .main{margin-left:0;}
   .grid-4,.grid-3,.grid-2{grid-template-columns:1fr;}
+}
+
+/* ---------- Tombol menu (hamburger) & backdrop untuk sidebar mobile ---------- */
+.menu-toggle-btn{
+  display:none;align-items:center;justify-content:center;flex-shrink:0;
+  width:36px;height:36px;border-radius:8px;
+  border:1px solid var(--border);background:var(--surface-2);color:var(--text);
+  cursor:pointer;
+}
+.menu-toggle-btn:hover{background:var(--border);}
+.menu-toggle-btn svg{width:18px;height:18px;flex-shrink:0;}
+.sidebar-backdrop{
+  display:none;position:fixed;inset:0;background:rgba(10,14,24,0.5);z-index:39;
+}
+/* Aturan responsif ditulis SETELAH aturan dasar di atas supaya menang
+   pada urutan cascade (spesifisitas sama, urutan sumber yang menentukan)
+   — kalau ditulis sebelum aturan dasar, display:none dasar akan selalu
+   menimpa display:flex ini walau media query aktif. */
+@media(max-width:900px){
+  .menu-toggle-btn{display:flex;}
+  .sidebar-backdrop.show{display:block;}
 }
 
 </style>
@@ -1410,14 +1517,18 @@ function derivePerubahanModalFromLedger(accounts, arusKas, labaBersih, penyesuai
 function withPerubahanModal(modal, neracaDisplay) {
   if (!modal || !neracaDisplay) return modal;
   const periodeIni = neracaDisplay.pendapatanPeriodeIni || 0;
+  // neracaDisplay.pendapatanSampaiTahunLalu SUDAH menggabungkan
+  // penyesuaianSaldoAwalLabaRugi (lihat withRetainedEarnings pada Neraca) —
+  // jadi di sini TIDAK perlu menambahkan modal.penyesuaianSaldoAwalLabaRugi
+  // lagi, supaya tidak dobel hitung. labaDitahanAwal & totalEkuitasAkhir
+  // otomatis ikut memasukkan penyesuaian tsb lewat sampaiTahunLalu.
   const sampaiTahunLalu = neracaDisplay.pendapatanSampaiTahunLalu || 0;
-  const penyesuaian = modal.penyesuaianSaldoAwalLabaRugi || 0;
   const labaDitahanAwal = sampaiTahunLalu + (periodeIni - modal.labaBersihPeriode);
   return {
     ...modal,
     labaDitahanAwal,
     saldoAwalEkuitas: modal.modalDisetorAwal + labaDitahanAwal,
-    totalEkuitasAkhirTermasukLabaDitahan: modal.modalDisetorAkhir + periodeIni + sampaiTahunLalu + penyesuaian
+    totalEkuitasAkhirTermasukLabaDitahan: modal.modalDisetorAkhir + periodeIni + sampaiTahunLalu
   };
 }
 
@@ -2026,6 +2137,45 @@ function translateAuthError(err) {
   return map[err.code] || ('Terjadi kesalahan: ' + err.message);
 }
 
+// ---------- Tema (Light / Dark Mode) ----------
+// Preferensi disimpan di localStorage supaya tetap konsisten antar sesi &
+// antar reload. Penerapan awal (sebelum JS ini sempat jalan) sudah
+// dilakukan lebih dulu oleh script anti-FOUC kecil di <head>, supaya
+// halaman tidak "berkedip" terang sesaat sebelum berganti ke gelap.
+const THEME_STORAGE_KEY = 'integrida-theme';
+
+function getStoredTheme() {
+  try { return localStorage.getItem(THEME_STORAGE_KEY); } catch (e) { return null; }
+}
+
+function applyTheme(theme) {
+  const t = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem(THEME_STORAGE_KEY, t); } catch (e) {}
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  if (metaTheme) metaTheme.setAttribute('content', t === 'dark' ? '#0F1420' : '#16213A');
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+  paintThemeToggleBtn();
+}
+
+const THEME_ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg>';
+const THEME_ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+
+function paintThemeToggleBtn() {
+  const btn = document.getElementById('theme-toggle-btn');
+  if (!btn) return;
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  // Ikon menunjukkan mode yang akan DIAKTIFKAN jika tombol diklik (pola
+  // umum toggle tema): matahari saat sedang gelap (klik -> ke terang),
+  // bulan saat sedang terang (klik -> ke gelap).
+  btn.innerHTML = isDark ? THEME_ICON_SUN : THEME_ICON_MOON;
+  btn.title = isDark ? 'Ganti ke Mode Terang' : 'Ganti ke Mode Gelap';
+}
+
 // ---------- Shell ----------
 function renderShell() {
   const root = document.getElementById('root');
@@ -2049,13 +2199,20 @@ function renderShell() {
           <button class="logout-btn" id="logout-btn">Keluar</button>
         </div>
       </nav>
+      <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
       <div class="main">
         <div class="topbar">
-          <div>
-            <h1 id="topbar-title">Dashboard</h1>
-            <div class="sub" id="topbar-sub">Ringkasan seluruh perusahaan</div>
+          <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+            <button class="menu-toggle-btn" id="menu-toggle-btn" title="Buka menu" aria-label="Buka menu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+            </button>
+            <div style="min-width:0;">
+              <h1 id="topbar-title">Dashboard</h1>
+              <div class="sub" id="topbar-sub">Ringkasan seluruh perusahaan</div>
+            </div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;">
+            <button class="theme-toggle-topbar" id="theme-toggle-btn"></button>
             <div class="sync-badge" id="sync-badge"></div>
             <button class="btn ghost" id="refresh-btn">Muat ulang data</button>
           </div>
@@ -2069,12 +2226,32 @@ function renderShell() {
   const navList = document.getElementById('nav-list');
   NAV_ITEMS.forEach(item => {
     const navEl = el(`<div class="nav-item" data-view="${item.id}">${icon(item.icon)}<span>${item.label}</span></div>`);
-    navEl.addEventListener('click', () => setView(item.id));
+    navEl.addEventListener('click', () => { setView(item.id); closeMobileSidebar(); });
     navList.appendChild(navEl);
   });
 
   document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
   document.getElementById('refresh-btn').addEventListener('click', reloadCompanies);
+
+  paintThemeToggleBtn();
+  document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
+
+  document.getElementById('menu-toggle-btn').addEventListener('click', openMobileSidebar);
+  document.getElementById('sidebar-backdrop').addEventListener('click', closeMobileSidebar);
+}
+
+// ---------- Sidebar mobile (drawer) ----------
+// Di layar sempit (<=900px, lihat media query .sidebar) sidebar
+// disembunyikan lewat transform:translateX(-100%) supaya tidak memakan
+// tempat konten. Fungsi berikut menampilkannya sebagai drawer di atas
+// konten (dengan backdrop gelap yang bisa diklik untuk menutup).
+function openMobileSidebar() {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sidebar-backdrop').classList.add('show');
+}
+function closeMobileSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-backdrop').classList.remove('show');
 }
 
 function setView(viewId) {
@@ -3252,7 +3429,7 @@ function businessInfoHTML(company, periodCount) {
         <div class="grid grid-4" style="gap:14px;margin-bottom:16px;">
           <div>
             <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px;">Kode</div>
-            <a href="#" id="edit-company-code" style="font-size:13.5px;color:var(--ink);text-decoration:none;" title="Klik untuk mengubah kode">${company.code ? escapeHTML(company.code) : '<span style="color:var(--slate-light);font-style:italic;">+ kode</span>'}</a>
+            <a href="#" id="edit-company-code" style="font-size:13.5px;color:var(--text);text-decoration:none;" title="Klik untuk mengubah kode">${company.code ? escapeHTML(company.code) : '<span style="color:var(--slate-light);font-style:italic;">+ kode</span>'}</a>
           </div>
           <div>
             <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px;">Klasifikasi</div>
@@ -3260,7 +3437,7 @@ function businessInfoHTML(company, periodCount) {
           </div>
           <div>
             <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px;">Induk Perusahaan</div>
-            <a href="#" id="edit-company-parent" style="font-size:13.5px;color:var(--ink);text-decoration:none;" title="Klik untuk mengubah induk perusahaan">${parentLabel}</a>
+            <a href="#" id="edit-company-parent" style="font-size:13.5px;color:var(--text);text-decoration:none;" title="Klik untuk mengubah induk perusahaan">${parentLabel}</a>
           </div>
           <div>
             <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px;">Jumlah Periode Tersimpan</div>
@@ -3491,10 +3668,15 @@ function withRetainedEarnings(neraca, statements, selected) {
   // akumulasi yang sama (lihat catatan di atas computeRetainedEarnings).
   const penyesuaian = neraca.penyesuaianSaldoAwalLabaRugi || 0;
   const { periodeIni, sampaiTahunLalu } = computeRetainedEarnings(statements, selected, penyesuaian);
+  // Baris "Penyesuaian Saldo Awal Akun Laba Rugi (Belum Ditutup)" tidak lagi
+  // ditampilkan terpisah pada Neraca — nilainya digabungkan ke "Pendapatan
+  // s.d. Tahun Lalu (Laba Ditahan)" (sampaiTahunLalu selalu 0 saat penyesuaian
+  // ini ada, lihat computeRetainedEarnings, jadi penggabungan ini tidak
+  // dobel hitung). Total Ekuitas Termasuk Laba tidak berubah nilainya.
   return {
     ...neraca,
     pendapatanPeriodeIni: periodeIni,
-    pendapatanSampaiTahunLalu: sampaiTahunLalu,
+    pendapatanSampaiTahunLalu: sampaiTahunLalu + penyesuaian,
     totalEkuitasTermasukLaba: (neraca.totalEkuitas || 0) + periodeIni + sampaiTahunLalu + penyesuaian
   };
 }
@@ -3515,7 +3697,7 @@ function neracaGroupedTable(neraca) {
     ${groupRow('Liabilitas')}
     ${row('totalKewajibanLancar')}${row('totalKewajibanJangkaPanjang')}${rowBold('totalKewajiban')}
     ${groupRow('Ekuitas')}
-    ${rowBold('totalEkuitas')}${row('penyesuaianSaldoAwalLabaRugi')}${row('pendapatanPeriodeIni')}${row('pendapatanSampaiTahunLalu')}${rowHighlight('totalEkuitasTermasukLaba')}
+    ${rowBold('totalEkuitas')}${row('pendapatanSampaiTahunLalu')}${row('pendapatanPeriodeIni')}${rowHighlight('totalEkuitasTermasukLaba')}
   </tbody></table>${neracaBalanceSummary(neraca)}`;
 }
 
@@ -3666,7 +3848,7 @@ function perubahanModalTable(modal, syncFlags) {
     ${groupLabel('Pengurangan')}
     ${line('Penarikan Modal Pemilik/Dividen', -modal.penarikanModal, 'penarikanModal')}
     ${highlight('Modal Disetor Akhir Periode', modal.modalDisetorAkhir, 'modalDisetorAkhir')}
-    ${modal.penyesuaianSaldoAwalLabaRugi ? line('Penyesuaian Saldo Awal Akun Laba Rugi (Belum Ditutup)', modal.penyesuaianSaldoAwalLabaRugi, 'penyesuaianSaldoAwalLabaRugi') : ''}
+    ${!hasHistori && modal.penyesuaianSaldoAwalLabaRugi ? line('Penyesuaian Saldo Awal Akun Laba Rugi (Belum Ditutup)', modal.penyesuaianSaldoAwalLabaRugi, 'penyesuaianSaldoAwalLabaRugi') : ''}
     ${hasHistori
       ? highlight('Saldo Akhir Ekuitas (Termasuk Laba Ditahan)', modal.totalEkuitasAkhirTermasukLabaDitahan, 'totalEkuitasAkhirTermasukLabaDitahan')
       : highlight('Total Ekuitas Akhir Periode (Termasuk Laba Periode Ini)', modal.totalEkuitasAkhir, 'totalEkuitasAkhir')}
@@ -3684,7 +3866,7 @@ function ledgerAccountRow(a) {
   return `
     <div class="bb-ledger-row" data-idx="${a._idx}" title="Klik untuk melihat rincian transaksi"
          style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;">
-      <span style="color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${codeTag}${a.name || '(tanpa nama)'}</span>
+      <span style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${codeTag}${a.name || '(tanpa nama)'}</span>
       <span class="num" style="font-family:var(--font-mono);flex-shrink:0;">${formatIDR(a.saldoAkhir)}</span>
     </div>`;
 }
@@ -3969,7 +4151,7 @@ function derivedFieldRow(key, value, contributions, formulaFn, formulaData, labe
       return `
         <div class="bb-akun-row" data-field="${key}" data-idx="${i}" title="Klik untuk melihat rincian transaksi"
              style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;">
-          <span style="color:var(--ink);">${codeTag}${c.name || '(tanpa nama)'}</span>
+          <span style="color:var(--text);">${codeTag}${c.name || '(tanpa nama)'}</span>
           <span style="display:flex;align-items:center;flex-shrink:0;">
             <span class="num" style="font-family:var(--font-mono);">${formatIDR(c.amount)}</span>
             ${syncKeyStr ? syncCheckboxHtml(syncKeyStr, syncFlags) : ''}
@@ -4063,7 +4245,7 @@ function derivedNeracaGrouped(neraca, contributions, syncFlags) {
     ${neracaGroupHeader('Liabilitas')}
     ${row('totalKewajibanLancar')}${row('totalKewajibanJangkaPanjang')}${highlight('totalKewajiban')}
     ${neracaGroupHeader('Ekuitas')}
-    ${row('totalEkuitas')}${row('penyesuaianSaldoAwalLabaRugi')}${row('pendapatanPeriodeIni')}${row('pendapatanSampaiTahunLalu')}${highlight('totalEkuitasTermasukLaba')}
+    ${row('totalEkuitas')}${row('pendapatanSampaiTahunLalu')}${row('pendapatanPeriodeIni')}${highlight('totalEkuitasTermasukLaba')}
   `;
 }
 

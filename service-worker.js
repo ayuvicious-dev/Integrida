@@ -188,7 +188,40 @@
 //      untuk transaksi ini setelah update ke v31, itu tandanya browser
 //      masih memuat versi lama — cek label "Build v31" di sidebar untuk
 //      memastikan versi sudah ter-update.
-const CACHE_NAME = 'integrida-cache-v31';
+// v32: index.html diperbarui — menambahkan fitur Light Mode / Dark Mode
+//      (toggle "Mode Gelap"/"Mode Terang" di sidebar, preferensi
+//      tersimpan di localStorage, mengikuti preferensi sistem jika belum
+//      pernah diatur). Warna sidebar kini ikut menyesuaikan tema: navy
+//      brand di light mode (seperti sebelumnya), dan nuansa gelap yang
+//      senada dengan latar aplikasi di dark mode — bukan lagi warna
+//      navy terang yang sama persis di kedua mode.
+// v33: index.html diperbarui — tombol toggle tema dipindah dari sidebar
+//      ke topbar (kini ikon bundar di sebelah kiri badge "Tersinkron"),
+//      dan warna sidebar di LIGHT MODE diubah dari navy gelap menjadi
+//      putih/terang senada dengan latar aplikasi (teks & ikon jadi gelap,
+//      item aktif memakai tint teal muda), sementara sidebar di DARK MODE
+//      tetap gelap senada dengan latar gelap seperti pada v32.
+// v34: index.html diperbarui — sidebar kini bisa dibuka di layar sempit
+//      (mis. mode "split view" di tablet/HP). Sebelumnya CSS drawer
+//      sidebar untuk layar <=900px sudah ada tapi TIDAK ADA tombol untuk
+//      membukanya, sehingga sidebar sama sekali tidak terlihat/tidak
+//      terjangkau. Sekarang ditambahkan: tombol hamburger (☰) di topbar
+//      (kiri judul halaman, hanya tampil di layar sempit), sidebar
+//      tampil sebagai drawer di atas konten saat tombol diklik, beserta
+//      backdrop gelap yang bisa diklik untuk menutup, dan drawer otomatis
+//      tertutup begitu satu menu navigasi dipilih.
+// v35: index.html diperbarui — perbaikan bug tombol hamburger (menu
+//      sidebar mobile) dari v34 yang TIDAK MUNCUL sama sekali. Penyebab:
+//      aturan CSS dasar ".menu-toggle-btn{display:none;...}" tertulis
+//      SETELAH aturan "@media(max-width:900px){.menu-toggle-btn{display:
+//      flex;}}" di dalam stylesheet — karena spesifisitas kedua aturan
+//      sama, urutan penulisan yang menentukan pemenang, sehingga aturan
+//      dasar (belakangan) selalu menimpa aturan responsif (duluan),
+//      membuat tombol selalu tersembunyi walau layar sempit/mode split.
+//      Sekarang urutannya dibalik (aturan dasar duluan, override
+//      responsif belakangan) sehingga tombol benar-benar tampil di
+//      layar <=900px seperti seharusnya.
+const CACHE_NAME = 'integrida-cache-v35';
 const APP_SHELL = [
   './',
   './index.html',
