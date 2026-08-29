@@ -50,6 +50,13 @@
   --border:#E4E6E9;
   --grid-line:rgba(20,30,50,.045);
 
+  /* Latar kotak logo perusahaan (mis. di Grid Perusahaan & Bagan
+     Struktur) — di light mode putih penuh senada dengan kartu, di dark
+     mode memakai off-white lembut (bukan putih terang) supaya logo tetap
+     kontras/terbaca namun tidak menyilaukan di atas latar gelap. */
+  --logo-box-bg:#FFFFFF;
+  --logo-box-border:rgba(0,0,0,0.08);
+
   /* Warna khusus sidebar — di light mode memakai palet terang senada
      dengan latar aplikasi (bukan lagi navy gelap), di dark mode memakai
      palet gelap senada dengan latar gelap (lihat override
@@ -83,6 +90,9 @@
   --slate-light:#6E7890;
   --border:#2A3450;
   --grid-line:rgba(255,255,255,.05);
+
+  --logo-box-bg:#C7CCD8;
+  --logo-box-border:rgba(255,255,255,0.10);
 
   --ink:#2A3C63;
   --ink-soft:#38507f;
@@ -135,6 +145,18 @@ input,select{font-family:inherit;}
   border-right:1px solid var(--sidebar-border);
   background-image:repeating-linear-gradient(to bottom, rgba(120,130,160,0.035) 0px, rgba(120,130,160,0.035) 1px, transparent 1px, transparent 28px);
   transition:background-color .15s ease;
+  /* z-index didefinisikan langsung di sini (bukan hanya di dalam media
+     query mobile) supaya sidebar SELALU dijamin berada di atas topbar
+     (yang punya position:sticky + z-index:5), di semua ukuran layar.
+     Sebelumnya z-index hanya di-set di dalam @media(max-width:900px),
+     sehingga urutan tumpukan sidebar vs topbar jadi ambigu di sebagian
+     browser mobile (terutama WebKit) — elemen position:sticky kadang
+     dirender di atas elemen position:fixed lain walau z-index-nya lebih
+     rendah, sebelum ia pernah "aktif" oleh event scroll. Ini yang
+     menyebabkan judul topbar terlihat menabrak/menimpa header sidebar
+     saat drawer mobile dibuka.
+  */
+  z-index:40;
 }
 .sidebar-brand{
   display:flex;align-items:center;gap:10px;
@@ -437,7 +459,7 @@ tbody tr:hover{background:var(--surface-2);}
 @media(max-width:640px){ .sync-badge .sync-time{display:none;} }
 
 @media(max-width:900px){
-  .sidebar{transform:translateX(-100%);transition:transform .2s ease;z-index:40;}
+  .sidebar{transform:translateX(-100%);transition:transform .2s ease;}
   .sidebar.open{transform:translateX(0);}
   .main{margin-left:0;}
   .grid-4,.grid-3,.grid-2{grid-template-columns:1fr;}
@@ -3284,7 +3306,7 @@ function companyAvatarHTML(company, size, radius, opts) {
     // kartu (bukan kotak persegi kecil), supaya logo yang proporsinya
     // melebar (wordmark seperti "KAMIL") bisa tampil jauh lebih besar.
     const boxWidthCss = opts.stretchWidth ? '100%' : `${size}px`;
-    const boxStyle = opts.transparent ? 'background:transparent;border:none;' : 'background:#fff;border:1px solid rgba(0,0,0,0.08);';
+    const boxStyle = opts.transparent ? 'background:transparent;border:none;' : 'background:var(--logo-box-bg);border:1px solid var(--logo-box-border);';
     const pad = opts.transparent ? 0 : Math.max(2, Math.round(size * 0.08));
     return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${boxWidthCss};height:${size}px;border-radius:${radius}px;flex-shrink:0;${boxStyle}overflow:hidden;box-sizing:border-box;padding:${pad}px;"><img src="${company.logoUrl}" alt="Logo ${escapeHTML(company.name || '')}" style="max-width:100%;max-height:100%;object-fit:contain;"></span>`;
   }
