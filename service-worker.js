@@ -173,7 +173,22 @@
 //      Besar (diverifikasi manual). Tidak ada perubahan pada format file
 //      Buku Besar yang diimpor — data yang sudah ada (Saldo Awal & Saldo
 //      Akhir per akun) sudah cukup.
-const CACHE_NAME = 'integrida-cache-v30';
+// v31: index.html diperbarui — HANYA menaikkan versi build (ditandai
+//      "Build v31" di sidebar) untuk memudahkan verifikasi bahwa
+//      browser sudah memuat kode terbaru, bukan versi lama yang masih
+//      ter-cache. TIDAK ADA perubahan logika arus kas: skema mutasi
+//      Saldo Awal→Saldo Akhir per akun dari v30 sudah diverifikasi
+//      cocok 1:1 dengan Laporan Arus Kas asli software akuntansi
+//      (termasuk kasus akun "Hutang PT. Kamil Tria Niaga" yang berisi
+//      transaksi berketerangan "Pembuatan merk mesin" — akun ini tetap
+//      dihitung sebagai Kewajiban Jangka Pendek/Aktivitas Operasi,
+//      bukan Aset Tetap/Investasi, karena klasifikasinya berdasarkan
+//      kode+nama AKUN, bukan kata kunci pada Keterangan transaksi).
+//      Jika hasil di aplikasi masih menunjukkan "Pembelian Aset Tetap"
+//      untuk transaksi ini setelah update ke v31, itu tandanya browser
+//      masih memuat versi lama — cek label "Build v31" di sidebar untuk
+//      memastikan versi sudah ter-update.
+const CACHE_NAME = 'integrida-cache-v31';
 const APP_SHELL = [
   './',
   './index.html',
