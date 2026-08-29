@@ -2309,50 +2309,25 @@ function lastCompletedPeriod(periodType, refDate) {
   return periodFromSequenceNumber(periodSequenceNumber(y, 'bulanan', m) - 1, 'bulanan');
 }
 
-// Menghitung progres impor satu perusahaan: dari periode PERTAMA yang
-// pernah diimpor perusahaan itu, sampai periode terakhir yang seharusnya
-// sudah selesai per hari ini, berapa persen yang datanya sudah ada.
-// Mengembalikan null kalau perusahaan belum punya data sama sekali.
-function companyImportProgress(companyId, allStatements, refDate) {
-  const own = (allStatements || []).filter(s => s.companyId === companyId);
-  if (!own.length) return null;
-
-  // Perusahaan bisa saja pernah diimpor dengan lebih dari satu jenis
-  // periode (mis. data lama bulanan, lalu pindah ke triwulan) — pakai
-  // jenis yang paling sering dipakai supaya progres tetap representatif.
-  const countByType = {};
-  own.forEach(s => { countByType[s.periodType] = (countByType[s.periodType] || 0) + 1; });
-  const periodType = Object.keys(countByType).sort((a, b) => countByType[b] - countByType[a])[0];
-  const relevant = own.filter(s => s.periodType === periodType);
-
-  const seqSet = new Set(relevant.map(s => periodSequenceNumber(s.year, periodType, s.periodIndex)));
-  const firstSeq = Math.min(...seqSet);
-  const target = lastCompletedPeriod(periodType, refDate || new Date());
-  const targetSeq = periodSequenceNumber(target.year, periodType, target.periodIndex);
-
-  // Kalau data pertama perusahaan ini lebih baru dari periode yang
-  // "seharusnya" sudah selesai (mis. perusahaan baru mulai bulan ini),
-  // belum ada kewajiban impor yang terlewat -> anggap 100% (tidak ada
-  // yang tertunggak).
-  if (firstSeq > targetSeq) return { checked: 1, total: 1, periodType, targetLabel: periodLabelFor(target.year, periodType, target.periodIndex) };
-
-  const total = targetSeq - firstSeq + 1;
-  let checked = 0;
-  for (let seq = firstSeq; seq <= targetSeq; seq++) if (seqSet.has(seq)) checked++;
-  return { checked, total, periodType, targetLabel: periodLabelFor(target.year, periodType, target.periodIndex) };
-}
-
 // Merender progress bar kecil pada kartu perusahaan (grid Perusahaan)
-// berdasarkan hasil companyImportProgress(). null -> belum ada data sama
-// sekali, tampil sebagai teks abu-abu tanpa bar.
+// berdasarkan hasil companySyncProgress() (lihat definisinya di dekat
+// statementSyncProgress, karena memakai logika persis yang sama).
+// null -> perusahaan belum punya data sama sekali. 'loading' -> rincian
+// Buku Besar sebagian periode masih dimuat dari server (companySyncProgress
+// akan memicu refreshCompanyGridProgress() otomatis begitu selesai).
 function companyProgressHTML(progress) {
-  if (!progress) return `<div class="company-card-progress-label" style="justify-content:center;color:var(--slate-light);">Belum ada data</div>`;
-  const pct = Math.round((progress.checked / progress.total) * 100);
+  if (progress === null) return `<div class="company-card-progress-label" style="justify-content:center;color:var(--slate-light);">Belum ada data</div>`;
+  if (progress === 'loading') return `<div class="company-card-progress-label" style="justify-content:center;color:var(--slate-light);">Memuat…</div>`;
+  const { checked, total, yearFrom, yearTo } = progress;
+  if (total === 0) return `<div class="company-card-progress-label" style="justify-content:center;color:var(--slate-light);">– Tidak ada baris</div>`;
+  const yearLabel = yearFrom === yearTo ? `Tahun ${yearFrom}` : `Tahun ${yearFrom}–${yearTo}`;
+  const yearLabelShort = yearFrom === yearTo ? `${yearFrom}` : `${yearFrom}–${yearTo}`;
+  const pct = Math.round((checked / total) * 100);
   const color = pct >= 100 ? 'var(--teal)' : (pct > 0 ? '#c9970c' : 'var(--slate-light)');
   return `
-    <div class="company-card-progress" title="Impor laporan keuangan s.d. ${escapeHTML(progress.targetLabel)}: ${progress.checked}/${progress.total} periode (${pct}%)">
+    <div class="company-card-progress" title="Persentase Sinkron seluruh periode (sama seperti kolom Persentase Sinkron di Riwayat Impor), ${escapeHTML(yearLabel)}: ${checked}/${total} baris (${pct}%)">
       <div class="company-card-progress-bar"><div class="company-card-progress-fill" style="width:${pct}%;background:${color};"></div></div>
-      <div class="company-card-progress-label"><span style="font-weight:700;color:${color};">${pct}%${pct >= 100 ? ' ✓' : ''}</span><span>s.d. ${escapeHTML(progress.targetLabel)}</span></div>
+      <div class="company-card-progress-label"><span style="font-weight:700;color:${color};">${pct}%${pct >= 100 ? ' ✓' : ''}</span><span>${checked}/${total} tersinkron (${escapeHTML(yearLabelShort)})</span></div>
     </div>`;
 }
 
@@ -2476,7 +2451,7 @@ function fillCompanyGrid(list, opts) {
       ${companyAvatarHTML(c, 108, 20)}
       <div class="company-card-name">${escapeHTML(c.name)}</div>
       ${c.code ? `<div class="company-card-code">${escapeHTML(c.code)}</div>` : ''}
-      ${companyProgressHTML(companyImportProgress(c.id, state.companiesGridStatements))}
+      ${companyProgressHTML(companySyncProgress(c.id, state.companiesGridStatements))}
     </div>
   `).join('');
 
@@ -3892,11 +3867,17 @@ function countSyncCheckboxes(html) {
 // lazy per periode (lihat ledgerCache); kalau untuk periode ini belum
 // dimuat, fungsi ini men-trigger pemuatannya (sama seperti untuk periode
 // yang sedang aktif dipilih) dan mengembalikan null untuk sementara —
-// paintCompanyDetail() akan dipanggil ulang otomatis begitu selesai dimuat.
+// onLoaded() akan dipanggil ulang otomatis begitu selesai dimuat (default:
+// paintCompanyDetail(), dipakai oleh tabel Riwayat Impor; kartu grid
+// Perusahaan/Utama mengoper refreshCompanyGridProgress() lewat
+// companySyncProgress() di bawah, supaya keduanya tetap konsisten).
 // activeContributions (variabel global dipakai oleh klik baris akun) sengaja
 // disimpan & dikembalikan lagi supaya penghitungan ini tidak mengubah
 // perilaku klik-untuk-detail pada laporan periode yang sedang tampil.
-function statementSyncProgress(statement, allStatements, companyId) {
+function statementSyncProgress(statement, allStatements, companyId, onLoaded) {
+  const notify = onLoaded || (() => {
+    if (state.view === 'company-detail' && state.companyDetailId === companyId) paintCompanyDetail(allStatements);
+  });
   const savedActiveContributions = activeContributions;
   try {
     let neracaBaseS = statement.neraca;
@@ -3914,7 +3895,7 @@ function statementSyncProgress(statement, allStatements, companyId) {
           DB.getLedgerAccounts(companyId, statement.id)
             .then((accounts) => {
               ledgerCache[statement.id] = accounts;
-              if (state.view === 'company-detail' && state.companyDetailId === companyId) paintCompanyDetail(allStatements);
+              notify();
             })
             .catch((err) => {
               delete ledgerCache[statement.id];
@@ -3938,6 +3919,38 @@ function statementSyncProgress(statement, allStatements, companyId) {
   } finally {
     activeContributions = savedActiveContributions;
   }
+}
+
+// Menghitung progres Persentase Sinkron TOTAL satu perusahaan: menjumlahkan
+// checkbox "Sinkron" (checked & total) dari SELURUH periode yang pernah
+// diimpor perusahaan ini, memakai statementSyncProgress() per periode —
+// persis rumus yang sama dengan kolom "Persentase Sinkron" di tabel
+// Riwayat Impor, hanya digabung lintas periode. Dipakai oleh kartu grid
+// Perusahaan (halaman Utama/Perusahaan) supaya kedua angka selalu konsisten.
+// Mengembalikan null kalau perusahaan belum punya periode sama sekali,
+// atau string 'loading' kalau rincian Buku Besar sebagian periode masih
+// dimuat dari server (refreshCompanyGridProgress() dipanggil ulang
+// otomatis oleh statementSyncProgress() begitu pemuatan selesai).
+function companySyncProgress(companyId, allStatements) {
+  const own = (allStatements || []).filter(s => s.companyId === companyId);
+  if (!own.length) return null;
+
+  const notify = () => {
+    if (state.view === 'companies' && state.companiesView !== 'chart') refreshCompanyGridProgress();
+  };
+
+  let total = 0, checked = 0, stillLoading = false;
+  own.forEach(s => {
+    const p = statementSyncProgress(s, allStatements, companyId, notify);
+    if (p === null) { stillLoading = true; return; }
+    total += p.total;
+    checked += p.checked;
+  });
+  if (stillLoading) return 'loading';
+  const years = own.map(s => s.year).filter(y => y != null);
+  const yearFrom = Math.min(...years);
+  const yearTo = Math.max(...years);
+  return { checked, total, yearFrom, yearTo };
 }
 
 // Merender isi sel kolom "Persentase Sinkron" pada tabel Riwayat Impor

@@ -112,7 +112,22 @@
 //      hari ini Agustus -> periode bulanan terakhir yang dicek = Juli),
 //      berapa persen periode di rentang itu yang datanya sudah ada. 100%
 //      berarti tidak ada periode yang tertunggak/bolong.
-const CACHE_NAME = 'integrida-cache-v24';
+// v25: index.html diperbarui — persentase pada progress bar kartu grid
+//      Perusahaan (halaman Utama/Perusahaan) diganti dari "kelengkapan
+//      periode" menjadi "Persentase Sinkron" yang SAMA PERSIS dengan
+//      kolom Persentase Sinkron di tabel Riwayat Impor (Detail
+//      Perusahaan): checkbox "Sinkron" yang tercentang pada seluruh
+//      baris Neraca/Laba Rugi/Arus Kas/Perubahan Modal, dijumlahkan dari
+//      SELURUH periode perusahaan tsb (companySyncProgress(), memakai
+//      ulang statementSyncProgress() per periode). Kartu kini menampilkan
+//      "Memuat…" sesaat saat rincian Buku Besar sebagian periode masih
+//      diambil dari server, lalu otomatis ter-update begitu selesai.
+// v26: index.html diperbarui — label persentase pada kartu grid
+//      Perusahaan kini menyertakan tahun periode yang dihitung, mis.
+//      "1/58 tersinkron (2023–2026)" atau "(2026)" kalau hanya satu
+//      tahun, supaya jelas rentang periode mana yang diwakili angka itu
+//      (companySyncProgress() kini juga mengembalikan yearFrom/yearTo).
+const CACHE_NAME = 'integrida-cache-v26';
 const APP_SHELL = [
   './',
   './index.html',
