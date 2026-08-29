@@ -99,7 +99,20 @@
 //      (hanya berisi Neraca/Laba Rugi/Arus Kas/Perubahan Modal yang
 //      memang selalu ringkas), sekaligus mempercepat sinkronisasi
 //      realtime lintas perangkat.
-const CACHE_NAME = 'integrida-cache-v22';
+// v23: index.html diperbarui — kolom "Verifikasi" (checkbox tandai-valid
+//      manual per periode) pada tabel Riwayat Impor (Detail Perusahaan)
+//      diganti jadi kolom "Persentase Sinkron": progress bar + persentase
+//      otomatis dari checkbox "Sinkron" yang sudah dicentang di baris-baris
+//      rincian Neraca, Laba Rugi, Arus Kas, & Perubahan Modal pada kartu di
+//      atasnya (bukan lagi status tunggal yang ditandai manual per periode).
+// v24: index.html diperbarui — grid kartu Perusahaan (halaman Perusahaan)
+//      kini menampilkan progress bar persentase impor per perusahaan:
+//      dari periode pertama yang pernah diimpor perusahaan itu sampai
+//      periode terakhir yang seharusnya sudah selesai per hari ini (mis.
+//      hari ini Agustus -> periode bulanan terakhir yang dicek = Juli),
+//      berapa persen periode di rentang itu yang datanya sudah ada. 100%
+//      berarti tidak ada periode yang tertunggak/bolong.
+const CACHE_NAME = 'integrida-cache-v24';
 const APP_SHELL = [
   './',
   './index.html',

@@ -128,6 +128,10 @@ input,select{font-family:inherit;}
 .company-card:hover{border-color:var(--teal);box-shadow:0 6px 18px rgba(22,33,58,0.08);transform:translateY(-2px);}
 .company-card-name{font-weight:600;font-size:14px;color:var(--ink);line-height:1.35;word-break:break-word;}
 .company-card-code{font-size:12px;color:var(--slate);font-family:var(--font-mono);}
+.company-card-progress{width:100%;display:flex;flex-direction:column;gap:4px;margin-top:2px;}
+.company-card-progress-bar{height:5px;border-radius:999px;background:var(--border);overflow:hidden;width:100%;}
+.company-card-progress-fill{height:100%;border-radius:999px;}
+.company-card-progress-label{font-size:11px;color:var(--slate-light);display:flex;justify-content:space-between;width:100%;gap:6px;}
 
 /* ---------- Judul laporan (kop laporan keuangan) ---------- */
 .report-title{margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);text-align:center;}
@@ -1853,6 +1857,7 @@ const state = {
   chartInstances: {},
   unsubCompanies: null,   // listener realtime daftar perusahaan (aktif sepanjang sesi)
   unsubData: null,        // listener realtime data view yang sedang aktif (dashboard/compare/ratios)
+  companiesGridStatements: [], // cache statements semua perusahaan untuk progres impor di grid Perusahaan
   importCompanyId: null,
   importType: 'bukuBesar', // jenis data yang sedang dipilih di halaman Impor Data
   companyDetailId: null,      // perusahaan yang sedang dilihat rinciannya
@@ -2252,6 +2257,105 @@ function companyDisplayLabel(c) {
   return c.code ? `${c.code} — ${c.name}` : c.name;
 }
 
+// ---------- Progres impor per perusahaan (grid kartu Perusahaan) ----------
+// Menampilkan seberapa lengkap riwayat impor laporan keuangan satu
+// perusahaan dibandingkan periode yang "seharusnya" sudah ada sampai saat
+// ini. Contoh: hari ini bulan Agustus -> periode bulanan terakhir yang
+// sudah selesai adalah Juli. Kalau Juli (dan seluruh bulan sebelumnya sejak
+// data pertama perusahaan itu) sudah diimpor, progres = 100%.
+
+const PERIOD_SLOTS_PER_YEAR = { bulanan: 12, triwulan: 4, semester: 2, tahunan: 1 };
+
+// Mengubah satu periode (year, periodType, periodIndex) jadi nomor urut
+// linear, supaya bisa dibandingkan & dihitung selisihnya lintas tahun
+// tanpa perlakuan khusus (mis. Desember -> Januari tahun berikutnya tetap
+// dianggap berurutan satu langkah).
+function periodSequenceNumber(year, periodType, periodIndex) {
+  const slots = PERIOD_SLOTS_PER_YEAR[periodType] || 12;
+  return year * slots + (periodIndex - 1);
+}
+function periodFromSequenceNumber(seq, periodType) {
+  const slots = PERIOD_SLOTS_PER_YEAR[periodType] || 12;
+  const year = Math.floor(seq / slots);
+  const periodIndex = (((seq % slots) + slots) % slots) + 1;
+  return { year, periodType, periodIndex };
+}
+
+// Label singkat untuk satu periode, dipakai pada tooltip kartu perusahaan
+// (mis. "Juli 2026", "Triwulan II 2026", "Semester I 2026", "Tahun 2026").
+function periodLabelFor(year, periodType, periodIndex) {
+  if (periodType === 'tahunan') return `Tahun ${year}`;
+  if (periodType === 'triwulan') return `Triwulan ${['I', 'II', 'III', 'IV'][periodIndex - 1]} ${year}`;
+  if (periodType === 'semester') return `Semester ${periodIndex === 1 ? 'I' : 'II'} ${year}`;
+  return `${cap(BULAN_ID[periodIndex - 1])} ${year}`;
+}
+
+// Periode terakhir dari suatu jenis periode yang sudah SELESAI (lewat)
+// per tanggal acuan `refDate` — bulanan: bulan penuh sebelum bulan
+// berjalan; triwulan/semester: kuartal/semester penuh sebelum yang
+// berjalan; tahunan: tahun sebelum tahun berjalan (karena tahun berjalan
+// belum tuntas).
+function lastCompletedPeriod(periodType, refDate) {
+  const y = refDate.getFullYear();
+  const m = refDate.getMonth() + 1;
+  if (periodType === 'tahunan') return { year: y - 1, periodType, periodIndex: 1 };
+  if (periodType === 'semester') {
+    return m > 6 ? { year: y, periodType, periodIndex: 1 } : { year: y - 1, periodType, periodIndex: 2 };
+  }
+  if (periodType === 'triwulan') {
+    const currentQ = Math.ceil(m / 3);
+    return periodFromSequenceNumber(periodSequenceNumber(y, 'triwulan', currentQ) - 1, 'triwulan');
+  }
+  return periodFromSequenceNumber(periodSequenceNumber(y, 'bulanan', m) - 1, 'bulanan');
+}
+
+// Menghitung progres impor satu perusahaan: dari periode PERTAMA yang
+// pernah diimpor perusahaan itu, sampai periode terakhir yang seharusnya
+// sudah selesai per hari ini, berapa persen yang datanya sudah ada.
+// Mengembalikan null kalau perusahaan belum punya data sama sekali.
+function companyImportProgress(companyId, allStatements, refDate) {
+  const own = (allStatements || []).filter(s => s.companyId === companyId);
+  if (!own.length) return null;
+
+  // Perusahaan bisa saja pernah diimpor dengan lebih dari satu jenis
+  // periode (mis. data lama bulanan, lalu pindah ke triwulan) — pakai
+  // jenis yang paling sering dipakai supaya progres tetap representatif.
+  const countByType = {};
+  own.forEach(s => { countByType[s.periodType] = (countByType[s.periodType] || 0) + 1; });
+  const periodType = Object.keys(countByType).sort((a, b) => countByType[b] - countByType[a])[0];
+  const relevant = own.filter(s => s.periodType === periodType);
+
+  const seqSet = new Set(relevant.map(s => periodSequenceNumber(s.year, periodType, s.periodIndex)));
+  const firstSeq = Math.min(...seqSet);
+  const target = lastCompletedPeriod(periodType, refDate || new Date());
+  const targetSeq = periodSequenceNumber(target.year, periodType, target.periodIndex);
+
+  // Kalau data pertama perusahaan ini lebih baru dari periode yang
+  // "seharusnya" sudah selesai (mis. perusahaan baru mulai bulan ini),
+  // belum ada kewajiban impor yang terlewat -> anggap 100% (tidak ada
+  // yang tertunggak).
+  if (firstSeq > targetSeq) return { checked: 1, total: 1, periodType, targetLabel: periodLabelFor(target.year, periodType, target.periodIndex) };
+
+  const total = targetSeq - firstSeq + 1;
+  let checked = 0;
+  for (let seq = firstSeq; seq <= targetSeq; seq++) if (seqSet.has(seq)) checked++;
+  return { checked, total, periodType, targetLabel: periodLabelFor(target.year, periodType, target.periodIndex) };
+}
+
+// Merender progress bar kecil pada kartu perusahaan (grid Perusahaan)
+// berdasarkan hasil companyImportProgress(). null -> belum ada data sama
+// sekali, tampil sebagai teks abu-abu tanpa bar.
+function companyProgressHTML(progress) {
+  if (!progress) return `<div class="company-card-progress-label" style="justify-content:center;color:var(--slate-light);">Belum ada data</div>`;
+  const pct = Math.round((progress.checked / progress.total) * 100);
+  const color = pct >= 100 ? 'var(--teal)' : (pct > 0 ? '#c9970c' : 'var(--slate-light)');
+  return `
+    <div class="company-card-progress" title="Impor laporan keuangan s.d. ${escapeHTML(progress.targetLabel)}: ${progress.checked}/${progress.total} periode (${pct}%)">
+      <div class="company-card-progress-bar"><div class="company-card-progress-fill" style="width:${pct}%;background:${color};"></div></div>
+      <div class="company-card-progress-label"><span style="font-weight:700;color:${color};">${pct}%${pct >= 100 ? ' ✓' : ''}</span><span>s.d. ${escapeHTML(progress.targetLabel)}</span></div>
+    </div>`;
+}
+
 // Mengumpulkan seluruh id keturunan (anak, cucu, dst) sebuah perusahaan —
 // dipakai untuk mencegah relasi induk melingkar (circular reference) saat
 // memilih induk perusahaan.
@@ -2271,6 +2375,7 @@ function getDescendantIds(companyId) {
 }
 
 function renderCompanies() {
+  teardownActiveDataListener();
   const root = document.getElementById('view-root');
   const view = state.companiesView === 'chart' ? 'chart' : 'table';
   root.innerHTML = `
@@ -2295,7 +2400,34 @@ function renderCompanies() {
     renderCompaniesChartView();
   } else {
     renderCompaniesGridView();
+    // Listener realtime: persentase progres impor pada tiap kartu otomatis
+    // diperbarui begitu ada data baru diimpor, dari perangkat ini maupun
+    // perangkat lain — sama seperti ringkasan di Dashboard.
+    const companyIds = state.companies.map(c => c.id);
+    if (companyIds.length) {
+      state.unsubData = DB.watchAllStatements(companyIds, (allStatements, meta) => {
+        Sync.report('statements', meta);
+        state.companiesGridStatements = allStatements;
+        if (state.view === 'companies' && state.companiesView !== 'chart') refreshCompanyGridProgress();
+      }, (err) => console.error('Gagal memuat progres impor perusahaan:', err));
+    }
   }
+}
+
+// Menyaring & merender ulang isi grid kartu Perusahaan saja (tanpa
+// menyusun ulang seluruh halaman/kotak pencarian) — dipakai baik saat
+// pengguna mengetik di kotak pencarian maupun saat data progres impor
+// baru selesai dimuat/diperbarui dari listener realtime.
+function refreshCompanyGridProgress() {
+  const searchInput = document.getElementById('company-search');
+  const q = searchInput ? searchInput.value.trim().toLowerCase() : '';
+  const filtered = !q ? state.companies : state.companies.filter(c =>
+    String(c.code || '').toLowerCase().includes(q) ||
+    String(c.name || '').toLowerCase().includes(q) ||
+    String(c.category || '').toLowerCase().includes(q));
+  const emptyEl = document.getElementById('company-search-empty');
+  if (emptyEl) emptyEl.style.display = filtered.length === 0 ? '' : 'none';
+  fillCompanyGrid(filtered, { draggable: !q });
 }
 
 // Tampilan "folder": grid kartu besar berisi logo & nama perusahaan saja.
@@ -2316,19 +2448,7 @@ function renderCompaniesGridView() {
   if (state.companies.length) {
     fillCompanyGrid(state.companies, { draggable: true });
     const searchInput = document.getElementById('company-search');
-    searchInput.addEventListener('input', () => {
-      const q = searchInput.value.trim().toLowerCase();
-      const filtered = !q ? state.companies : state.companies.filter(c =>
-        String(c.code || '').toLowerCase().includes(q) ||
-        String(c.name || '').toLowerCase().includes(q) ||
-        String(c.category || '').toLowerCase().includes(q)
-      );
-      document.getElementById('company-search-empty').style.display = filtered.length === 0 ? '' : 'none';
-      // Urutan hanya bisa diubah pada tampilan tanpa filter — saat sedang
-      // mencari, daftarnya sudah bukan daftar lengkap sehingga posisi
-      // "drop"-nya tidak mewakili urutan sebenarnya.
-      fillCompanyGrid(filtered, { draggable: !q });
-    });
+    searchInput.addEventListener('input', refreshCompanyGridProgress);
   }
 }
 
@@ -2356,6 +2476,7 @@ function fillCompanyGrid(list, opts) {
       ${companyAvatarHTML(c, 108, 20)}
       <div class="company-card-name">${escapeHTML(c.name)}</div>
       ${c.code ? `<div class="company-card-code">${escapeHTML(c.code)}</div>` : ''}
+      ${companyProgressHTML(companyImportProgress(c.id, state.companiesGridStatements))}
     </div>
   `).join('');
 
@@ -3742,6 +3863,111 @@ function syncCheckboxHtml(key, syncFlags) {
   </label>`;
 }
 
+// Menghitung jumlah checkbox "Sinkron" (total & yang sudah dicentang) dari
+// sepotong HTML hasil syncCheckboxHtml() di atas. Dipakai untuk menghitung
+// persentase progres sinkronisasi satu periode secara keseluruhan (Neraca +
+// Laba Rugi + Arus Kas + Perubahan Modal) tanpa perlu menduplikasi logika
+// penentuan baris mana saja yang punya checkbox — cukup render ulang HTML
+// keempat laporan lalu hitung kemunculan pola checkbox-nya di sini.
+function countSyncCheckboxes(html) {
+  const re = /<input type="checkbox" data-sync-key="[^"]*"\s*(checked)?>/g;
+  let total = 0;
+  let checked = 0;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    total++;
+    if (m[1]) checked++;
+  }
+  return { total, checked };
+}
+
+// Menghitung progres sinkronisasi satu periode (statement) untuk ditampilkan
+// sebagai persentase pada kolom "Persentase Sinkron" di tabel Riwayat Impor.
+// Progres dihitung dari checkbox "Sinkron" yang sama persis dengan yang
+// ditampilkan pada kartu Neraca/Laba Rugi/Arus Kas/Perubahan Modal di atas
+// tabel (lihat syncCheckboxHtml) — bukan hitungan terpisah — supaya kolom
+// ini selalu konsisten dengan apa yang sudah dicentang pengguna di sana.
+//
+// Neraca & Laba Rugi butuh rincian akun Buku Besar (bbContribs) yang dimuat
+// lazy per periode (lihat ledgerCache); kalau untuk periode ini belum
+// dimuat, fungsi ini men-trigger pemuatannya (sama seperti untuk periode
+// yang sedang aktif dipilih) dan mengembalikan null untuk sementara —
+// paintCompanyDetail() akan dipanggil ulang otomatis begitu selesai dimuat.
+// activeContributions (variabel global dipakai oleh klik baris akun) sengaja
+// disimpan & dikembalikan lagi supaya penghitungan ini tidak mengubah
+// perilaku klik-untuk-detail pada laporan periode yang sedang tampil.
+function statementSyncProgress(statement, allStatements, companyId) {
+  const savedActiveContributions = activeContributions;
+  try {
+    let neracaBaseS = statement.neraca;
+    let labaRugiBaseS = statement.labaRugi;
+    let bbContribsS = null;
+    if (statement.bukuBesarCount > 0) {
+      if (Array.isArray(ledgerCache[statement.id])) {
+        const derived = deriveStatementsFromLedgerAccounts(ledgerCache[statement.id]);
+        bbContribsS = derived.contributions;
+        neracaBaseS = derived.neraca;
+        labaRugiBaseS = derived.labaRugi;
+      } else {
+        if (ledgerCache[statement.id] !== 'loading') {
+          ledgerCache[statement.id] = 'loading';
+          DB.getLedgerAccounts(companyId, statement.id)
+            .then((accounts) => {
+              ledgerCache[statement.id] = accounts;
+              if (state.view === 'company-detail' && state.companyDetailId === companyId) paintCompanyDetail(allStatements);
+            })
+            .catch((err) => {
+              delete ledgerCache[statement.id];
+              console.error('Gagal memuat rincian Buku Besar untuk progres sinkronisasi:', err);
+            });
+        }
+        return null;
+      }
+    }
+    const syncFlags = statement.syncFlags || {};
+    const neracaDisplayS = withRetainedEarnings(neracaBaseS, allStatements, statement);
+    const modalDisplayS = withPerubahanModal(statement.perubahanModal, neracaDisplayS);
+    let html = '';
+    if (bbContribsS) {
+      html += derivedNeracaGrouped(neracaDisplayS, bbContribsS, syncFlags);
+      html += derivedSectionDetails(labaRugiBaseS, bbContribsS, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS, LABA_RUGI_ORDER, syncFlags, 'labaRugi');
+    }
+    html += arusKasTable(statement.arusKas, syncFlags);
+    html += perubahanModalTable(modalDisplayS, syncFlags);
+    return countSyncCheckboxes(html);
+  } finally {
+    activeContributions = savedActiveContributions;
+  }
+}
+
+// Merender isi sel kolom "Persentase Sinkron" pada tabel Riwayat Impor
+// berdasarkan hasil statementSyncProgress(): progress bar kecil + teks
+// persentase (dan pecahan jumlah baris), berwarna teal saat 100%, kuning
+// keemasan saat sebagian, abu-abu saat belum ada satupun/tidak ada yang
+// bisa disinkronkan, dan "Memuat…" saat rincian Buku Besar-nya masih
+// dimuat dari server.
+function syncProgressCellHtml(progress) {
+  if (progress === null) {
+    return `<span style="color:var(--slate-light);font-size:12px;">Memuat…</span>`;
+  }
+  const { total, checked } = progress;
+  if (total === 0) {
+    return `<span style="color:var(--slate-light);font-size:12px;">– Tidak ada</span>`;
+  }
+  const pct = Math.round((checked / total) * 100);
+  const color = pct >= 100 ? 'var(--teal)' : (pct > 0 ? '#c9970c' : 'var(--slate-light)');
+  return `
+    <div style="display:flex;flex-direction:column;gap:3px;min-width:110px;">
+      <div style="display:flex;justify-content:space-between;font-size:12px;">
+        <span style="font-weight:700;color:${color};">${pct}%${pct >= 100 ? ' ✓' : ''}</span>
+        <span style="color:var(--slate-light);">${checked}/${total}</span>
+      </div>
+      <div style="height:5px;border-radius:999px;background:var(--border);overflow:hidden;">
+        <div style="height:100%;width:${pct}%;background:${color};border-radius:999px;"></div>
+      </div>
+    </div>`;
+}
+
 function derivedFieldRow(key, value, contributions, formulaFn, formulaData, labelOverride, syncFlags, sectionPrefix) {
   const list = contributions && contributions[key];
   let body;
@@ -4078,16 +4304,16 @@ function paintCompanyDetail(statements) {
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Periode</th><th>Neraca</th><th>Laba Rugi</th><th>Arus Kas</th><th>Perubahan Modal</th><th>Buku Besar</th><th>Verifikasi</th><th></th></tr></thead>
+          <thead><tr><th>Periode</th><th>Neraca</th><th>Laba Rugi</th><th>Arus Kas</th><th>Perubahan Modal</th><th>Buku Besar</th><th>Persentase Sinkron</th><th></th></tr></thead>
           <tbody>
             ${statements.slice().reverse().map(s => `<tr data-statement-id="${s.id}">
-              <td data-period-cell="${s.id}">${s.periodLabel}${s.verified ? '<span class="verify-badge">✓ Terverifikasi</span>' : ''}</td>
+              <td data-period-cell="${s.id}">${s.periodLabel}</td>
               <td>${hasSectionData(s.neraca) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${hasSectionData(s.labaRugi) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${hasSectionData(s.arusKas) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${hasSectionData(s.perubahanModal) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${s.bukuBesarCount > 0 ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
-              <td><label class="verify-checkbox-label"><input type="checkbox" data-verify-statement="${s.id}" data-label="${s.periodLabel}" ${s.verified ? 'checked' : ''}>${s.verified ? 'Terverifikasi' : 'Tandai valid'}</label></td>
+              <td>${syncProgressCellHtml(statementSyncProgress(s, statements, state.companyDetailId))}</td>
               <td style="text-align:right;"><button class="btn danger" data-del-statement="${s.id}" data-label="${s.periodLabel}">Hapus</button></td>
             </tr>`).join('')}
           </tbody>
@@ -4102,32 +4328,6 @@ function paintCompanyDetail(statements) {
     p.addEventListener('click', () => {
       state.companyDetailPeriodId = p.dataset.periodId;
       paintCompanyDetail(statements);
-    });
-  });
-
-  document.querySelectorAll('[data-verify-statement]').forEach(cb => {
-    cb.addEventListener('change', async () => {
-      const statementId = cb.dataset.verifyStatement;
-      const label = cb.dataset.label;
-      const verified = cb.checked;
-      cb.disabled = true;
-      try {
-        await DB.updateStatementVerified(state.companyDetailId, statementId, verified);
-        const s = statements.find(x => x.id === statementId);
-        if (s) s.verified = verified;
-        toast(verified ? `Periode "${label}" ditandai terverifikasi` : `Verifikasi periode "${label}" dibatalkan`, 'success');
-        // Tampilan akan otomatis diperbarui lewat listener realtime, tapi
-        // update juga secara langsung supaya badge & label terasa instan.
-        const cell = document.querySelector(`[data-period-cell="${statementId}"]`);
-        if (cell) cell.innerHTML = `${escapeHTML(label)}${verified ? '<span class="verify-badge">✓ Terverifikasi</span>' : ''}`;
-        const wrapLabel = cb.closest('.verify-checkbox-label');
-        if (wrapLabel) wrapLabel.lastChild.textContent = verified ? 'Terverifikasi' : 'Tandai valid';
-      } catch (err) {
-        cb.checked = !verified;
-        toast('Gagal memperbarui status verifikasi: ' + err.message, 'error');
-      } finally {
-        cb.disabled = false;
-      }
     });
   });
 
