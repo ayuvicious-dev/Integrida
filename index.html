@@ -3120,12 +3120,27 @@ const NERACA_LABELS = {
  * Diasumsikan tiap periode yang diimpor mewakili aktivitas periode itu
  * sendiri (bukan angka kumulatif year-to-date), sesuai cara Laba Bersih
  * diturunkan dari mutasi akun Buku Besar (lihat deriveStatementsFromLedgerAccounts).
+ *
+ * PENGECUALIAN — software akuntansi yang TIDAK menutup akun Laba Rugi
+ * tiap tutup buku (lihat penyesuaianSaldoAwalLabaRugi pada
+ * deriveStatementsFromLedgerAccounts): pada kasus itu, Saldo Awal akun
+ * Pendapatan/Beban periode terpilih SUDAH berisi akumulasi Laba Bersih
+ * seluruh tahun sebelumnya (dibawa otomatis oleh Buku Besar itu
+ * sendiri), sehingga penyesuaianSaldoAwalLabaRugi periode ini SUDAH
+ * setara dengan sampaiTahunLalu. Kalau keduanya dijumlahkan, hasilnya
+ * dobel hitung — karena itu sampaiTahunLalu sengaja dianggap 0 saat
+ * periode terpilih punya penyesuaianSaldoAwalLabaRugi sendiri.
  */
-function computeRetainedEarnings(statements, selected) {
+function computeRetainedEarnings(statements, selected, penyesuaianSaldoAwalLabaRugi) {
   const list = Array.isArray(statements) ? statements : [];
   const periodeIni = list
     .filter(s => s.year === selected.year && s.periodIndex <= selected.periodIndex)
     .reduce((sum, s) => sum + ((s.labaRugi && s.labaRugi.labaBersih) || 0), 0);
+  if (penyesuaianSaldoAwalLabaRugi) {
+    // Sudah tercakup lewat penyesuaianSaldoAwalLabaRugi periode ini sendiri
+    // (lihat catatan di atas) — hindari dobel hitung.
+    return { periodeIni, sampaiTahunLalu: 0 };
+  }
   const sampaiTahunLalu = list
     .filter(s => s.year < selected.year)
     .reduce((sum, s) => sum + ((s.labaRugi && s.labaRugi.labaBersih) || 0), 0);
@@ -3138,13 +3153,12 @@ function computeRetainedEarnings(statements, selected) {
 // dicocokkan dengan Total Kewajiban + Total Ekuitas.
 function withRetainedEarnings(neraca, statements, selected) {
   if (!neraca || !('totalEkuitas' in neraca)) return neraca;
-  const { periodeIni, sampaiTahunLalu } = computeRetainedEarnings(statements, selected);
   // penyesuaianSaldoAwalLabaRugi (bila ada) sudah dihitung per-periode saat
-  // impor Buku Besar (lihat deriveStatementsFromLedgerAccounts) — ikut
-  // dimasukkan di sini supaya Total Ekuitas (Termasuk Laba/Rugi) tetap
-  // menutup selisih terhadap Total Aset walau ada akun Laba Rugi yang
-  // Saldo Awal-nya belum ditutup di software akuntansi asal.
+  // impor Buku Besar (lihat deriveStatementsFromLedgerAccounts) — diteruskan
+  // ke computeRetainedEarnings supaya sampaiTahunLalu tidak dobel hitung
+  // akumulasi yang sama (lihat catatan di atas computeRetainedEarnings).
   const penyesuaian = neraca.penyesuaianSaldoAwalLabaRugi || 0;
+  const { periodeIni, sampaiTahunLalu } = computeRetainedEarnings(statements, selected, penyesuaian);
   return {
     ...neraca,
     pendapatanPeriodeIni: periodeIni,
