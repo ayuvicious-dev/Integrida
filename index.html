@@ -3600,7 +3600,7 @@ function arusKasLangsungItemsHtml(items, syncFlags, activity, bucketIdx) {
 function arusKasLangsungLineRow(bucket, syncFlags, activity, bucketIdx) {
   const net = bucket.masuk - bucket.keluar;
   return `
-    <details style="border-bottom:1px solid var(--border);">
+    <details style="border-bottom:1px solid var(--border);" data-details-key="arusKas__${activity}__${bucketIdx}">
       <summary style="display:flex;justify-content:space-between;align-items:center;padding:7px 2px;cursor:pointer;font-size:13px;">
         <span>${escapeHTML(bucket.label)}<span style="font-weight:400;color:var(--slate-light);margin-left:6px;">(${bucket.items.length} transaksi)</span></span>
         <span class="num" style="font-family:var(--font-mono);">${net < 0 ? '(' + formatIDR(Math.abs(net)) + ')' : formatIDR(net)}</span>
@@ -4006,7 +4006,7 @@ function derivedFieldRow(key, value, contributions, formulaFn, formulaData, labe
     body = `<div style="color:var(--slate-light);font-size:12px;margin-top:4px;padding-left:2px;">Tidak ada akun buku besar yang menyusun baris ini.</div>`;
   }
   return `
-    <details style="border-bottom:1px solid var(--border);">
+    <details style="border-bottom:1px solid var(--border);" data-details-key="${sectionPrefix || 'field'}__${key}">
       <summary style="display:flex;justify-content:space-between;align-items:center;padding:7px 2px;cursor:pointer;">
         <span>${labelOverride || humanizeKey(key)}</span><span class="num" style="font-family:var(--font-mono);">${formatIDR(value)}</span>
       </summary>
@@ -4121,6 +4121,21 @@ function renderCompanyDetail() {
 function paintCompanyDetail(statements) {
   const content = document.getElementById('company-detail-content');
   if (!content) return;
+  // Simpan panel kategori (<details>, mis. "Kas Setara Kas") mana saja yang
+  // sedang TERBUKA sebelum HTML ditimpa ulang di bawah. Fungsi ini dipanggil
+  // ulang setiap ada perubahan data — termasuk oleh tulisan lokal kita
+  // sendiri, mis. saat mencentang checkbox "Sinkron" (listener realtime
+  // watchStatements ikut terpicu oleh perubahan itu) — tanpa ini, SETIAP
+  // repaint akan mengembalikan semua <details> ke keadaan tertutup
+  // (default HTML), sehingga kategori yang baru saja dibuka pengguna
+  // terlihat "hilang"/tertutup lagi walau baris di dalamnya sebenarnya
+  // tidak disembunyikan sama sekali. Dicocokkan lewat data-details-key
+  // (lihat derivedFieldRow & arusKasLangsungLineRow) dan dipulihkan lagi
+  // di akhir fungsi ini setelah innerHTML yang baru terpasang.
+  const openDetailsKeys = new Set(
+    Array.from(content.querySelectorAll('details[data-details-key][open]'))
+      .map(d => d.dataset.detailsKey)
+  );
   const company = state.companies.find(c => c.id === state.companyDetailId);
   const wireBusinessInfoButton = () => {
     const btn = document.getElementById('edit-business-info');
@@ -4310,6 +4325,7 @@ function paintCompanyDetail(statements) {
       </div>
     </div>
 
+
     <div class="section-block">
       <div class="section-title">Riwayat Impor</div>
       <div style="font-size:12px;color:var(--slate);margin:-8px 0 12px 0;">
@@ -4334,6 +4350,16 @@ function paintCompanyDetail(statements) {
       </div>
     </div>
   `;
+
+  // Pulihkan kembali <details> yang tadinya terbuka (lihat openDetailsKeys
+  // di awal fungsi) supaya repaint akibat perubahan data (termasuk saat
+  // mencentang checkbox "Sinkron" sendiri) tidak terasa seperti kategori
+  // yang baru dibuka tiba-tiba tertutup/"hilang" lagi.
+  if (openDetailsKeys.size) {
+    content.querySelectorAll('details[data-details-key]').forEach(d => {
+      if (openDetailsKeys.has(d.dataset.detailsKey)) d.setAttribute('open', '');
+    });
+  }
 
   wireBusinessInfoButton();
 

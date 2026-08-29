@@ -127,7 +127,36 @@
 //      "1/58 tersinkron (2023–2026)" atau "(2026)" kalau hanya satu
 //      tahun, supaya jelas rentang periode mana yang diwakili angka itu
 //      (companySyncProgress() kini juga mengembalikan yearFrom/yearTo).
-const CACHE_NAME = 'integrida-cache-v26';
+// v27: index.html diperbarui — checkbox "Sinkron" per baris (Neraca,
+//      Laba Rugi, Arus Kas, Perubahan Modal) di Detail Perusahaan
+//      sebelumnya TIDAK menyembunyikan barisnya sendiri secara otomatis
+//      saat dicentang. Sekarang ditambahkan toggle manual "Sembunyikan
+//      baris yang sudah sinkron" di atas kartu Laporan Keuangan — saat
+//      diaktifkan, baris yang checkbox Sinkron-nya sudah dicentang akan
+//      disembunyikan (bisa dinyalakan/dimatikan kapan saja sesuai
+//      kebutuhan), tanpa mengubah perilaku checkbox itu sendiri.
+// v28: index.html diperbarui — toggle manual "Sembunyikan baris yang
+//      sudah sinkron" dari v27 DIHAPUS (bukan itu yang dimaksud). Baris
+//      Neraca/Laba Rugi/Arus Kas/Perubahan Modal kini kembali seperti
+//      semula: mencentang "Sinkron" tidak menyembunyikan barisnya sama
+//      sekali — baris tetap tampil apa adanya di dalam kategorinya
+//      (mis. "Kas Setara Kas"), dan mekanisme "sembunyikan manual" yang
+//      dimaksud memang sudah ada secara alami lewat collapse/expand
+//      kategori (klik judul kategori seperti "Kas Setara Kas" untuk
+//      menutup/membuka daftar akun di dalamnya).
+// v29: index.html diperbarui — perbaikan akar masalah baris "hilang"
+//      saat checkbox "Sinkron" dicentang: setiap perubahan syncFlags
+//      tersimpan ke server, listener realtime (watchStatements) langsung
+//      memicu render ulang SELURUH Detail Perusahaan, dan render ulang
+//      itu mengembalikan semua panel kategori (<details>, mis. "Kas
+//      Setara Kas") ke keadaan tertutup (bawaan HTML) — sehingga
+//      kategori yang baru saja dibuka pengguna terlihat langsung
+//      tertutup/"hilang" lagi walau baris di dalamnya sebenarnya tidak
+//      pernah disembunyikan. Sekarang paintCompanyDetail() mengingat
+//      kategori mana saja yang sedang terbuka sebelum render ulang
+//      (lewat atribut data-details-key baru pada tiap <details>) dan
+//      membuka kembali otomatis setelah HTML baru terpasang.
+const CACHE_NAME = 'integrida-cache-v29';
 const APP_SHELL = [
   './',
   './index.html',
