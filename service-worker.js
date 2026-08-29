@@ -156,7 +156,24 @@
 //      kategori mana saja yang sedang terbuka sebelum render ulang
 //      (lewat atribut data-details-key baru pada tiap <details>) dan
 //      membuka kembali otomatis setelah HTML baru terpasang.
-const CACHE_NAME = 'integrida-cache-v29';
+// v30: index.html diperbarui — perbaikan STRUKTURAL pada cara Laporan
+//      Arus Kas Metode Langsung diturunkan dari Buku Besar. Sebelumnya
+//      (v11-v29) kategori Arus Kas (Operasi/Investasi/Pendanaan) ditebak
+//      dari KATA KUNCI pada kolom Keterangan transaksi akun Kas & Setara
+//      Kas (mis. kata "peralatan" -> dianggap Investasi) — pendekatan ini
+//      bisa salah tebak (mis. kata yang mirip tapi beda makna akuntansi)
+//      sehingga hasilnya bisa beda dari Laporan Arus Kas asli software
+//      akuntansi sumber Buku Besar. Sekarang Arus Kas dihitung dari
+//      MUTASI (Saldo Akhir - Saldo Awal) tiap akun SELAIN Kas & Setara
+//      Kas, dengan tanda sesuai posisi normalnya (Aset & Beban dibalik
+//      tandanya, Kewajiban/Ekuitas/Pendapatan dipakai apa adanya) —
+//      memakai identitas akuntansi dasar (Total Debit = Total Kredit)
+//      yang membuat hasilnya SELALU balance persis tanpa sisa, dan cocok
+//      1:1 dengan Laporan Arus Kas asli software akuntansi sumber Buku
+//      Besar (diverifikasi manual). Tidak ada perubahan pada format file
+//      Buku Besar yang diimpor — data yang sudah ada (Saldo Awal & Saldo
+//      Akhir per akun) sudah cukup.
+const CACHE_NAME = 'integrida-cache-v30';
 const APP_SHELL = [
   './',
   './index.html',

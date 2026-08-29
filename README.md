@@ -114,13 +114,20 @@ firebase deploy
    diturunkan** dari Buku Besar ini berdasarkan kode akun (1=Aset,
    2=Kewajiban, 3=Ekuitas, 4=Pendapatan, 5=HPP, 6=Beban Operasional,
    7=Pendapatan Lainnya, 8=Beban Lainnya, 9=Beban Pajak) — tidak perlu
-   diimpor terpisah. Laporan Perubahan Modal merekonsiliasi mutasi akun
+   diimpor terpisah. **Arus Kas Metode Langsung** dihitung dari **mutasi
+   (Saldo Akhir − Saldo Awal) tiap akun selain Kas/Bank**, dengan tanda
+   sesuai posisi normal akunnya (Aset & Beban dibalik tandanya;
+   Kewajiban, Ekuitas & Pendapatan dipakai apa adanya) — bukan menebak
+   dari kata kunci keterangan transaksi, sehingga hasilnya selalu balance
+   persis dan konsisten dengan Laporan Arus Kas dari software akuntansi
+   sumber Buku Besar. Laporan Perubahan Modal merekonsiliasi mutasi akun
    Ekuitas dengan Setoran Modal Pemilik & Penarikan Modal
-   Pemilik/Dividen yang dikenali dari transaksi kas, ditambah Laba
-   Bersih periode berjalan. Buku Besar kini menjadi **satu-satunya jenis
-   impor** (tidak ada lagi impor manual terpisah untuk Neraca, Laba
-   Rugi, Arus Kas, atau Perubahan Modal). Setiap file mewakili **satu
-   perusahaan pada satu periode** (bulanan/triwulan/semester/tahunan).
+   Pemilik/Dividen yang diturunkan dari Arus Kas Pendanaan di atas,
+   ditambah Laba Bersih periode berjalan. Buku Besar kini menjadi
+   **satu-satunya jenis impor** (tidak ada lagi impor manual terpisah
+   untuk Neraca, Laba Rugi, Arus Kas, atau Perubahan Modal). Setiap file
+   mewakili **satu perusahaan pada satu periode**
+   (bulanan/triwulan/semester/tahunan).
 4. Buka menu **Perbandingan** untuk membandingkan beberapa perusahaan pada
    jenis periode yang sama (grafik + tabel).
 5. Buka menu **Analisis Rasio** untuk melihat rasio likuiditas (Current
