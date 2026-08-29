@@ -137,6 +137,16 @@ input,select{font-family:inherit;}
 .verify-checkbox-label{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12.5px;color:var(--slate);user-select:none;}
 .verify-checkbox-label input{width:16px;height:16px;accent-color:var(--teal);cursor:pointer;}
 
+/* Checkbox "Sinkron" pada rincian akun (per sub-akun/transaksi/baris) —
+   menandai bahwa angka di Integrida sudah dicocokkan manual dengan data
+   sistem/sumber aslinya (mis. mutasi rekening bank). Berbeda dari
+   verify-checkbox-label (yang menandai satu PERIODE penuh), ini menandai
+   satu BARIS rincian secara individual. */
+.sync-checkbox-label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--slate-light);user-select:none;white-space:nowrap;margin-left:12px;flex-shrink:0;}
+.sync-checkbox-label:hover{color:var(--teal);}
+.sync-checkbox-label input{width:14px;height:14px;accent-color:var(--teal);cursor:pointer;}
+.sync-checkbox-label.is-synced{color:var(--teal);font-weight:600;}
+
 .kpi-card{display:flex;flex-direction:column;gap:6px;}
 .kpi-label{font-size:12px;color:var(--slate);text-transform:uppercase;letter-spacing:.5px;}
 .kpi-value{font-family:var(--font-mono);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;}
@@ -583,6 +593,21 @@ const DB = {
   // diverifikasi/divalidasi kebenarannya (mis. oleh akuntan/pemilik).
   async updateStatementVerified(companyId, statementId, verified) {
     await db.collection('companies').doc(companyId).collection('statements').doc(statementId).update({ verified: !!verified });
+  },
+
+  // syncFlags: map (di dalam dokumen statement) yang menandai baris rincian
+  // akun mana saja (per kategori/sub-akun, per transaksi Arus Kas, atau per
+  // baris Perubahan Modal) yang sudah dicocokkan manual oleh pengguna
+  // dengan data sistem/sumber aslinya (mis. rekening koran bank). Berbeda
+  // dari `verified` (menandai satu periode penuh sekaligus), ini menandai
+  // satu baris rincian secara individual — lihat syncCheckboxHtml() &
+  // fungsi-fungsi derivedFieldRow/arusKasLangsungItemsHtml/
+  // perubahanModalTable di bawah untuk cara key-nya dibentuk. `key` dikirim
+  // sebagai path bertitik (mis. "neraca__kasSetaraKas__0") supaya tersimpan
+  // sebagai field bertingkat di dalam map syncFlags, bukan menimpa seluruh
+  // map setiap kali satu baris dicentang.
+  async updateStatementSyncFlag(companyId, statementId, key, value) {
+    await db.collection('companies').doc(companyId).collection('statements').doc(statementId).update({ [`syncFlags.${key}`]: !!value });
   },
 
   // ===========================================================
@@ -3461,16 +3486,22 @@ function keyValueTable(obj, order, labels) {
 // derivedFieldRow (yang rinciannya berupa AKUN buku besar), di sini
 // rinciannya berupa TRANSAKSI kas individual — jadi ditampilkan langsung
 // inline di dalam <details>, bukan lewat modal.
-function arusKasLangsungItemsHtml(items) {
+function arusKasLangsungItemsHtml(items, syncFlags, activity, bucketIdx) {
   if (!items || !items.length) return `<div style="color:var(--slate-light);font-size:12px;padding:4px 8px;">Tidak ada transaksi.</div>`;
-  return items.map(it => `
-    <div style="display:flex;justify-content:space-between;gap:10px;padding:4px 8px;font-size:12px;color:var(--slate);">
+  return items.map((it, i) => {
+    const syncKeyStr = (syncFlags && activity != null && bucketIdx != null) ? `arusKas__${activity}__${bucketIdx}__${i}` : null;
+    return `
+    <div style="display:flex;justify-content:space-between;gap:10px;padding:4px 8px;font-size:12px;color:var(--slate);align-items:center;">
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${it.tanggal ? escapeHTML(it.tanggal) + ' &middot; ' : ''}${escapeHTML(it.keterangan) || '(tanpa keterangan)'} <span style="color:var(--slate-light);">(${escapeHTML(it.akun)})</span></span>
-      <span class="num" style="font-family:var(--font-mono);flex-shrink:0;">${it.debit ? formatIDR(it.debit) : '(' + formatIDR(it.kredit) + ')'}</span>
-    </div>`).join('');
+      <span style="display:flex;align-items:center;flex-shrink:0;">
+        <span class="num" style="font-family:var(--font-mono);">${it.debit ? formatIDR(it.debit) : '(' + formatIDR(it.kredit) + ')'}</span>
+        ${syncKeyStr ? syncCheckboxHtml(syncKeyStr, syncFlags) : ''}
+      </span>
+    </div>`;
+  }).join('');
 }
 
-function arusKasLangsungLineRow(bucket) {
+function arusKasLangsungLineRow(bucket, syncFlags, activity, bucketIdx) {
   const net = bucket.masuk - bucket.keluar;
   return `
     <details style="border-bottom:1px solid var(--border);">
@@ -3478,15 +3509,15 @@ function arusKasLangsungLineRow(bucket) {
         <span>${escapeHTML(bucket.label)}<span style="font-weight:400;color:var(--slate-light);margin-left:6px;">(${bucket.items.length} transaksi)</span></span>
         <span class="num" style="font-family:var(--font-mono);">${net < 0 ? '(' + formatIDR(Math.abs(net)) + ')' : formatIDR(net)}</span>
       </summary>
-      <div style="padding:2px 2px 10px 12px;">${arusKasLangsungItemsHtml(bucket.items)}</div>
+      <div style="padding:2px 2px 10px 12px;">${arusKasLangsungItemsHtml(bucket.items, syncFlags, activity, bucketIdx)}</div>
     </details>`;
 }
 
-function arusKasLangsungActivityBlock(label, buckets, total) {
+function arusKasLangsungActivityBlock(label, buckets, total, syncFlags, activity) {
   if (!buckets || !buckets.length) return '';
   return `
     <div style="font-weight:600;color:var(--slate);font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:12px 2px 4px 2px;">${label}</div>
-    ${buckets.map(arusKasLangsungLineRow).join('')}
+    ${buckets.map((b, i) => arusKasLangsungLineRow(b, syncFlags, activity, i)).join('')}
     <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding:7px 8px;border-radius:6px;background:var(--teal-light);margin-top:4px;">
       <span>Kas Bersih dari ${label}</span>
       <span class="num" style="font-family:var(--font-mono);">${total < 0 ? '(' + formatIDR(Math.abs(total)) + ')' : formatIDR(total)}</span>
@@ -3498,7 +3529,7 @@ function arusKasLangsungActivityBlock(label, buckets, total) {
 // Mendeteksi bentuk lama (hasil impor manual, field datar seperti
 // kasAwal/arusKasOperasi/kasAkhir) lewat absennya `rincian` dan tetap
 // menampilkannya lewat keyValueTable supaya data lama tidak rusak.
-function arusKasTable(arusKas) {
+function arusKasTable(arusKas, syncFlags) {
   if (!arusKas || !arusKas.rincian) return keyValueTable(arusKas);
   const kasAwalRow = `
     <div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 2px;">
@@ -3514,9 +3545,9 @@ function arusKasTable(arusKas) {
       <span>Kas &amp; Setara Kas Akhir Periode</span><span class="num" style="font-family:var(--font-mono);">${formatIDR(arusKas.kasAkhir)}</span>
     </div>`;
   return `
-    ${arusKasLangsungActivityBlock(ARUS_KAS_ACTIVITY_LABELS.operasi, arusKas.rincian.operasi, arusKas.totalOperasi)}
-    ${arusKasLangsungActivityBlock(ARUS_KAS_ACTIVITY_LABELS.investasi, arusKas.rincian.investasi, arusKas.totalInvestasi)}
-    ${arusKasLangsungActivityBlock(ARUS_KAS_ACTIVITY_LABELS.pendanaan, arusKas.rincian.pendanaan, arusKas.totalPendanaan)}
+    ${arusKasLangsungActivityBlock(ARUS_KAS_ACTIVITY_LABELS.operasi, arusKas.rincian.operasi, arusKas.totalOperasi, syncFlags, 'operasi')}
+    ${arusKasLangsungActivityBlock(ARUS_KAS_ACTIVITY_LABELS.investasi, arusKas.rincian.investasi, arusKas.totalInvestasi, syncFlags, 'investasi')}
+    ${arusKasLangsungActivityBlock(ARUS_KAS_ACTIVITY_LABELS.pendanaan, arusKas.rincian.pendanaan, arusKas.totalPendanaan, syncFlags, 'pendanaan')}
     <div style="margin-top:10px;">${kasAwalRow}${kenaikanRow}${kasAkhirRow}</div>`;
 }
 
@@ -3527,33 +3558,46 @@ function arusKasTable(arusKas) {
 // periode), baris Laba Ditahan Awal Periode & Saldo Ekuitas termasuk laba
 // ditahan ikut ditampilkan, sejalan dengan Total Ekuitas (Termasuk
 // Laba/Rugi) pada Neraca.
-function perubahanModalTable(modal) {
+function perubahanModalTable(modal, syncFlags) {
   if (!modal) return `<div style="color:var(--slate-light);font-size:13px;padding:6px 2px;">Belum ada data.</div>`;
-  const line = (label, value) => `
-    <div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 2px;">
-      <span>${label}</span><span class="num" style="font-family:var(--font-mono);">${value < 0 ? '(' + formatIDR(Math.abs(value)) + ')' : formatIDR(value)}</span>
+  // Perubahan Modal tidak punya rincian per akun buku besar seperti Neraca/
+  // Laba Rugi (baris-barisnya sudah merupakan hasil rekonsiliasi, bukan
+  // agregasi langsung dari satu kelompok akun) — jadi checkbox "Sinkron"
+  // dipasang langsung di tiap baris ringkasan itu sendiri (key = nama
+  // field), bukan pada sub-akun di dalamnya.
+  const line = (label, value, key) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 2px;">
+      <span>${label}</span>
+      <span style="display:flex;align-items:center;">
+        <span class="num" style="font-family:var(--font-mono);">${value < 0 ? '(' + formatIDR(Math.abs(value)) + ')' : formatIDR(value)}</span>
+        ${syncFlags && key ? syncCheckboxHtml(`modal__${key}`, syncFlags) : ''}
+      </span>
     </div>`;
-  const highlight = (label, value) => `
-    <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding:7px 8px;border-radius:6px;background:var(--teal-light);margin:6px 0;">
-      <span>${label}</span><span class="num" style="font-family:var(--font-mono);">${value < 0 ? '(' + formatIDR(Math.abs(value)) + ')' : formatIDR(value)}</span>
+  const highlight = (label, value, key) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;padding:7px 8px;border-radius:6px;background:var(--teal-light);margin:6px 0;">
+      <span>${label}</span>
+      <span style="display:flex;align-items:center;">
+        <span class="num" style="font-family:var(--font-mono);">${value < 0 ? '(' + formatIDR(Math.abs(value)) + ')' : formatIDR(value)}</span>
+        ${syncFlags && key ? syncCheckboxHtml(`modal__${key}`, syncFlags) : ''}
+      </span>
     </div>`;
   const groupLabel = (text) => `<div style="font-weight:600;color:var(--slate);font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:10px 2px 4px 2px;">${text}</div>`;
   const hasHistori = 'saldoAwalEkuitas' in modal;
 
   return `
     ${hasHistori
-      ? line('Modal Disetor Awal Periode', modal.modalDisetorAwal) + line('Laba Ditahan Awal Periode', modal.labaDitahanAwal) + highlight('Saldo Awal Ekuitas', modal.saldoAwalEkuitas)
-      : line('Modal Disetor Awal Periode', modal.modalDisetorAwal)}
+      ? line('Modal Disetor Awal Periode', modal.modalDisetorAwal, 'modalDisetorAwal') + line('Laba Ditahan Awal Periode', modal.labaDitahanAwal, 'labaDitahanAwal') + highlight('Saldo Awal Ekuitas', modal.saldoAwalEkuitas, 'saldoAwalEkuitas')
+      : line('Modal Disetor Awal Periode', modal.modalDisetorAwal, 'modalDisetorAwal')}
     ${groupLabel('Penambahan')}
-    ${line('Setoran Modal Pemilik', modal.setoranModal)}
-    ${line('Laba Bersih Periode Berjalan', modal.labaBersihPeriode)}
+    ${line('Setoran Modal Pemilik', modal.setoranModal, 'setoranModal')}
+    ${line('Laba Bersih Periode Berjalan', modal.labaBersihPeriode, 'labaBersihPeriode')}
     ${groupLabel('Pengurangan')}
-    ${line('Penarikan Modal Pemilik/Dividen', -modal.penarikanModal)}
-    ${highlight('Modal Disetor Akhir Periode', modal.modalDisetorAkhir)}
-    ${modal.penyesuaianSaldoAwalLabaRugi ? line('Penyesuaian Saldo Awal Akun Laba Rugi (Belum Ditutup)', modal.penyesuaianSaldoAwalLabaRugi) : ''}
+    ${line('Penarikan Modal Pemilik/Dividen', -modal.penarikanModal, 'penarikanModal')}
+    ${highlight('Modal Disetor Akhir Periode', modal.modalDisetorAkhir, 'modalDisetorAkhir')}
+    ${modal.penyesuaianSaldoAwalLabaRugi ? line('Penyesuaian Saldo Awal Akun Laba Rugi (Belum Ditutup)', modal.penyesuaianSaldoAwalLabaRugi, 'penyesuaianSaldoAwalLabaRugi') : ''}
     ${hasHistori
-      ? highlight('Saldo Akhir Ekuitas (Termasuk Laba Ditahan)', modal.totalEkuitasAkhirTermasukLabaDitahan)
-      : highlight('Total Ekuitas Akhir Periode (Termasuk Laba Periode Ini)', modal.totalEkuitasAkhir)}
+      ? highlight('Saldo Akhir Ekuitas (Termasuk Laba Ditahan)', modal.totalEkuitasAkhirTermasukLabaDitahan, 'totalEkuitasAkhirTermasukLabaDitahan')
+      : highlight('Total Ekuitas Akhir Periode (Termasuk Laba Periode Ini)', modal.totalEkuitasAkhir, 'totalEkuitasAkhir')}
     ${modal.warnings && modal.warnings.length ? `<div class="ratio-note" style="margin-top:8px;">${modal.warnings.join('<br>')}</div>` : ''}`;
 }
 
@@ -3679,7 +3723,26 @@ document.addEventListener('click', (e) => {
   }
 });
 
-function derivedFieldRow(key, value, contributions, formulaFn, formulaData, labelOverride) {
+// Checkbox "Sinkron" yang ditampilkan di sebelah kanan angka pada satu
+// baris rincian (sub-akun, transaksi Arus Kas, atau baris Perubahan
+// Modal). Hanya dirender saat `syncFlags` disediakan (obyek, boleh
+// kosong {}) — ini dipakai untuk membedakan tampilan Detail Perusahaan
+// (data sudah tersimpan, statementId nyata, boleh dicentang) dari
+// Pratinjau Impor (data belum tersimpan, tidak ada tempat menyimpan
+// centang), yang cukup memanggil fungsi ini tanpa argumen `syncFlags`.
+// onclick="event.stopPropagation()" mencegah klik pada checkbox ikut
+// men-trigger baris pembungkusnya (mis. .bb-akun-row) yang membuka modal
+// rincian transaksi.
+function syncCheckboxHtml(key, syncFlags) {
+  if (!syncFlags) return '';
+  const checked = !!syncFlags[key];
+  return `<label class="sync-checkbox-label${checked ? ' is-synced' : ''}" title="Tandai baris ini sudah dicocokkan dengan data sistem" onclick="event.stopPropagation();">
+    <input type="checkbox" data-sync-key="${key}" ${checked ? 'checked' : ''}>
+    <span>${checked ? 'Sinkron' : 'Tandai sinkron'}</span>
+  </label>`;
+}
+
+function derivedFieldRow(key, value, contributions, formulaFn, formulaData, labelOverride, syncFlags, sectionPrefix) {
   const list = contributions && contributions[key];
   let body;
   if (list && list.length) {
@@ -3687,11 +3750,15 @@ function derivedFieldRow(key, value, contributions, formulaFn, formulaData, labe
       const codeTag = c.code
         ? `<span style="font-family:var(--font-mono);font-size:11px;color:var(--slate-light);margin-right:7px;">${c.code}</span>`
         : '';
+      const syncKeyStr = sectionPrefix ? `${sectionPrefix}__${key}__${i}` : null;
       return `
         <div class="bb-akun-row" data-field="${key}" data-idx="${i}" title="Klik untuk melihat rincian transaksi"
              style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;">
           <span style="color:var(--ink);">${codeTag}${c.name || '(tanpa nama)'}</span>
-          <span class="num" style="font-family:var(--font-mono);flex-shrink:0;">${formatIDR(c.amount)}</span>
+          <span style="display:flex;align-items:center;flex-shrink:0;">
+            <span class="num" style="font-family:var(--font-mono);">${formatIDR(c.amount)}</span>
+            ${syncKeyStr ? syncCheckboxHtml(syncKeyStr, syncFlags) : ''}
+          </span>
         </div>`;
     }).join('');
   } else if (formulaFn) {
@@ -3740,12 +3807,12 @@ function sortEntriesByOrder(entries, order) {
     .map(({ entry }) => entry);
 }
 
-function derivedSectionDetails(obj, contributions, formulas, labels, highlightKeys, order) {
+function derivedSectionDetails(obj, contributions, formulas, labels, highlightKeys, order, syncFlags, sectionPrefix) {
   activeContributions = contributions;
   const entries = sortEntriesByOrder(Object.entries(obj || {}), order);
   if (entries.length === 0) return `<div style="color:var(--slate-light);font-size:13px;">Tidak ada data.</div>`;
   return entries.map(([k, v]) => {
-    const rowHtml = derivedFieldRow(k, v, contributions, formulas[k], obj, labels && labels[k]);
+    const rowHtml = derivedFieldRow(k, v, contributions, formulas[k], obj, labels && labels[k], syncFlags, sectionPrefix);
     return (highlightKeys && highlightKeys.includes(k))
       ? `<div style="background:var(--teal-light);border-radius:6px;">${rowHtml}</div>`
       : rowHtml;
@@ -3765,12 +3832,12 @@ function neracaGroupHeader(label) {
   return `<div style="font-weight:600;color:var(--slate);font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:12px 2px 4px 2px;">${label}</div>`;
 }
 
-function derivedNeracaGrouped(neraca, contributions) {
+function derivedNeracaGrouped(neraca, contributions, syncFlags) {
   activeContributions = contributions;
   if (!neraca || Object.keys(neraca).length === 0) return `<div style="color:var(--slate-light);font-size:13px;">Tidak ada data.</div>`;
-  const row = (key) => key in neraca ? derivedFieldRow(key, neraca[key], contributions, NERACA_FORMULAS[key], neraca, NERACA_LABELS[key]) : '';
+  const row = (key) => key in neraca ? derivedFieldRow(key, neraca[key], contributions, NERACA_FORMULAS[key], neraca, NERACA_LABELS[key], syncFlags, 'neraca') : '';
   const highlight = (key) => key in neraca
-    ? `<div style="background:var(--teal-light);border-radius:6px;">${derivedFieldRow(key, neraca[key], contributions, NERACA_FORMULAS[key], neraca, NERACA_LABELS[key])}</div>`
+    ? `<div style="background:var(--teal-light);border-radius:6px;">${derivedFieldRow(key, neraca[key], contributions, NERACA_FORMULAS[key], neraca, NERACA_LABELS[key], syncFlags, 'neraca')}</div>`
     : '';
   return `
     ${neracaGroupHeader('Aset Lancar')}
@@ -3977,7 +4044,7 @@ function paintCompanyDetail(statements) {
           <span class="badge teal">Neraca</span>
           ${bbContribs ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik baris untuk rincian akun</span>' : ''}
         </div>
-        ${bbContribs ? derivedNeracaGrouped(neracaDisplay, bbContribs) + neracaBalanceSummary(neracaDisplay) : neracaGroupedTable(neracaDisplay)}
+        ${bbContribs ? derivedNeracaGrouped(neracaDisplay, bbContribs, selected.syncFlags || {}) + neracaBalanceSummary(neracaDisplay) : neracaGroupedTable(neracaDisplay)}
       </div>
       <div class="card">
         ${company ? reportTitleHTML(company, 'Laba Rugi', selected, false) : ''}
@@ -3985,7 +4052,7 @@ function paintCompanyDetail(statements) {
           <span class="badge gold">Laba Rugi</span>
           ${bbContribs ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik baris untuk rincian akun</span>' : ''}
         </div>
-        ${bbContribs ? derivedSectionDetails(labaRugiBase, bbContribs, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS, LABA_RUGI_ORDER) : keyValueTable(labaRugiBase, LABA_RUGI_ORDER, LABA_RUGI_LABELS)}
+        ${bbContribs ? derivedSectionDetails(labaRugiBase, bbContribs, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS, LABA_RUGI_ORDER, selected.syncFlags || {}, 'labaRugi') : keyValueTable(labaRugiBase, LABA_RUGI_ORDER, LABA_RUGI_LABELS)}
       </div>
       <div class="card">
         ${company ? reportTitleHTML(company, 'Arus Kas', selected, false) : ''}
@@ -3993,14 +4060,14 @@ function paintCompanyDetail(statements) {
           <span class="badge blue">Arus Kas (Metode Langsung)</span>
           ${selected.arusKas && selected.arusKas.rincian ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik pos untuk rincian transaksi kas</span>' : ''}
         </div>
-        ${arusKasTable(selected.arusKas)}
+        ${arusKasTable(selected.arusKas, selected.syncFlags || {})}
       </div>
       <div class="card">
         ${company ? reportTitleHTML(company, 'Perubahan Modal', selected, false) : ''}
         <div class="section-title">
           <span class="badge purple">Perubahan Modal</span>
         </div>
-        ${perubahanModalTable(modalDisplay)}
+        ${perubahanModalTable(modalDisplay, selected.syncFlags || {})}
       </div>
     </div>
 
@@ -4058,6 +4125,32 @@ function paintCompanyDetail(statements) {
       } catch (err) {
         cb.checked = !verified;
         toast('Gagal memperbarui status verifikasi: ' + err.message, 'error');
+      } finally {
+        cb.disabled = false;
+      }
+    });
+  });
+
+  // Checkbox "Sinkron" per baris rincian akun (Neraca, Laba Rugi, Arus
+  // Kas) & per baris ringkasan (Perubahan Modal) — lihat syncCheckboxHtml()
+  // & DB.updateStatementSyncFlag(). Ditulis ke statement yang SEDANG
+  // tampil (`selected`), jadi berlaku khusus untuk periode itu.
+  document.querySelectorAll('[data-sync-key]').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      const key = cb.dataset.syncKey;
+      const checked = cb.checked;
+      const label = cb.nextElementSibling;
+      const wrap = cb.closest('.sync-checkbox-label');
+      cb.disabled = true;
+      try {
+        await DB.updateStatementSyncFlag(state.companyDetailId, selected.id, key, checked);
+        selected.syncFlags = selected.syncFlags || {};
+        selected.syncFlags[key] = checked;
+        if (label) label.textContent = checked ? 'Sinkron' : 'Tandai sinkron';
+        if (wrap) wrap.classList.toggle('is-synced', checked);
+      } catch (err) {
+        cb.checked = !checked;
+        toast('Gagal menyimpan status sinkron: ' + err.message, 'error');
       } finally {
         cb.disabled = false;
       }
