@@ -985,6 +985,12 @@ function deriveStatementsFromLedgerAccounts(accounts) {
     });
   };
   const unrecognized = [];
+  // Akumulasi Saldo Awal akun Pendapatan/Beban yang seharusnya sudah
+  // "ditutup" (dinolkan) ke Ekuitas/Laba Ditahan pada akhir periode
+  // sebelumnya oleh software akuntansi asal, tapi ternyata masih terbawa
+  // di Buku Besar yang diimpor (lihat catatan panjang di atas
+  // penyesuaianSaldoAwalLabaRugi di bawah).
+  let penyesuaianSaldoAwalLabaRugi = 0;
 
   accounts.forEach(a => {
     const c = classifyLedgerAccount(a.code, a.name);
@@ -1005,11 +1011,21 @@ function deriveStatementsFromLedgerAccounts(accounts) {
     } else if (c.group === 'pendapatan') {
       if (c.bucket === 'inti') { labaRugi.pendapatan += mutasi; addContribution('pendapatan', a, mutasi); }
       else { labaRugi.pendapatanLainnya += mutasi; addContribution('pendapatanLainnya', a, mutasi); }
+      if (a.saldoAwal) {
+        // Saldo Awal akun Pendapatan (kredit) yang belum ditutup -> menambah Ekuitas.
+        penyesuaianSaldoAwalLabaRugi += a.saldoAwal;
+        addContribution('penyesuaianSaldoAwalLabaRugi', a, a.saldoAwal);
+      }
     } else if (c.group === 'beban') {
       if (c.bucket === 'hpp') { labaRugi.hpp += mutasi; addContribution('hpp', a, mutasi); }
       else if (c.bucket === 'operasional') { labaRugi.bebanOperasional += mutasi; addContribution('bebanOperasional', a, mutasi); }
       else if (c.bucket === 'lainnya') { labaRugi.bebanLainnya += mutasi; addContribution('bebanLainnya', a, mutasi); }
       else if (c.bucket === 'pajak') { labaRugi.pajakPenghasilan += mutasi; addContribution('pajakPenghasilan', a, mutasi); }
+      if (a.saldoAwal) {
+        // Saldo Awal akun Beban (debit) yang belum ditutup -> mengurangi Ekuitas.
+        penyesuaianSaldoAwalLabaRugi -= a.saldoAwal;
+        addContribution('penyesuaianSaldoAwalLabaRugi', a, -a.saldoAwal);
+      }
     } else {
       unrecognized.push(`${a.code ? '(' + a.code + ') ' : ''}${a.name}`);
     }
@@ -1025,6 +1041,22 @@ function deriveStatementsFromLedgerAccounts(accounts) {
   const warnings = [];
   if (unrecognized.length) {
     warnings.push(`Kode akun berikut tidak dikenali kategorinya sehingga dilewati dari Neraca/Laba Rugi (kode akun harus diawali 1-9): ${unrecognized.join(', ')}.`);
+  }
+  // Akun Pendapatan/Beban seharusnya bersaldo 0 di awal periode (akun
+  // sementara yang ditutup ke Laba Ditahan tiap tutup buku). Kalau Buku
+  // Besar yang diimpor ternyata masih membawa Saldo Awal pada akun
+  // semacam itu (biasanya karena belum sempat ditutup di software
+  // akuntansi asal pada periode sebelumnya), angka itu tidak pernah
+  // masuk ke Neraca sama sekali (bukan Aset/Kewajiban/Ekuitas, dan
+  // Laba Rugi periode ini sengaja hanya menghitung MUTASI-nya supaya
+  // tidak dobel-hitung) — akibatnya Total Aset jadi tidak sama dengan
+  // Total Kewajiban + Total Ekuitas. Di sinilah otomatis "ditutup" ke
+  // Ekuitas (baris "Penyesuaian Saldo Awal Akun Laba Rugi") supaya
+  // Neraca balance persis sesuai data yang diimpor, tanpa mengubah
+  // angka Laba Rugi tahun berjalan.
+  if (penyesuaianSaldoAwalLabaRugi !== 0) {
+    neraca.penyesuaianSaldoAwalLabaRugi = penyesuaianSaldoAwalLabaRugi;
+    warnings.push(`Ditemukan akun Pendapatan/Beban dengan Saldo Awal yang belum ditutup ke Ekuitas di software akuntansi asal (lihat baris "Penyesuaian Saldo Awal Akun Laba Rugi" pada Neraca) — otomatis disesuaikan sebesar ${formatIDR(penyesuaianSaldoAwalLabaRugi)} ke Ekuitas supaya Total Aset tetap sama dengan Total Kewajiban + Total Ekuitas.`);
   }
 
   return { neraca, labaRugi, warnings, contributions };
@@ -1198,7 +1230,7 @@ function deriveArusKasLangsungFromLedger(accounts) {
 // dari transaksi kas (pos "modal" pada CASHFLOW_DIRECT_CATEGORIES /
 // deriveArusKasLangsungFromLedger), lalu menambahkan Laba Bersih periode
 // berjalan supaya diperoleh Total Ekuitas Akhir Periode.
-function derivePerubahanModalFromLedger(accounts, arusKas, labaBersih) {
+function derivePerubahanModalFromLedger(accounts, arusKas, labaBersih, penyesuaianSaldoAwalLabaRugi) {
   const equityAccounts = (accounts || []).filter(a => classifyLedgerAccount(a.code, a.name).group === 'ekuitas');
   const modalDisetorAwal = equityAccounts.reduce((s, a) => s + (a.saldoAwal || 0), 0);
   const modalDisetorAkhir = equityAccounts.reduce((s, a) => s + (a.saldoAkhir || 0), 0);
@@ -1210,7 +1242,11 @@ function derivePerubahanModalFromLedger(accounts, arusKas, labaBersih) {
   const penarikanModal = penarikanBucket ? penarikanBucket.keluar : 0;
 
   const labaBersihPeriode = labaBersih || 0;
-  const totalEkuitasAkhir = modalDisetorAkhir + labaBersihPeriode;
+  // Ikut memasukkan penyesuaian Saldo Awal akun Laba Rugi yang belum
+  // ditutup (lihat deriveStatementsFromLedgerAccounts) supaya Total
+  // Ekuitas Akhir di sini konsisten dengan Total Ekuitas pada Neraca.
+  const penyesuaian = penyesuaianSaldoAwalLabaRugi || 0;
+  const totalEkuitasAkhir = modalDisetorAkhir + labaBersihPeriode + penyesuaian;
 
   const warnings = [];
   if (equityAccounts.length === 0) {
@@ -1222,7 +1258,7 @@ function derivePerubahanModalFromLedger(accounts, arusKas, labaBersih) {
     }
   }
 
-  return { modalDisetorAwal, setoranModal, penarikanModal, modalDisetorAkhir, labaBersihPeriode, totalEkuitasAkhir, warnings };
+  return { modalDisetorAwal, setoranModal, penarikanModal, modalDisetorAkhir, labaBersihPeriode, penyesuaianSaldoAwalLabaRugi: penyesuaian, totalEkuitasAkhir, warnings };
 }
 
 // Melengkapi Laporan Perubahan Modal dengan Laba Ditahan Awal Periode &
@@ -1233,12 +1269,13 @@ function withPerubahanModal(modal, neracaDisplay) {
   if (!modal || !neracaDisplay) return modal;
   const periodeIni = neracaDisplay.pendapatanPeriodeIni || 0;
   const sampaiTahunLalu = neracaDisplay.pendapatanSampaiTahunLalu || 0;
+  const penyesuaian = modal.penyesuaianSaldoAwalLabaRugi || 0;
   const labaDitahanAwal = sampaiTahunLalu + (periodeIni - modal.labaBersihPeriode);
   return {
     ...modal,
     labaDitahanAwal,
     saldoAwalEkuitas: modal.modalDisetorAwal + labaDitahanAwal,
-    totalEkuitasAkhirTermasukLabaDitahan: modal.modalDisetorAkhir + periodeIni + sampaiTahunLalu
+    totalEkuitasAkhirTermasukLabaDitahan: modal.modalDisetorAkhir + periodeIni + sampaiTahunLalu + penyesuaian
   };
 }
 
@@ -1326,7 +1363,7 @@ function parseBukuBesarSheet(sheet) {
 
   const derived = deriveStatementsFromLedgerAccounts(accounts);
   const arusKas = deriveArusKasLangsungFromLedger(accounts);
-  const perubahanModal = derivePerubahanModalFromLedger(accounts, arusKas, derived.labaRugi.labaBersih);
+  const perubahanModal = derivePerubahanModalFromLedger(accounts, arusKas, derived.labaRugi.labaBersih, derived.neraca.penyesuaianSaldoAwalLabaRugi);
 
   return {
     companyName,
@@ -3059,6 +3096,7 @@ function humanizeKey(key) {
 // mentah hasil impor) — dipakai untuk menimpa label bawaan dari
 // humanizeKey() supaya istilahnya sesuai maksud aslinya.
 const NERACA_LABELS = {
+  penyesuaianSaldoAwalLabaRugi: 'Penyesuaian Saldo Awal Akun Laba Rugi (Belum Ditutup)',
   pendapatanPeriodeIni: 'Pendapatan Periode Ini (Laba Rugi Tahun Berjalan)',
   pendapatanSampaiTahunLalu: 'Pendapatan s.d. Tahun Lalu (Laba Ditahan)',
   totalEkuitasTermasukLaba: 'Total Ekuitas (Termasuk Laba/Rugi)'
@@ -3101,11 +3139,17 @@ function computeRetainedEarnings(statements, selected) {
 function withRetainedEarnings(neraca, statements, selected) {
   if (!neraca || !('totalEkuitas' in neraca)) return neraca;
   const { periodeIni, sampaiTahunLalu } = computeRetainedEarnings(statements, selected);
+  // penyesuaianSaldoAwalLabaRugi (bila ada) sudah dihitung per-periode saat
+  // impor Buku Besar (lihat deriveStatementsFromLedgerAccounts) — ikut
+  // dimasukkan di sini supaya Total Ekuitas (Termasuk Laba/Rugi) tetap
+  // menutup selisih terhadap Total Aset walau ada akun Laba Rugi yang
+  // Saldo Awal-nya belum ditutup di software akuntansi asal.
+  const penyesuaian = neraca.penyesuaianSaldoAwalLabaRugi || 0;
   return {
     ...neraca,
     pendapatanPeriodeIni: periodeIni,
     pendapatanSampaiTahunLalu: sampaiTahunLalu,
-    totalEkuitasTermasukLaba: (neraca.totalEkuitas || 0) + periodeIni + sampaiTahunLalu
+    totalEkuitasTermasukLaba: (neraca.totalEkuitas || 0) + periodeIni + sampaiTahunLalu + penyesuaian
   };
 }
 
@@ -3125,7 +3169,7 @@ function neracaGroupedTable(neraca) {
     ${groupRow('Liabilitas')}
     ${row('totalKewajibanLancar')}${row('totalKewajibanJangkaPanjang')}${rowBold('totalKewajiban')}
     ${groupRow('Ekuitas')}
-    ${rowBold('totalEkuitas')}${row('pendapatanPeriodeIni')}${row('pendapatanSampaiTahunLalu')}${rowHighlight('totalEkuitasTermasukLaba')}
+    ${rowBold('totalEkuitas')}${row('penyesuaianSaldoAwalLabaRugi')}${row('pendapatanPeriodeIni')}${row('pendapatanSampaiTahunLalu')}${rowHighlight('totalEkuitasTermasukLaba')}
   </tbody></table>${neracaBalanceSummary(neraca)}`;
 }
 
@@ -3256,6 +3300,7 @@ function perubahanModalTable(modal) {
     ${groupLabel('Pengurangan')}
     ${line('Penarikan Modal Pemilik/Dividen', -modal.penarikanModal)}
     ${highlight('Modal Disetor Akhir Periode', modal.modalDisetorAkhir)}
+    ${modal.penyesuaianSaldoAwalLabaRugi ? line('Penyesuaian Saldo Awal Akun Laba Rugi (Belum Ditutup)', modal.penyesuaianSaldoAwalLabaRugi) : ''}
     ${hasHistori
       ? highlight('Saldo Akhir Ekuitas (Termasuk Laba Ditahan)', modal.totalEkuitasAkhirTermasukLabaDitahan)
       : highlight('Total Ekuitas Akhir Periode (Termasuk Laba Periode Ini)', modal.totalEkuitasAkhir)}
@@ -3316,9 +3361,10 @@ function ledgerTable(accounts) {
 const NERACA_FORMULAS = {
   totalAset: (n) => `Total Aset Lancar (${formatIDR(n.totalAsetLancar)}) + Total Aset Tidak Lancar (${formatIDR(n.totalAsetTidakLancar)})`,
   totalKewajiban: (n) => `Total Kewajiban Lancar (${formatIDR(n.totalKewajibanLancar)}) + Total Kewajiban Jangka Panjang (${formatIDR(n.totalKewajibanJangkaPanjang)})`,
+  penyesuaianSaldoAwalLabaRugi: () => `Akun Pendapatan/Beban pada Buku Besar yang diimpor ternyata masih membawa Saldo Awal (semestinya sudah ditutup/dinolkan ke Laba Ditahan oleh software akuntansi asal setiap tutup buku). Karena nilai ini tidak masuk ke Aset/Kewajiban/Ekuitas manapun dan sengaja tidak dihitung sebagai Laba Rugi tahun berjalan, Integrida menutupnya otomatis ke Ekuitas di sini (klik baris ini untuk melihat akun sumbernya) supaya Total Aset = Total Kewajiban + Total Ekuitas persis sesuai Buku Besar yang diimpor.`,
   pendapatanPeriodeIni: () => `Akumulasi Laba Bersih seluruh periode pada tahun yang sama, dari awal tahun sampai periode ini (laba/rugi tahun berjalan).`,
   pendapatanSampaiTahunLalu: () => `Akumulasi Laba Bersih seluruh periode pada tahun-tahun sebelum tahun periode ini, sejak awal berdiri (laba ditahan s.d. akhir tahun lalu).`,
-  totalEkuitasTermasukLaba: (n) => `Total Ekuitas (${formatIDR(n.totalEkuitas)}) + Pendapatan Periode Ini (${formatIDR(n.pendapatanPeriodeIni)}) + Pendapatan s.d. Tahun Lalu (${formatIDR(n.pendapatanSampaiTahunLalu)})`
+  totalEkuitasTermasukLaba: (n) => `Total Ekuitas (${formatIDR(n.totalEkuitas)}) + Penyesuaian Saldo Awal Akun Laba Rugi (${formatIDR(n.penyesuaianSaldoAwalLabaRugi || 0)}) + Pendapatan Periode Ini (${formatIDR(n.pendapatanPeriodeIni)}) + Pendapatan s.d. Tahun Lalu (${formatIDR(n.pendapatanSampaiTahunLalu)})`
 };
 const LABA_RUGI_FORMULAS = {
   labaKotor: (l) => `Pendapatan (${formatIDR(l.pendapatan)}) − HPP (${formatIDR(l.hpp)})`,
@@ -3481,7 +3527,7 @@ function derivedNeracaGrouped(neraca, contributions) {
     ${neracaGroupHeader('Liabilitas')}
     ${row('totalKewajibanLancar')}${row('totalKewajibanJangkaPanjang')}${highlight('totalKewajiban')}
     ${neracaGroupHeader('Ekuitas')}
-    ${row('totalEkuitas')}${row('pendapatanPeriodeIni')}${row('pendapatanSampaiTahunLalu')}${highlight('totalEkuitasTermasukLaba')}
+    ${row('totalEkuitas')}${row('penyesuaianSaldoAwalLabaRugi')}${row('pendapatanPeriodeIni')}${row('pendapatanSampaiTahunLalu')}${highlight('totalEkuitasTermasukLaba')}
   `;
 }
 
