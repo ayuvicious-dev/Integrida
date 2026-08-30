@@ -1075,6 +1075,21 @@ function parseLedgerAccountLabel(raw) {
   return { code: '', name: text };
 }
 
+// ---------- Versi logika turunan (Neraca/Laba Rugi/Arus Kas/Perubahan
+// Modal) dari Buku Besar ----------
+// PENTING: naikkan angka ini setiap kali logika klasifikasi/perhitungan
+// berubah (classifyLedgerAccount, arusKasPosForAccount,
+// deriveArusKasLangsungFromLedger, derivePerubahanModalFromLedger, dsb.).
+// Setiap statement tersimpan membawa derivationVersion saat itu disimpan;
+// begitu company-detail dibuka & Buku Besar-nya sudah ter-load, kalau
+// derivationVersion tersimpan < DERIVATION_VERSION saat ini, Neraca/Laba
+// Rugi/Arus Kas/Perubahan Modal dihitung ulang dari Buku Besar mentah dan
+// snapshot-nya ditimpa otomatis (lihat paintCompanyDetail) — TANPA perlu
+// impor ulang file Excel-nya. Ini membuat pembaruan logika turunan
+// otomatis berlaku ke data yang sudah pernah diimpor, satu periode setiap
+// kali periode itu dibuka.
+const DERIVATION_VERSION = 2;
+
 function classifyLedgerAccount(code, name) {
   const n = normalizeKey(name);
   const prefixStr = String(code || '').split('-')[0].trim();
@@ -1395,6 +1410,16 @@ const ARUS_KAS_ACTIVITY_LABELS = {
 // Arus Kas, karena itu yang dihitung dampaknya) atau kode akun di luar
 // 1-9 (tidak dikenali — sudah diperingatkan terpisah di
 // deriveStatementsFromLedgerAccounts).
+// Pengecualian khusus: akun (Laba)/Rugi Pelepasan Aset Tetap pada
+// kelompok Pendapatan Lainnya/Beban Lainnya (kode 7/8) secara substansi
+// akuntansi (PSAK 2/IAS 7) termasuk Aktivitas Investasi, bukan Operasi
+// — karena satu paket dengan transaksi pelepasan aset tetap itu sendiri.
+// Deteksi berdasarkan nama akun "pelepasan aset tetap" saja (pola yang
+// tidak ambigu), BUKAN pendekatan tebak-tebakan kata kunci umum seperti
+// pada versi lama (lihat catatan panjang soal itu di atas
+// deriveArusKasLangsungFromLedger).
+const PELEPASAN_ASET_TETAP_RE = /pelepasan aset tetap/;
+
 function arusKasPosForAccount(code, name) {
   const c = classifyLedgerAccount(code, name);
   if (c.group === 'aset') {
@@ -1409,11 +1434,15 @@ function arusKasPosForAccount(code, name) {
   if (c.group === 'ekuitas') return { key: 'modal', label: 'Setoran/Penarikan Modal Pemilik', activity: 'pendanaan', debitNormal: false };
   if (c.group === 'pendapatan') {
     if (c.bucket === 'inti') return { key: 'pendapatan', label: 'Penerimaan dari Pelanggan', activity: 'operasi', debitNormal: false };
+    if (PELEPASAN_ASET_TETAP_RE.test(normalizeKey(name))) return { key: 'asetTetap', label: 'Perolehan/Penjualan Aset Tetap', activity: 'investasi', debitNormal: false };
     return { key: 'pendapatanLainnya', label: 'Pendapatan Lainnya', activity: 'operasi', debitNormal: false };
   }
   if (c.group === 'beban') {
     if (c.bucket === 'hpp') return { key: 'hpp', label: 'Pembayaran Harga Pokok Penjualan (HPP)', activity: 'operasi', debitNormal: true };
-    if (c.bucket === 'lainnya') return { key: 'bebanLainnya', label: 'Pembayaran Beban Lainnya', activity: 'operasi', debitNormal: true };
+    if (c.bucket === 'lainnya') {
+      if (PELEPASAN_ASET_TETAP_RE.test(normalizeKey(name))) return { key: 'asetTetap', label: 'Perolehan/Penjualan Aset Tetap', activity: 'investasi', debitNormal: true };
+      return { key: 'bebanLainnya', label: 'Pembayaran Beban Lainnya', activity: 'operasi', debitNormal: true };
+    }
     if (c.bucket === 'pajak') return { key: 'pajak', label: 'Pembayaran Pajak Penghasilan', activity: 'operasi', debitNormal: true };
     return { key: 'bebanOperasional', label: 'Pembayaran Beban Operasional', activity: 'operasi', debitNormal: true };
   }
@@ -4063,12 +4092,17 @@ function statementSyncProgress(statement, allStatements, companyId, onLoaded) {
     let neracaBaseS = statement.neraca;
     let labaRugiBaseS = statement.labaRugi;
     let bbContribsS = null;
+    let arusKasBaseS = statement.arusKas;
+    let perubahanModalBaseS = statement.perubahanModal;
     if (statement.bukuBesarCount > 0) {
       if (Array.isArray(ledgerCache[statement.id])) {
-        const derived = deriveStatementsFromLedgerAccounts(ledgerCache[statement.id]);
+        const ledgerAccountsS = ledgerCache[statement.id];
+        const derived = deriveStatementsFromLedgerAccounts(ledgerAccountsS);
         bbContribsS = derived.contributions;
         neracaBaseS = derived.neraca;
         labaRugiBaseS = derived.labaRugi;
+        arusKasBaseS = deriveArusKasLangsungFromLedger(ledgerAccountsS);
+        perubahanModalBaseS = derivePerubahanModalFromLedger(ledgerAccountsS, arusKasBaseS, derived.labaRugi.labaBersih, derived.neraca.penyesuaianSaldoAwalLabaRugi);
       } else {
         if (ledgerCache[statement.id] !== 'loading') {
           ledgerCache[statement.id] = 'loading';
@@ -4087,13 +4121,13 @@ function statementSyncProgress(statement, allStatements, companyId, onLoaded) {
     }
     const syncFlags = statement.syncFlags || {};
     const neracaDisplayS = withRetainedEarnings(neracaBaseS, allStatements, statement);
-    const modalDisplayS = withPerubahanModal(statement.perubahanModal, neracaDisplayS);
+    const modalDisplayS = withPerubahanModal(perubahanModalBaseS, neracaDisplayS);
     let html = '';
     if (bbContribsS) {
       html += derivedNeracaGrouped(neracaDisplayS, bbContribsS, syncFlags);
       html += derivedSectionDetails(labaRugiBaseS, bbContribsS, LABA_RUGI_FORMULAS, LABA_RUGI_LABELS, LABA_RUGI_HIGHLIGHT_KEYS, LABA_RUGI_ORDER, syncFlags, 'labaRugi');
     }
-    html += arusKasTable(statement.arusKas, syncFlags);
+    html += arusKasTable(arusKasBaseS, syncFlags);
     html += perubahanModalTable(modalDisplayS, syncFlags);
     return countSyncCheckboxes(html);
   } finally {
@@ -4430,6 +4464,8 @@ function paintCompanyDetail(statements) {
   let bbContribs = null;
   let neracaBase = selected.neraca;
   let labaRugiBase = selected.labaRugi;
+  let arusKasBase = selected.arusKas;
+  let perubahanModalBase = selected.perubahanModal;
   if (selected.bukuBesarCount > 0) {
     if (Array.isArray(ledgerCache[selected.id])) {
       // Neraca & Laba Rugi periode ini SELALU diturunkan ulang langsung dari
@@ -4438,10 +4474,38 @@ function paintCompanyDetail(statements) {
       // diperbarui di kemudian hari (mis. kategori "Aset Lancar Lainnya"),
       // periode yang datanya sudah diimpor lama ikut otomatis ter-update
       // begitu dibuka lagi, tanpa perlu impor ulang file Buku Besar-nya.
-      const derivedLive = deriveStatementsFromLedgerAccounts(ledgerCache[selected.id]);
+      const ledgerAccounts = ledgerCache[selected.id];
+      const derivedLive = deriveStatementsFromLedgerAccounts(ledgerAccounts);
       bbContribs = derivedLive.contributions;
       neracaBase = derivedLive.neraca;
       labaRugiBase = derivedLive.labaRugi;
+      // Arus Kas & Perubahan Modal ikut diturunkan ulang di sini juga (dulu
+      // sempat cuma dipakai dari snapshot statis `selected.arusKas`/
+      // `selected.perubahanModal`, jadi basi kalau logikanya berubah — lihat
+      // DERIVATION_VERSION di atas classifyLedgerAccount).
+      const arusKasLive = deriveArusKasLangsungFromLedger(ledgerAccounts);
+      const perubahanModalLive = derivePerubahanModalFromLedger(ledgerAccounts, arusKasLive, derivedLive.labaRugi.labaBersih, derivedLive.neraca.penyesuaianSaldoAwalLabaRugi);
+      arusKasBase = arusKasLive;
+      perubahanModalBase = perubahanModalLive;
+
+      // Kalau snapshot tersimpan berasal dari versi logika turunan yang
+      // lebih lama, timpa diam-diam dengan hasil hitung ulang di atas —
+      // supaya halaman lain yang memakai snapshot statis (Perbandingan,
+      // Analisis Rasio) ikut ter-update begitu periode ini pernah dibuka
+      // sekali, tanpa perlu impor ulang. Ditandai di objek `selected` juga
+      // supaya tidak berulang kali menyimpan pada render berikutnya dalam
+      // sesi yang sama.
+      if (selected.derivationVersion !== DERIVATION_VERSION) {
+        selected.derivationVersion = DERIVATION_VERSION;
+        DB.saveStatementSections(state.companyDetailId, selected, {
+          neraca: neracaBase,
+          labaRugi: labaRugiBase,
+          arusKas: arusKasLive,
+          perubahanModal: perubahanModalLive,
+          bukuBesarCount: selected.bukuBesarCount,
+          derivationVersion: DERIVATION_VERSION
+        }).catch((err) => console.error('Gagal memperbarui otomatis snapshot Neraca/Laba Rugi/Arus Kas/Perubahan Modal:', err));
+      }
     } else if (ledgerCache[selected.id] !== 'loading') {
       ledgerCache[selected.id] = 'loading';
       DB.getLedgerAccounts(state.companyDetailId, selected.id)
@@ -4460,7 +4524,7 @@ function paintCompanyDetail(statements) {
   // Pendapatan s.d. Tahun Lalu (lihat withRetainedEarnings) supaya Total
   // Aset bisa dicocokkan dengan Total Kewajiban + Total Ekuitas.
   const neracaDisplay = withRetainedEarnings(neracaBase, statements, selected);
-  const modalDisplay = withPerubahanModal(selected.perubahanModal, neracaDisplay);
+  const modalDisplay = withPerubahanModal(perubahanModalBase, neracaDisplay);
 
   content.innerHTML = `
     ${company ? businessInfoHTML(company, statements.length) : ''}
@@ -4492,9 +4556,9 @@ function paintCompanyDetail(statements) {
         ${company ? reportTitleHTML(company, 'Arus Kas', selected, false) : ''}
         <div class="section-title">
           <span class="badge blue">Arus Kas (Metode Langsung)</span>
-          ${selected.arusKas && selected.arusKas.rincian ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik pos untuk rincian akun kontributor</span>' : ''}
+          ${arusKasBase && arusKasBase.rincian ? '<span style="font-size:11px;color:var(--slate);font-weight:400;margin-left:8px;">klik pos untuk rincian akun kontributor</span>' : ''}
         </div>
-        ${arusKasTable(selected.arusKas, selected.syncFlags || {})}
+        ${arusKasTable(arusKasBase, selected.syncFlags || {})}
       </div>
       <div class="card">
         ${company ? reportTitleHTML(company, 'Perubahan Modal', selected, false) : ''}
@@ -4836,7 +4900,8 @@ async function confirmImport() {
       labaRugi: pendingImport.data.labaRugi,
       arusKas: pendingImport.data.arusKas,
       perubahanModal: pendingImport.data.perubahanModal,
-      bukuBesarCount: accounts.length
+      bukuBesarCount: accounts.length,
+      derivationVersion: DERIVATION_VERSION
     });
     toast(`Buku Besar tersimpan — Neraca, Laba Rugi, Arus Kas & Perubahan Modal otomatis diperbarui`, 'success');
     pendingImport = null;
