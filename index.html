@@ -1088,7 +1088,7 @@ function parseLedgerAccountLabel(raw) {
 // impor ulang file Excel-nya. Ini membuat pembaruan logika turunan
 // otomatis berlaku ke data yang sudah pernah diimpor, satu periode setiap
 // kali periode itu dibuka.
-const DERIVATION_VERSION = 2;
+const DERIVATION_VERSION = 3;
 
 function classifyLedgerAccount(code, name) {
   const n = normalizeKey(name);
@@ -1420,6 +1420,19 @@ const ARUS_KAS_ACTIVITY_LABELS = {
 // deriveArusKasLangsungFromLedger).
 const PELEPASAN_ASET_TETAP_RE = /pelepasan aset tetap/;
 
+// Pengecualian khusus: akun Kewajiban yang namanya berpola "Hutang
+// Pendanaan - ..." (mis. "Hutang Pendanaan - PT", "Hutang Pendanaan -
+// Pak", "Hutang Pendanaan - Bank") adalah utang berbunga/pinjaman untuk
+// pendanaan (dari pemegang saham, pihak berelasi, PT lain, atau bank) —
+// BUKAN hutang usaha/dagang biasa — sehingga secara akuntansi termasuk
+// Aktivitas Pendanaan pada Arus Kas, TERLEPAS dari jangka waktunya
+// (pendek/panjang). Sengaja HANYA memengaruhi klasifikasi Arus Kas di
+// sini, TIDAK mengubah bucket 'lancar'/'jangkaPanjang' pada
+// classifyLedgerAccount — supaya penyajian Kewajiban Lancar vs Jangka
+// Panjang di Neraca (dan Current Ratio) tetap mengikuti jangka waktu
+// aslinya, bukan ikut disamakan jadi Jangka Panjang.
+const HUTANG_PENDANAAN_RE = /hutang pendanaan/;
+
 function arusKasPosForAccount(code, name) {
   const c = classifyLedgerAccount(code, name);
   if (c.group === 'aset') {
@@ -1428,7 +1441,7 @@ function arusKasPosForAccount(code, name) {
     return { key: 'asetLancarLainnya', label: 'Perubahan Aset Lancar Lainnya (Piutang, Persediaan, dsb.)', activity: 'operasi', debitNormal: true };
   }
   if (c.group === 'kewajiban') {
-    if (c.bucket === 'jangkaPanjang') return { key: 'pinjaman', label: 'Penerimaan/Pembayaran Pinjaman', activity: 'pendanaan', debitNormal: false };
+    if (c.bucket === 'jangkaPanjang' || HUTANG_PENDANAAN_RE.test(normalizeKey(name))) return { key: 'pinjaman', label: 'Penerimaan/Pembayaran Pinjaman', activity: 'pendanaan', debitNormal: false };
     return { key: 'hutangLancar', label: 'Perubahan Hutang & Liabilitas Jangka Pendek', activity: 'operasi', debitNormal: false };
   }
   if (c.group === 'ekuitas') return { key: 'modal', label: 'Setoran/Penarikan Modal Pemilik', activity: 'pendanaan', debitNormal: false };
