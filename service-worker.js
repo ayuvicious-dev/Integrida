@@ -298,7 +298,46 @@
 //      Date.getDay(): 0=Minggu...6=Sabtu) disimpan di dokumen reminder;
 //      occursOnDate() & label repeat pada daftar pengingat (mis. "↻ Sen,
 //      Rab, Jum") sudah menyesuaikan.
-const CACHE_NAME = 'integrida-cache-v46';
+// v47: index.html diperbarui — modal Tambah/Edit Pengingat kini punya
+//      checkbox "s.d. tgl lain" di sebelah field Tanggal; saat dicentang,
+//      muncul field "s.d. Tanggal" untuk menetapkan rentang tanggal (mis.
+//      tgl 1 s.d. tgl 3). Field ini bisa dikombinasikan dengan Ulangi
+//      (Harian/Mingguan/Bulanan/Tidak berulang) dan dengan filter opsional
+//      "Hanya muncul di hari berikut" (checkbox hari, memakai ulang UI
+//      "Hari Tertentu") — contoh: rentang tgl 1-3, diulangi Bulanan,
+//      difilter Senin-Jumat, sehingga kalau tgl 1-3 jatuh di Sabtu/Minggu
+//      pengingatnya otomatis tidak muncul di hari itu. Field baru `endDate`
+//      (string tanggal atau kosong) disimpan di dokumen reminder Firestore;
+//      occursOnDate() & repeatDisplayLabel() sudah menyesuaikan untuk
+//      menangani rentang tanggal ini pada semua jenis Ulangi.
+// v48: index.html diperbarui — tampilan semua input tanggal (Tanggal
+//      Berdiri di Info Bisnis, serta Tanggal & "s.d. Tanggal" pada modal
+//      Pengingat) sekarang SELALU berformat dd/mm/yyyy, apapun locale
+//      browser/OS pengguna (native <input type="date"> sebelumnya ikut
+//      locale browser, bisa tampil mm/dd/yyyy di sebagian perangkat).
+//      Trik: teks bawaan input disembunyikan lalu ditumpuk teks overlay
+//      dd/mm/yyyy (enhanceDateInputs()/formatDateDisplayDDMMYYYY()) —
+//      value tersimpan & date picker native tidak berubah sama sekali.
+// v49: index.html diperbarui — formatDateID() (dipakai untuk menampilkan
+//      Tanggal Berdiri perusahaan di kartu Perusahaan/Detail Perusahaan)
+//      diubah dari format tanggal dieja pakai nama bulan (mis. "9
+//      Februari 2026") menjadi angka dd/mm/yyyy (mis. "09/02/2026"),
+//      supaya seragam dengan format dd/mm/yyyy yang sejak v48 dipakai di
+//      seluruh input tanggal & kop laporan keuangan aplikasi ini.
+// v50: index.html diperbarui — repeat "Hari Tertentu" pada Ulangi diganti
+//      jadi "Bulanan, Hari Tertentu" dan perilakunya diubah total: yang
+//      tadinya berulang TIAP MINGGU di hari yang dicentang (tanpa peduli
+//      tanggal), sekarang berulang TIAP BULAN pada tanggal yang sama
+//      dengan field Tanggal (mengikuti penyesuaian akhir bulan seperti
+//      repeat "Bulanan" biasa) DAN hanya benar-benar muncul kalau tanggal
+//      itu jatuh di salah satu hari yang dicentang — kalau tidak jatuh di
+//      hari tsb pada suatu bulan, pengingat dilewati bulan itu (bukan
+//      digeser ke tanggal lain). Opsi "s.d. tgl lain" (rentang tanggal)
+//      disembunyikan otomatis saat repeat ini dipilih karena tidak
+//      relevan. occursOnDate(), repeatDisplayLabel(), & REPEAT_LABELS
+//      sudah disesuaikan; data pengingat lama dengan repeat "custom"
+//      otomatis mengikuti perilaku baru ini (tidak ada migrasi data).
+const CACHE_NAME = 'integrida-cache-v50';
 const APP_SHELL = [
   './',
   './index.html',
