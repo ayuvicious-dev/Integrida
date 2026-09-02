@@ -337,7 +337,7 @@
 //      relevan. occursOnDate(), repeatDisplayLabel(), & REPEAT_LABELS
 //      sudah disesuaikan; data pengingat lama dengan repeat "custom"
 //      otomatis mengikuti perilaku baru ini (tidak ada migrasi data).
-const CACHE_NAME = 'integrida-cache-v50';
+const CACHE_NAME = 'integrida-cache-v52';
 const APP_SHELL = [
   './',
   './index.html',

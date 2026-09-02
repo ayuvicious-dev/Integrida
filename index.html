@@ -378,9 +378,9 @@ tbody tr:hover{background:var(--surface-2);}
 .cal-pending-btn.active{background:var(--teal);color:#fff;}
 .cal-pending-badge{display:inline-flex;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-left:6px;}
 .cal-pending-btn.active .cal-pending-badge{background:#fff;}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;align-items:start;}
 .cal-dow{font-size:11px;font-weight:600;color:var(--slate-light);text-align:center;padding:6px 0 10px 0;text-transform:uppercase;letter-spacing:.4px;position:sticky;top:62px;background:var(--card);z-index:2;}
-.cal-cell{position:relative;aspect-ratio:1/1;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:3px;font-size:13px;color:var(--text);min-height:38px;padding-top:8px;}
+.cal-cell{position:relative;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;display:flex;flex-direction:column;align-items:stretch;gap:3px;font-size:13px;color:var(--text);min-height:38px;padding:8px 0 6px 0;}
 .cal-cell:hover{background:var(--teal-light);}
 .cal-cell.cal-outside{background:transparent!important;}
 .cal-cell.cal-saturday{background:var(--success-light);}
@@ -388,10 +388,18 @@ tbody tr:hover{background:var(--surface-2);}
 .cal-cell.cal-today{border-color:var(--teal);font-weight:700;}
 .cal-cell.cal-selected{background:var(--teal);color:#fff;border-color:var(--teal);}
 .cal-cell.cal-selected:hover{background:var(--teal);}
+.cal-cell-date{text-align:center;flex-shrink:0;}
+.cal-cell-reminders{display:flex;flex-direction:column;gap:2px;margin-top:3px;padding:0 4px;}
+.cal-cell-reminder{display:flex;align-items:baseline;gap:3px;font-size:10.5px;line-height:1.35;border-radius:4px;padding:1px 3px;cursor:pointer;overflow:hidden;}
+.cal-cell-reminder:hover{background:rgba(0,0,0,.08);}
+.cal-cell.cal-selected .cal-cell-reminder:hover{background:rgba(255,255,255,.2);}
+.cal-cell-reminder-num{font-weight:700;color:var(--teal);flex-shrink:0;}
+.cal-cell.cal-selected .cal-cell-reminder-num{color:#fff;}
+.cal-cell-reminder-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;text-align:left;color:var(--text);}
+.cal-cell.cal-selected .cal-cell-reminder-title{color:#fff;}
+.cal-cell-reminder.cal-cell-reminder-done .cal-cell-reminder-title{text-decoration:line-through;color:var(--slate-light);}
 .cal-dot{width:5px;height:5px;border-radius:50%;background:var(--gold);}
 .cal-cell.cal-selected .cal-dot{background:#fff;}
-.cal-day-list{margin-top:20px;}
-.cal-day-list-title{font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:10px;}
 .reminder-item{display:flex;gap:11px;align-items:flex-start;border:1px solid var(--border);border-radius:9px;padding:12px 13px;background:var(--surface-2);}
 .reminder-item + .reminder-item{margin-top:10px;}
 .reminder-item input[type="checkbox"]{width:19px;height:19px;flex-shrink:0;margin-top:1px;cursor:pointer;accent-color:var(--teal);}
@@ -2335,8 +2343,7 @@ const state = {
   upgradeExpanded: {},        // itemId -> true jika keterangan panjang sedang ditampilkan penuh
   reminders: [],              // daftar pengingat/catatan tugas bebas (menu Kalender)
   calendarCursor: (() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; })(), // bulan yang sedang ditampilkan di grid kalender
-  calendarSelectedDate: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })(), // tanggal (YYYY-MM-DD) yang sedang dipilih
-  calendarShowPending: false // true = menu Kalender sedang menampilkan daftar "Pending Reminder" (pengingat tanpa tanggal) bukan daftar per-tanggal
+  calendarSelectedDate: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })() // tanggal (YYYY-MM-DD) yang sedang dipilih; dipakai sbg default tanggal saat menambah pengingat baru lewat tombol "+"
 };
 
 // =============================================================
@@ -5955,8 +5962,18 @@ function occursOnDate(reminder, dateKeyStr) {
     // hari (Senin/Selasa/dst.) yang dicentang di reminder.customDays.
     // Kalau bulan tsb tanggalnya tidak jatuh di hari yang dipilih,
     // pengingat DILEWATI bulan itu (tidak digeser ke tanggal lain).
+    // Kalau "s.d. tgl lain" (endDate) diisi, targetDay di atas melebar
+    // jadi RENTANG tanggal tiap bulan (sama seperti repeat "Bulanan"
+    // dengan endDate), dan filter hari tetap berlaku per-hari di dalam
+    // rentang tsb.
     if (filterDays.length === 0) return false;
     const daysInCurMonth = new Date(ky, km, 0).getDate();
+    if (hasEndDate) {
+      const spanDays = Math.max(0, ed - bd);
+      const startDayEff = Math.min(bd, daysInCurMonth);
+      const endDayEff = Math.min(bd + spanDays, daysInCurMonth);
+      return kd >= startDayEff && kd <= endDayEff && filterDays.includes(curDow);
+    }
     const targetDay = Math.min(bd, daysInCurMonth);
     if (kd !== targetDay) return false;
     return filterDays.includes(curDow);
@@ -5986,7 +6003,11 @@ function repeatDisplayLabel(item) {
   if (repeat === 'custom') {
     if (days.length === 0) return REPEAT_LABELS.custom;
     const bd = item.date ? Number(item.date.split('-')[2]) : null;
-    const dayPart = bd ? ` (tgl ${bd})` : '';
+    let dayPart = bd ? ` (tgl ${bd})` : '';
+    if (hasEndDate) {
+      const ed = Number(item.endDate.split('-')[2]);
+      dayPart = ` (tgl ${bd}-${ed})`;
+    }
     return `${REPEAT_LABELS.custom}${dayPart} · ${days.map(d => CAL_DOW_BY_JSDOW[d]).join(', ')}`;
   }
   let label = REPEAT_LABELS[repeat] || REPEAT_LABELS.none;
@@ -6015,31 +6036,23 @@ function renderCalendar() {
           </div>
         </div>
         <div class="cal-grid" id="cal-grid"></div>
-        <div class="cal-day-list" id="cal-day-list"></div>
       </div>
     </div>
     <button class="cal-fab" id="add-reminder-btn" title="Tambah Pengingat">${icon('plus')}</button>
   `;
   document.getElementById('cal-prev').addEventListener('click', () => shiftCalendarMonth(-1));
   document.getElementById('cal-next').addEventListener('click', () => shiftCalendarMonth(1));
-  document.getElementById('cal-pending-btn').addEventListener('click', () => {
-    state.calendarShowPending = !state.calendarShowPending;
-    renderCalendarGrid();
-    renderCalendarDayList();
-  });
-  document.getElementById('add-reminder-btn').addEventListener('click', () => openReminderModal(null, state.calendarShowPending ? '' : state.calendarSelectedDate));
+  document.getElementById('cal-pending-btn').addEventListener('click', () => openPendingRemindersModal());
+  document.getElementById('add-reminder-btn').addEventListener('click', () => openReminderModal(null, state.calendarSelectedDate));
 
   state.unsubData = DB.watchReminders(state.user.uid, (items) => {
     state.reminders = items;
     renderCalendarGrid();
-    renderCalendarDayList();
   }, (err) => {
-    const list = document.getElementById('cal-day-list');
-    if (list) list.innerHTML = `<div class="upgrade-empty">Gagal memuat: ${escapeHTML(err.message)}</div>`;
+    toast('Gagal memuat pengingat: ' + err.message, 'error');
   });
 
   renderCalendarGrid();
-  renderCalendarDayList();
 }
 
 function shiftCalendarMonth(delta) {
@@ -6059,9 +6072,7 @@ function renderCalendarGrid() {
 
   const pendingCount = state.reminders.filter(r => !r.date && !r.done).length;
   const badge = document.getElementById('cal-pending-badge');
-  const pendingBtn = document.getElementById('cal-pending-btn');
   if (badge) { badge.style.display = pendingCount > 0 ? 'inline-flex' : 'none'; }
-  if (pendingBtn) pendingBtn.classList.toggle('active', !!state.calendarShowPending);
 
   const remindersByDate = {}; // cache sederhana per tanggal supaya tidak menghitung ulang saat render grid
 
@@ -6096,22 +6107,34 @@ function renderCalendarGrid() {
 
   grid.innerHTML = cells;
   grid.querySelectorAll('[data-cal-date]').forEach(cell => {
-    cell.addEventListener('click', () => {
+    cell.addEventListener('click', (e) => {
+      // Klik pada baris pengingat di dalam sel ditangani terpisah (lihat
+      // di bawah) dan tidak boleh ikut memicu pemilihan tanggal ini.
+      if (e.target.closest('[data-cal-reminder]')) return;
       const key = cell.dataset.calDate;
       state.calendarSelectedDate = key;
-      state.calendarShowPending = false;
       const [y, m] = key.split('-').map(Number);
       state.calendarCursor = { year: y, month: m - 1 };
       renderCalendarGrid();
-      renderCalendarDayList();
+    });
+  });
+  grid.querySelectorAll('[data-cal-reminder]').forEach(row => {
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const item = state.reminders.find(r => r.id === row.dataset.calReminder);
+      if (item) openReminderModal(item);
     });
   });
 }
 
+// Menampilkan ringkasan pengingat langsung di dalam sel kalender (nomor
+// urut & judul saja, sekilas), tanpa daftar terpisah di bawah grid.
+// Tinggi sel menyesuaikan otomatis mengikuti jumlah pengingat pada
+// tanggal tsb (lihat CSS .cal-cell, sudah tidak dipaksa aspect-ratio 1/1).
 function calCellHTML(y, m, d, outside, remindersByDate, todayKey) {
   const key = dateKey(y, m, d);
-  if (!(key in remindersByDate)) remindersByDate[key] = remindersForDate(key).length > 0;
-  const hasReminders = remindersByDate[key];
+  if (!(key in remindersByDate)) remindersByDate[key] = remindersForDate(key);
+  const items = remindersByDate[key];
   const dow = new Date(y, m, d).getDay(); // 0 = Minggu, 6 = Sabtu
   const holidayName = idHolidayName(key);
   const classes = ['cal-cell'];
@@ -6120,36 +6143,40 @@ function calCellHTML(y, m, d, outside, remindersByDate, todayKey) {
   else if (dow === 6) classes.push('cal-saturday');
   if (key === todayKey) classes.push('cal-today');
   if (key === state.calendarSelectedDate) classes.push('cal-selected');
+  const remindersHTML = (!outside && items.length > 0)
+    ? `<div class="cal-cell-reminders">${items.map((item, idx) => calCellReminderHTML(item, idx)).join('')}</div>`
+    : '';
   return `<div class="${classes.join(' ')}" data-cal-date="${key}"${holidayName ? ` title="${escapeHTML(holidayName)}"` : ''}>
-    ${outside ? '' : `<span>${d}</span>`}
-    ${hasReminders ? '<span class="cal-dot"></span>' : ''}
+    ${outside ? '' : `<span class="cal-cell-date">${d}</span>`}
+    ${remindersHTML}
   </div>`;
 }
 
-function renderCalendarDayList() {
-  const list = document.getElementById('cal-day-list');
-  if (!list) return;
+function calCellReminderHTML(item, idx) {
+  const num = (item.order !== null && item.order !== undefined && item.order !== '') ? item.order : (idx + 1);
+  return `<div class="cal-cell-reminder${item.done ? ' cal-cell-reminder-done' : ''}" data-cal-reminder="${item.id}" title="${escapeHTML(item.title)}">
+    <span class="cal-cell-reminder-num">${escapeHTML(String(num))}.</span>
+    <span class="cal-cell-reminder-title">${escapeHTML(item.title)}</span>
+  </div>`;
+}
 
-  let label, items;
-  if (state.calendarShowPending) {
-    label = 'Pending Reminder';
-    items = state.reminders.filter(r => !r.date)
-      .sort((a, b) => (a.priority === 'priority' ? 0 : 1) - (b.priority === 'priority' ? 0 : 1) || (a.createdAtMs || 0) - (b.createdAtMs || 0));
-  } else {
-    const key = state.calendarSelectedDate;
-    const [y, m, d] = key.split('-').map(Number);
-    label = `Pengingat — ${d} ${CAL_MONTH_NAMES[m - 1]} ${y}`;
-    items = remindersForDate(key);
-  }
-
-  list.innerHTML = `
-    <div class="cal-day-list-title">${label}</div>
+// Modal terpisah untuk "Pending Reminder" (pengingat tanpa tanggal),
+// karena tidak punya tanggal untuk ditampilkan di dalam sel kalender.
+function openPendingRemindersModal() {
+  const items = state.reminders.filter(r => !r.date)
+    .sort((a, b) => (a.priority === 'priority' ? 0 : 1) - (b.priority === 'priority' ? 0 : 1) || (a.createdAtMs || 0) - (b.createdAtMs || 0));
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:520px;">
+    <button class="modal-close" id="close-modal" title="Tutup">${icon('close')}</button>
+    <h3>Pending Reminder</h3>
     ${items.length === 0
-      ? `<div class="upgrade-empty">${state.calendarShowPending ? 'Belum ada pengingat tanpa tanggal.' : 'Belum ada pengingat untuk tanggal ini.'} Klik tombol "+" untuk menambahkan.</div>`
-      : (state.calendarShowPending ? reminderPendingTableHTML(items) : items.map(item => reminderItemHTML(item)).join(''))}
-  `;
+      ? `<div class="upgrade-empty">Belum ada pengingat tanpa tanggal.</div>`
+      : reminderPendingTableHTML(items)}
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#close-modal').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
 
-  list.querySelectorAll('[data-reminder-check]').forEach(cb => {
+  backdrop.querySelectorAll('[data-reminder-check]').forEach(cb => {
     cb.addEventListener('change', async () => {
       try {
         await DB.setReminderDone(cb.dataset.reminderCheck, cb.checked);
@@ -6158,13 +6185,13 @@ function renderCalendarDayList() {
       }
     });
   });
-  list.querySelectorAll('[data-reminder-edit]').forEach(btn => {
+  backdrop.querySelectorAll('[data-reminder-edit]').forEach(btn => {
     btn.addEventListener('click', () => {
       const item = state.reminders.find(r => r.id === btn.dataset.reminderEdit);
-      if (item) openReminderModal(item);
+      if (item) { backdrop.remove(); openReminderModal(item); }
     });
   });
-  list.querySelectorAll('[data-reminder-delete]').forEach(btn => {
+  backdrop.querySelectorAll('[data-reminder-delete]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const item = state.reminders.find(r => r.id === btn.dataset.reminderDelete);
       if (!item) return;
@@ -6221,33 +6248,16 @@ function reminderRowHTML(item) {
   `;
 }
 
-function reminderItemHTML(item) {
-  const repeat = item.repeat || 'none';
-  const hasEndDate = !!item.endDate && item.endDate >= item.date;
-  const showRepeatBadge = repeat !== 'none' || hasEndDate;
-  const isPriority = !item.date && item.priority === 'priority';
-  return `
-    <div class="reminder-item${isPriority ? ' reminder-item-priority' : ''}">
-      <input type="checkbox" data-reminder-check="${item.id}" ${item.done ? 'checked' : ''} title="Tandai selesai">
-      <div class="reminder-item-body">
-        <div class="reminder-item-title" style="${item.done ? 'text-decoration:line-through;color:var(--slate-light);' : ''}">${item.time ? `<span class="reminder-item-time">${escapeHTML(item.time)}</span> ` : ''}${escapeHTML(item.title)}${showRepeatBadge ? ` <span class="reminder-item-repeat">↻ ${repeatDisplayLabel(item)}</span>` : ''}${isPriority ? ` <span class="reminder-item-priority-badge">Prioritas</span>` : ''}</div>
-        ${item.description ? `<div class="reminder-item-desc">${escapeHTML(item.description)}</div>` : ''}
-      </div>
-      <div class="reminder-item-actions">
-        <button data-reminder-edit="${item.id}" title="Edit pengingat">${icon('edit')}</button>
-        <button class="danger-action" data-reminder-delete="${item.id}" title="Hapus pengingat">${icon('trash')}</button>
-      </div>
-    </div>
-  `;
-}
-
 // item kosong/undefined => mode tambah baru; defaultDate dipakai untuk
 // mengisi tanggal awal sesuai hari yang sedang dipilih di grid kalender.
 function openReminderModal(item, defaultDate) {
   const isEdit = !!item;
   const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:460px;">
     <button class="modal-close" id="close-modal" title="Tutup">${icon('close')}</button>
-    <h3>${isEdit ? 'Edit Pengingat' : 'Tambah Pengingat'}</h3>
+    <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <span>${isEdit ? 'Edit Pengingat' : 'Tambah Pengingat'}</span>
+      ${isEdit ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--slate);cursor:pointer;user-select:none;"><input type="checkbox" id="reminder-done-input" ${item.done ? 'checked' : ''}><span>Selesai</span></label>` : ''}
+    </h3>
     <div class="field" style="display:flex;flex-direction:row;gap:10px;align-items:flex-end;">
       <div style="width:70px;flex-shrink:0;"><label style="font-size:12.5px;color:var(--slate);font-weight:500;display:block;margin-bottom:5px;" title="Urutan tampil pada rincian jadwal hari itu (opsional)">Urutan</label><input type="number" id="reminder-order-input" placeholder="-" value="${item && item.order !== null && item.order !== undefined ? item.order : ''}" style="width:100%;padding:9px 8px;border:1px solid var(--border);border-radius:7px;font-size:13.5px;background:var(--card);color:var(--text);text-align:center;"></div>
       <div style="flex:1;min-width:0;"><label style="font-size:12.5px;color:var(--slate);font-weight:500;display:block;margin-bottom:5px;">Judul</label><input type="text" id="reminder-title-input" placeholder="Contoh: Follow up dokumen pajak" value="${escapeHTML(item ? item.title : '')}" style="width:100%;"></div>
@@ -6293,9 +6303,12 @@ function openReminderModal(item, defaultDate) {
       </div>
     </div>
     <div class="field"><label>Keterangan (opsional)</label><textarea id="reminder-desc-input" rows="4" placeholder="Detail tambahan...">${escapeHTML(item ? item.description : '')}</textarea></div>
-    <div class="modal-actions">
-      <button class="btn ghost" id="cancel-modal">Batal</button>
-      <button class="btn primary" id="save-reminder">Simpan</button>
+    <div class="modal-actions" style="justify-content:${isEdit ? 'space-between' : 'flex-end'};">
+      ${isEdit ? `<button class="btn ghost danger-action" id="delete-reminder" style="color:var(--danger);border-color:var(--danger);">Hapus</button>` : ''}
+      <div style="display:flex;gap:10px;">
+        <button class="btn ghost" id="cancel-modal">Batal</button>
+        <button class="btn primary" id="save-reminder">Simpan</button>
+      </div>
     </div>
   </div></div>`);
   document.body.appendChild(backdrop);
@@ -6304,6 +6317,27 @@ function openReminderModal(item, defaultDate) {
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
   backdrop.querySelector('#reminder-title-input').focus();
   enhanceDateInputs(backdrop);
+
+  if (isEdit) {
+    backdrop.querySelector('#reminder-done-input').addEventListener('change', async (e) => {
+      try {
+        await DB.setReminderDone(item.id, e.target.checked);
+      } catch (err) {
+        toast('Gagal memperbarui status: ' + err.message, 'error');
+        e.target.checked = !e.target.checked;
+      }
+    });
+    backdrop.querySelector('#delete-reminder').addEventListener('click', async () => {
+      if (!confirm(`Hapus pengingat "${item.title}"?`)) return;
+      try {
+        await DB.deleteReminder(item.id);
+        toast('Pengingat dihapus', 'success');
+        backdrop.remove();
+      } catch (err) {
+        toast('Gagal menghapus: ' + err.message, 'error');
+      }
+    });
+  }
 
   const pendingCheckbox = backdrop.querySelector('#reminder-pending-input');
   const dateInput = backdrop.querySelector('#reminder-date-input');
@@ -6321,12 +6355,11 @@ function openReminderModal(item, defaultDate) {
   const applyRepeatState = () => {
     const notPending = repeatRow.style.display !== 'none';
     const isCustomRepeat = repeatSelect.value === 'custom';
-    // "Bulanan, Hari Tertentu" sudah punya tanggal & filter hari sendiri,
-    // jadi opsi rentang tanggal ("s.d. tgl lain") disembunyikan & di-
-    // nonaktifkan untuk repeat ini supaya tidak membingungkan.
-    dateRangeLabel.style.display = isCustomRepeat ? 'none' : '';
-    if (isCustomRepeat) dateRangeCheckbox.checked = false;
-    const isRange = !isCustomRepeat && dateRangeCheckbox.checked;
+    // "s.d. tgl lain" tetap bisa dipakai walau repeat = "Bulanan, Hari
+    // Tertentu": kalau diaktifkan, tanggal tunggalnya melebar jadi
+    // rentang tanggal tiap bulan (lihat occursOnDate), sementara filter
+    // hari yang dicentang tetap berlaku.
+    const isRange = dateRangeCheckbox.checked;
     enddateRow.style.display = (notPending && isRange) ? '' : 'none';
     if (!isRange) enddateInput.value = '';
     customDaysRow.style.display = (notPending && (isCustomRepeat || isRange)) ? '' : 'none';
@@ -6356,7 +6389,7 @@ function openReminderModal(item, defaultDate) {
     const time = isPending ? '' : timeInput.value;
     const repeat = isPending ? 'none' : repeatSelect.value;
     const isCustomRepeat = repeat === 'custom';
-    const isRange = !isPending && !isCustomRepeat && dateRangeCheckbox.checked;
+    const isRange = !isPending && dateRangeCheckbox.checked;
     const endDate = isRange ? enddateInput.value : '';
     const customDays = (isCustomRepeat || isRange)
       ? Array.from(backdrop.querySelectorAll('.reminder-customday-checkbox:checked')).map(cb => Number(cb.value))
