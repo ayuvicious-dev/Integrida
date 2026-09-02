@@ -302,7 +302,15 @@ tbody tr:hover{background:var(--surface-2);}
   padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:13.5px;background:var(--card);color:var(--text);
 }
 .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:var(--teal);}
+.field input:disabled{opacity:.5;cursor:not-allowed;background:var(--surface-2);}
 .field textarea{font-family:inherit;resize:vertical;min-height:56px;}
+.reminder-pending-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;user-select:none;}
+.reminder-pending-check input[type="checkbox"]{width:17px;height:17px;cursor:pointer;accent-color:var(--teal);flex-shrink:0;}
+.reminder-pending-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;}
+.reminder-priority-group{display:none;align-items:center;gap:14px;}
+.reminder-priority-group.show{display:flex;}
+.reminder-priority-group label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--slate);cursor:pointer;user-select:none;}
+.reminder-priority-group input[type="radio"]{width:15px;height:15px;cursor:pointer;accent-color:var(--danger);}
 .ownership-row{display:grid;grid-template-columns:1fr 110px 34px;gap:8px;align-items:center;margin-bottom:8px;}
 .ownership-row input[type="text"],.ownership-row select{padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:var(--card);color:var(--text);width:100%;}
 .ownership-row .pct-wrap{position:relative;}
@@ -331,6 +339,57 @@ tbody tr:hover{background:var(--surface-2);}
 .upgrade-item-actions svg{width:14px;height:14px;}
 .upgrade-empty{font-size:13px;color:var(--slate-light);padding:14px 2px;text-align:center;}
 .upgrade-toggle-done{font-size:12px;color:var(--teal);cursor:pointer;font-weight:600;background:none;border:none;padding:0;margin-bottom:12px;display:inline-block;}
+
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap;}
+.cal-nav{display:flex;align-items:center;gap:6px;}
+.cal-nav button{background:transparent;border:1px solid var(--border);border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text);}
+.cal-nav button:hover{background:var(--surface-2);}
+.cal-nav button svg{width:16px;height:16px;}
+.cal-month-label{font-family:var(--font-display);font-weight:600;font-size:15.5px;min-width:150px;text-align:center;}
+.cal-pending-btn{position:relative;font-size:12px;font-weight:600;color:var(--teal);background:none;border:1px solid var(--teal);border-radius:7px;padding:5px 10px;cursor:pointer;}
+.cal-pending-btn:hover{background:var(--teal-light);}
+.cal-pending-btn.active{background:var(--teal);color:#fff;}
+.cal-pending-badge{display:inline-flex;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-left:6px;}
+.cal-pending-btn.active .cal-pending-badge{background:#fff;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
+.cal-dow{font-size:11px;font-weight:600;color:var(--slate-light);text-align:center;padding-bottom:4px;text-transform:uppercase;letter-spacing:.4px;}
+.cal-cell{position:relative;aspect-ratio:1/1;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:13px;color:var(--text);min-height:38px;}
+.cal-cell:hover{background:var(--teal-light);}
+.cal-cell.cal-outside{opacity:.35;}
+.cal-cell.cal-today{border-color:var(--teal);font-weight:700;}
+.cal-cell.cal-selected{background:var(--teal);color:#fff;border-color:var(--teal);}
+.cal-cell.cal-selected:hover{background:var(--teal);}
+.cal-dot{width:5px;height:5px;border-radius:50%;background:var(--gold);}
+.cal-cell.cal-selected .cal-dot{background:#fff;}
+.cal-day-list{margin-top:20px;}
+.cal-day-list-title{font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:10px;}
+.reminder-item{display:flex;gap:11px;align-items:flex-start;border:1px solid var(--border);border-radius:9px;padding:12px 13px;background:var(--surface-2);}
+.reminder-item + .reminder-item{margin-top:10px;}
+.reminder-item input[type="checkbox"]{width:19px;height:19px;flex-shrink:0;margin-top:1px;cursor:pointer;accent-color:var(--teal);}
+.reminder-item-body{flex:1;min-width:0;}
+.reminder-item-title{font-size:14px;font-weight:600;color:var(--text);word-break:break-word;}
+.reminder-item-time{color:var(--teal);font-weight:700;}
+.reminder-item-repeat{color:var(--gold);font-weight:600;font-size:11.5px;}
+.reminder-item-priority-badge{background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;letter-spacing:.2px;}
+.reminder-item.reminder-item-priority{border-color:var(--danger);background:var(--danger-light);}
+.reminder-item-desc{font-size:12.5px;color:var(--slate);line-height:1.55;margin-top:4px;white-space:pre-wrap;word-break:break-word;}
+.reminder-item-actions{display:flex;gap:6px;flex-shrink:0;margin-top:1px;}
+.reminder-item-actions button{background:transparent;border:1px solid var(--border);border-radius:7px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--slate);}
+.reminder-item-actions button:hover{background:var(--surface-3,rgba(0,0,0,.05));color:var(--text);}
+.reminder-item-actions button.danger-action:hover{color:var(--danger);border-color:var(--danger);}
+.reminder-item-actions svg{width:14px;height:14px;}
+.cal-fab{
+  position:fixed;right:24px;bottom:24px;width:56px;height:56px;border-radius:50%;
+  background:var(--teal);color:#fff;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 10px 24px rgba(47,111,228,0.45);z-index:46;
+  transition:background-color .15s ease,transform .15s ease;
+}
+.cal-fab:hover{background:#1f56c9;transform:translateY(-1px);}
+.cal-fab svg{width:24px;height:24px;}
+@media(max-width:900px){
+  .cal-fab{bottom:calc(96px + env(safe-area-inset-bottom));right:18px;}
+}
 .ownership-row .remove-ownership{background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--slate);cursor:pointer;height:34px;}
 .ownership-row .remove-ownership:hover{color:#c0392b;border-color:#c0392b;}
 
@@ -466,7 +525,10 @@ tbody tr:hover{background:var(--surface-2);}
 .modal-backdrop{
   position:fixed;inset:0;background:rgba(15,20,30,0.55);display:flex;align-items:center;justify-content:center;z-index:50;
 }
-.modal{background:var(--card);color:var(--text);border-radius:12px;width:460px;max-width:92vw;padding:24px;max-height:88vh;overflow-y:auto;}
+.modal{background:var(--card);color:var(--text);border-radius:12px;width:460px;max-width:92vw;padding:24px;max-height:88vh;overflow-y:auto;position:relative;}
+.modal-close{position:absolute;top:16px;right:16px;width:28px;height:28px;border-radius:50%;background:transparent;border:none;cursor:pointer;color:var(--slate);display:flex;align-items:center;justify-content:center;}
+.modal-close:hover{background:var(--surface-2);color:var(--text);}
+.modal-close svg{width:16px;height:16px;}
 .modal h3{font-family:var(--font-display);margin:0 0 4px 0;}
 .modal .modal-sub{font-size:12.5px;color:var(--slate);margin-bottom:16px;}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
@@ -973,6 +1035,53 @@ const DB = {
 
   async deleteUpgradeItem(itemId) {
     await db.collection('upgradeItems').doc(itemId).delete();
+  },
+
+  // ---- Kalender → Pengingat (catatan/reminder tugas bebas per tanggal) ----
+  watchReminders(uid, onData, onError) {
+    return db.collection('reminders').where('ownerUid', '==', uid)
+      .onSnapshot({ includeMetadataChanges: true }, (snap) => {
+        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || '') || (a.createdAtMs || 0) - (b.createdAtMs || 0));
+        onData(items, {
+          pendingWrites: snap.metadata.hasPendingWrites,
+          fromCache: snap.metadata.fromCache
+        });
+      }, (err) => { if (onError) onError(err); else console.error('watchReminders error', err); });
+  },
+
+  async addReminder(uid, { title, description, date, time, repeat, priority }) {
+    await db.collection('reminders').add({
+      title: title || '',
+      description: description || '',
+      date: date || '',
+      time: time || '',
+      repeat: repeat || 'none',
+      priority: priority || 'standard',
+      done: false,
+      ownerUid: uid,
+      createdAtMs: Date.now(),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  },
+
+  async updateReminder(id, { title, description, date, time, repeat, priority }) {
+    await db.collection('reminders').doc(id).update({
+      title: title || '',
+      description: description || '',
+      date: date || '',
+      time: time || '',
+      repeat: repeat || 'none',
+      priority: priority || 'standard'
+    });
+  },
+
+  async setReminderDone(id, done) {
+    await db.collection('reminders').doc(id).update({ done: !!done });
+  },
+
+  async deleteReminder(id) {
+    await db.collection('reminders').doc(id).delete();
   }
 };
 
@@ -2188,7 +2297,11 @@ const state = {
   companyDetailPeriodId: null, // periode (statementId) yang sedang dipilih di halaman rincian
   upgradeItems: [],           // daftar poin checklist Upgrade Aplikasi (menu Setting)
   upgradeShowDone: false,     // true = tampilkan juga poin yang sudah dicentang (biasanya auto-hide)
-  upgradeExpanded: {}         // itemId -> true jika keterangan panjang sedang ditampilkan penuh
+  upgradeExpanded: {},        // itemId -> true jika keterangan panjang sedang ditampilkan penuh
+  reminders: [],              // daftar pengingat/catatan tugas bebas (menu Kalender)
+  calendarCursor: (() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; })(), // bulan yang sedang ditampilkan di grid kalender
+  calendarSelectedDate: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })(), // tanggal (YYYY-MM-DD) yang sedang dipilih
+  calendarShowPending: false // true = menu Kalender sedang menampilkan daftar "Pending Reminder" (pengingat tanpa tanggal) bukan daftar per-tanggal
 };
 
 // =============================================================
@@ -2266,6 +2379,7 @@ const PERIOD_LABELS = {
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid' },
   { id: 'companies', label: 'Perusahaan', icon: 'building' },
+  { id: 'calendar', label: 'Kalender', icon: 'calendar' },
   { id: 'report', label: 'Report', icon: 'bars' },
   { id: 'settings', label: 'Setting', icon: 'gear' }
 ];
@@ -2281,7 +2395,12 @@ const ICONS = {
   check: '<path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>',
   edit: '<path d="M12 20h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linejoin="round"/>',
-  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M16 3v4M8 3v4M3 10h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  chevronLeft: '<path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+  chevronRight: '<path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+  plus: '<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>'
 };
 
 function icon(name) {
@@ -2442,7 +2561,6 @@ function renderShell() {
     <div id="app-shell">
       <nav class="sidebar" id="sidebar">
         <div class="sidebar-brand">
-          <img class="mark" src="icons/icon-192.png" alt="Integrida">
           <div>
             <div class="name">Integrida</div>
             <div class="tag">Konsolidasi Keuangan</div>
@@ -2454,7 +2572,6 @@ function renderShell() {
       <div class="main">
         <div class="topbar">
           <div style="display:flex;align-items:center;gap:12px;min-width:0;">
-            <img class="topbar-brand" src="icons/icon-192.png" alt="Integrida">
             <div style="min-width:0;">
               <h1 id="topbar-title">Dashboard</h1>
               <div class="sub" id="topbar-sub">Ringkasan seluruh perusahaan</div>
@@ -2500,6 +2617,7 @@ function setView(viewId) {
     dashboard: ['Dashboard', 'Ringkasan seluruh perusahaan'],
     companies: ['Perusahaan', 'Kelola daftar entitas yang dikonsolidasikan'],
     import: ['Impor Data', 'Unggah neraca & laba rugi dari file Excel'],
+    calendar: ['Kalender', 'Pengingat & catatan tugas'],
     report: ['Report', 'Perbandingan kinerja & analisis rasio antar perusahaan/periode'],
     settings: ['Setting', 'Akun dan konfigurasi']
   };
@@ -2514,6 +2632,7 @@ function renderCurrentView() {
     companies: renderCompanies,
     'company-detail': renderCompanyDetail,
     import: renderImport,
+    calendar: renderCalendar,
     report: renderReport,
     settings: renderSettings
   };
@@ -5646,6 +5765,321 @@ function openUpgradeItemModal(item) {
       } else {
         await DB.addUpgradeItem(state.user.uid, title, description);
         toast('Poin ditambahkan', 'success');
+      }
+      backdrop.remove();
+    } catch (err) {
+      toast('Gagal menyimpan: ' + err.message, 'error');
+    }
+  });
+}
+
+// ---------- Kalender (pengingat/catatan tugas bebas) ----------
+const CAL_DOW = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+const CAL_MONTH_NAMES = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+function dateKey(y, m, d) {
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+// Menentukan apakah sebuah pengingat "terjadi" pada tanggal tertentu,
+// dengan mempertimbangkan pengaturan Ulangi (Harian/Mingguan/Bulanan).
+// Pengingat tidak pernah muncul sebelum tanggal awalnya (reminder.date).
+function occursOnDate(reminder, dateKeyStr) {
+  if (!reminder.date || dateKeyStr < reminder.date) return false;
+  const repeat = reminder.repeat || 'none';
+  if (repeat === 'none') return dateKeyStr === reminder.date;
+  const [by, bm, bd] = reminder.date.split('-').map(Number);
+  const [ky, km, kd] = dateKeyStr.split('-').map(Number);
+  if (repeat === 'daily') return true;
+  if (repeat === 'weekly') {
+    const baseDow = new Date(by, bm - 1, bd).getDay();
+    const curDow = new Date(ky, km - 1, kd).getDay();
+    return baseDow === curDow;
+  }
+  if (repeat === 'monthly') {
+    // Kalau tanggal awal (mis. 31) tidak ada di bulan tsb (mis.
+    // Februari), dianggap jatuh di tanggal terakhir bulan itu.
+    const daysInCurMonth = new Date(ky, km, 0).getDate();
+    const targetDay = Math.min(bd, daysInCurMonth);
+    return kd === targetDay;
+  }
+  return false;
+}
+
+function remindersForDate(dateKeyStr) {
+  return state.reminders
+    .filter(r => occursOnDate(r, dateKeyStr))
+    .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+}
+
+const REPEAT_LABELS = { none: 'Tidak berulang', daily: 'Harian', weekly: 'Mingguan', monthly: 'Bulanan' };
+
+function renderCalendar() {
+  const root = document.getElementById('view-root');
+  root.innerHTML = `
+    <div style="max-width:900px;margin:0 auto;">
+      <div class="card" style="width:100%;">
+        <div class="cal-header">
+          <div class="cal-nav">
+            <button id="cal-prev" title="Bulan sebelumnya">${icon('chevronLeft')}</button>
+            <div class="cal-month-label" id="cal-month-label"></div>
+            <button id="cal-next" title="Bulan berikutnya">${icon('chevronRight')}</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="cal-pending-btn" id="cal-pending-btn">Pending Reminder<span class="cal-pending-badge" id="cal-pending-badge" style="display:none;"></span></button>
+          </div>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+        <div class="cal-day-list" id="cal-day-list"></div>
+      </div>
+    </div>
+    <button class="cal-fab" id="add-reminder-btn" title="Tambah Pengingat">${icon('plus')}</button>
+  `;
+  document.getElementById('cal-prev').addEventListener('click', () => shiftCalendarMonth(-1));
+  document.getElementById('cal-next').addEventListener('click', () => shiftCalendarMonth(1));
+  document.getElementById('cal-pending-btn').addEventListener('click', () => {
+    state.calendarShowPending = !state.calendarShowPending;
+    renderCalendarGrid();
+    renderCalendarDayList();
+  });
+  document.getElementById('add-reminder-btn').addEventListener('click', () => openReminderModal(null, state.calendarShowPending ? '' : state.calendarSelectedDate));
+
+  state.unsubData = DB.watchReminders(state.user.uid, (items) => {
+    state.reminders = items;
+    renderCalendarGrid();
+    renderCalendarDayList();
+  }, (err) => {
+    const list = document.getElementById('cal-day-list');
+    if (list) list.innerHTML = `<div class="upgrade-empty">Gagal memuat: ${escapeHTML(err.message)}</div>`;
+  });
+
+  renderCalendarGrid();
+  renderCalendarDayList();
+}
+
+function shiftCalendarMonth(delta) {
+  let { year, month } = state.calendarCursor;
+  month += delta;
+  if (month < 0) { month = 11; year -= 1; }
+  if (month > 11) { month = 0; year += 1; }
+  state.calendarCursor = { year, month };
+  renderCalendarGrid();
+}
+
+function renderCalendarGrid() {
+  const grid = document.getElementById('cal-grid');
+  if (!grid) return; // pengguna sudah pindah dari menu Kalender
+  const { year, month } = state.calendarCursor;
+  document.getElementById('cal-month-label').textContent = `${CAL_MONTH_NAMES[month]} ${year}`;
+
+  const pendingCount = state.reminders.filter(r => !r.date && !r.done).length;
+  const badge = document.getElementById('cal-pending-badge');
+  const pendingBtn = document.getElementById('cal-pending-btn');
+  if (badge) { badge.style.display = pendingCount > 0 ? 'inline-flex' : 'none'; }
+  if (pendingBtn) pendingBtn.classList.toggle('active', !!state.calendarShowPending);
+
+  const remindersByDate = {}; // cache sederhana per tanggal supaya tidak menghitung ulang saat render grid
+
+  const today = new Date();
+  const todayKey = dateKey(today.getFullYear(), today.getMonth(), today.getDate());
+  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // geser: Senin=0 ... Minggu=6
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+  let cells = '';
+  CAL_DOW.forEach(d => { cells += `<div class="cal-dow">${d}</div>`; });
+
+  // Sel tanggal bulan sebelumnya (pengisi awal grid)
+  for (let i = 0; i < firstDow; i++) {
+    const d = daysInPrevMonth - firstDow + i + 1;
+    const m = month === 0 ? 11 : month - 1;
+    const y = month === 0 ? year - 1 : year;
+    cells += calCellHTML(y, m, d, true, remindersByDate, todayKey);
+  }
+  // Sel tanggal bulan ini
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells += calCellHTML(year, month, d, false, remindersByDate, todayKey);
+  }
+  // Sel tanggal bulan berikutnya (pengisi akhir grid, sampai kelipatan 7)
+  const totalSoFar = firstDow + daysInMonth;
+  const trailing = (7 - (totalSoFar % 7)) % 7;
+  for (let d = 1; d <= trailing; d++) {
+    const m = month === 11 ? 0 : month + 1;
+    const y = month === 11 ? year + 1 : year;
+    cells += calCellHTML(y, m, d, true, remindersByDate, todayKey);
+  }
+
+  grid.innerHTML = cells;
+  grid.querySelectorAll('[data-cal-date]').forEach(cell => {
+    cell.addEventListener('click', () => {
+      const key = cell.dataset.calDate;
+      state.calendarSelectedDate = key;
+      state.calendarShowPending = false;
+      const [y, m] = key.split('-').map(Number);
+      state.calendarCursor = { year: y, month: m - 1 };
+      renderCalendarGrid();
+      renderCalendarDayList();
+    });
+  });
+}
+
+function calCellHTML(y, m, d, outside, remindersByDate, todayKey) {
+  const key = dateKey(y, m, d);
+  if (!(key in remindersByDate)) remindersByDate[key] = remindersForDate(key).length > 0;
+  const hasReminders = remindersByDate[key];
+  const classes = ['cal-cell'];
+  if (outside) classes.push('cal-outside');
+  if (key === todayKey) classes.push('cal-today');
+  if (key === state.calendarSelectedDate) classes.push('cal-selected');
+  return `<div class="${classes.join(' ')}" data-cal-date="${key}">
+    <span>${d}</span>
+    ${hasReminders ? '<span class="cal-dot"></span>' : ''}
+  </div>`;
+}
+
+function renderCalendarDayList() {
+  const list = document.getElementById('cal-day-list');
+  if (!list) return;
+
+  let label, items;
+  if (state.calendarShowPending) {
+    label = 'Pending Reminder';
+    items = state.reminders.filter(r => !r.date)
+      .sort((a, b) => (a.priority === 'priority' ? 0 : 1) - (b.priority === 'priority' ? 0 : 1) || (a.createdAtMs || 0) - (b.createdAtMs || 0));
+  } else {
+    const key = state.calendarSelectedDate;
+    const [y, m, d] = key.split('-').map(Number);
+    label = `Pengingat — ${d} ${CAL_MONTH_NAMES[m - 1]} ${y}`;
+    items = remindersForDate(key);
+  }
+
+  list.innerHTML = `
+    <div class="cal-day-list-title">${label}</div>
+    ${items.length === 0
+      ? `<div class="upgrade-empty">${state.calendarShowPending ? 'Belum ada pengingat tanpa tanggal.' : 'Belum ada pengingat untuk tanggal ini.'} Klik tombol "+" untuk menambahkan.</div>`
+      : items.map(item => reminderItemHTML(item)).join('')}
+  `;
+
+  list.querySelectorAll('[data-reminder-check]').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      try {
+        await DB.setReminderDone(cb.dataset.reminderCheck, cb.checked);
+      } catch (err) {
+        toast('Gagal memperbarui status: ' + err.message, 'error');
+      }
+    });
+  });
+  list.querySelectorAll('[data-reminder-edit]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = state.reminders.find(r => r.id === btn.dataset.reminderEdit);
+      if (item) openReminderModal(item);
+    });
+  });
+  list.querySelectorAll('[data-reminder-delete]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const item = state.reminders.find(r => r.id === btn.dataset.reminderDelete);
+      if (!item) return;
+      if (!confirm(`Hapus pengingat "${item.title}"?`)) return;
+      try {
+        await DB.deleteReminder(item.id);
+        toast('Pengingat dihapus', 'success');
+      } catch (err) {
+        toast('Gagal menghapus: ' + err.message, 'error');
+      }
+    });
+  });
+}
+
+function reminderItemHTML(item) {
+  const repeat = item.repeat || 'none';
+  const isPriority = !item.date && item.priority === 'priority';
+  return `
+    <div class="reminder-item${isPriority ? ' reminder-item-priority' : ''}">
+      <input type="checkbox" data-reminder-check="${item.id}" ${item.done ? 'checked' : ''} title="Tandai selesai">
+      <div class="reminder-item-body">
+        <div class="reminder-item-title" style="${item.done ? 'text-decoration:line-through;color:var(--slate-light);' : ''}">${item.time ? `<span class="reminder-item-time">${escapeHTML(item.time)}</span> ` : ''}${escapeHTML(item.title)}${repeat !== 'none' ? ` <span class="reminder-item-repeat">↻ ${REPEAT_LABELS[repeat]}</span>` : ''}${isPriority ? ` <span class="reminder-item-priority-badge">Prioritas</span>` : ''}</div>
+        ${item.description ? `<div class="reminder-item-desc">${escapeHTML(item.description)}</div>` : ''}
+      </div>
+      <div class="reminder-item-actions">
+        <button data-reminder-edit="${item.id}" title="Edit pengingat">${icon('edit')}</button>
+        <button class="danger-action" data-reminder-delete="${item.id}" title="Hapus pengingat">${icon('trash')}</button>
+      </div>
+    </div>
+  `;
+}
+
+// item kosong/undefined => mode tambah baru; defaultDate dipakai untuk
+// mengisi tanggal awal sesuai hari yang sedang dipilih di grid kalender.
+function openReminderModal(item, defaultDate) {
+  const isEdit = !!item;
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:460px;">
+    <button class="modal-close" id="close-modal" title="Tutup">${icon('close')}</button>
+    <h3>${isEdit ? 'Edit Pengingat' : 'Tambah Pengingat'}</h3>
+    <div class="field"><label>Judul</label><input type="text" id="reminder-title-input" placeholder="Contoh: Follow up dokumen pajak" value="${escapeHTML(item ? item.title : '')}"></div>
+    <div class="reminder-pending-row">
+      <label class="reminder-pending-check"><input type="checkbox" id="reminder-pending-input" ${(item ? !item.date : !!state.calendarShowPending) ? 'checked' : ''}><span>Pending</span></label>
+      <div class="reminder-priority-group" id="reminder-priority-group">
+        <label><input type="radio" name="reminder-priority" value="priority" ${item && item.priority === 'priority' ? 'checked' : ''}><span>Prioritas</span></label>
+        <label><input type="radio" name="reminder-priority" value="standard" ${!item || item.priority !== 'priority' ? 'checked' : ''}><span>Standar</span></label>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;" id="reminder-datetime-row">
+      <div class="field" style="flex:1;"><label>Tanggal (opsional)</label><input type="date" id="reminder-date-input" value="${item ? item.date : (defaultDate || '')}"></div>
+      <div class="field" style="flex:1;"><label>Jam (opsional)</label><input type="time" id="reminder-time-input" value="${item && item.time ? item.time : ''}"></div>
+    </div>
+    <div class="field" id="reminder-repeat-row"><label>Ulangi</label>
+      <select id="reminder-repeat-input">
+        <option value="none" ${(!item || !item.repeat || item.repeat === 'none') ? 'selected' : ''}>Tidak berulang</option>
+        <option value="daily" ${item && item.repeat === 'daily' ? 'selected' : ''}>Harian</option>
+        <option value="weekly" ${item && item.repeat === 'weekly' ? 'selected' : ''}>Mingguan</option>
+        <option value="monthly" ${item && item.repeat === 'monthly' ? 'selected' : ''}>Bulanan</option>
+      </select>
+    </div>
+    <div class="field"><label>Keterangan (opsional)</label><textarea id="reminder-desc-input" rows="4" placeholder="Detail tambahan...">${escapeHTML(item ? item.description : '')}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="cancel-modal">Batal</button>
+      <button class="btn primary" id="save-reminder">Simpan</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#close-modal').addEventListener('click', () => backdrop.remove());
+  backdrop.querySelector('#cancel-modal').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelector('#reminder-title-input').focus();
+
+  const pendingCheckbox = backdrop.querySelector('#reminder-pending-input');
+  const dateInput = backdrop.querySelector('#reminder-date-input');
+  const timeInput = backdrop.querySelector('#reminder-time-input');
+  const repeatSelect = backdrop.querySelector('#reminder-repeat-input');
+  const datetimeRow = backdrop.querySelector('#reminder-datetime-row');
+  const repeatRow = backdrop.querySelector('#reminder-repeat-row');
+  const priorityGroup = backdrop.querySelector('#reminder-priority-group');
+  const applyPendingState = () => {
+    const isPending = pendingCheckbox.checked;
+    datetimeRow.style.display = isPending ? 'none' : 'flex';
+    repeatRow.style.display = isPending ? 'none' : '';
+    if (isPending) { dateInput.value = ''; timeInput.value = ''; repeatSelect.value = 'none'; }
+    priorityGroup.classList.toggle('show', isPending);
+  };
+  pendingCheckbox.addEventListener('change', applyPendingState);
+  applyPendingState();
+
+  backdrop.querySelector('#save-reminder').addEventListener('click', async () => {
+    const title = backdrop.querySelector('#reminder-title-input').value.trim();
+    const isPending = pendingCheckbox.checked;
+    const date = isPending ? '' : dateInput.value;
+    const time = isPending ? '' : timeInput.value;
+    const repeat = isPending ? 'none' : repeatSelect.value;
+    const priority = isPending ? (backdrop.querySelector('input[name="reminder-priority"]:checked').value) : 'standard';
+    const description = backdrop.querySelector('#reminder-desc-input').value.trim();
+    if (!title) { toast('Judul wajib diisi', 'error'); return; }
+    try {
+      if (isEdit) {
+        await DB.updateReminder(item.id, { title, description, date, time, repeat, priority });
+        toast('Pengingat diperbarui', 'success');
+      } else {
+        await DB.addReminder(state.user.uid, { title, description, date, time, repeat, priority });
+        toast('Pengingat ditambahkan', 'success');
       }
       backdrop.remove();
     } catch (err) {
