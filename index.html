@@ -384,7 +384,7 @@ tbody tr:hover{background:var(--surface-2);}
 .cal-dow-row{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;min-width:980px;will-change:transform;}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:auto;gap:5px;min-width:980px;}
 .cal-dow{font-size:11px;font-weight:600;color:var(--slate-light);text-align:center;padding:6px 0 4px 0;text-transform:uppercase;letter-spacing:.4px;background:var(--card);}
-.cal-cell{position:relative;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;display:flex;flex-direction:column;align-items:stretch;gap:3px;font-size:13px;color:var(--text);height:100px;padding:8px 0 6px 0;overflow:hidden;}
+.cal-cell{position:relative;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;display:flex;flex-direction:column;align-items:stretch;gap:3px;font-size:13px;color:var(--text);height:122px;padding:8px 0 6px 0;overflow:hidden;}
 .cal-cell:hover{background:var(--teal-light);}
 .cal-cell.cal-outside{background:transparent!important;}
 .cal-cell.cal-saturday{background:var(--success-light);}
@@ -1093,7 +1093,7 @@ const DB = {
       }, (err) => { if (onError) onError(err); else console.error('watchReminders error', err); });
   },
 
-  async addReminder(uid, { title, description, date, time, repeat, priority, order, customDays, endDate }) {
+  async addReminder(uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil }) {
     await db.collection('reminders').add({
       title: title || '',
       description: description || '',
@@ -1102,6 +1102,9 @@ const DB = {
       repeat: repeat || 'none',
       customDays: Array.isArray(customDays) ? customDays : [],
       endDate: endDate || '',
+      shiftSaturday: !!shiftSaturday,
+      shiftSunday: !!shiftSunday,
+      repeatUntil: repeatUntil || '',
       priority: priority || 'standard',
       order: (order === '' || order === null || order === undefined) ? null : Number(order),
       done: false,
@@ -1111,7 +1114,7 @@ const DB = {
     });
   },
 
-  async updateReminder(id, { title, description, date, time, repeat, priority, order, customDays, endDate }) {
+  async updateReminder(id, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil }) {
     await db.collection('reminders').doc(id).update({
       title: title || '',
       description: description || '',
@@ -1120,6 +1123,9 @@ const DB = {
       repeat: repeat || 'none',
       customDays: Array.isArray(customDays) ? customDays : [],
       endDate: endDate || '',
+      shiftSaturday: !!shiftSaturday,
+      shiftSunday: !!shiftSunday,
+      repeatUntil: repeatUntil || '',
       priority: priority || 'standard',
       order: (order === '' || order === null || order === undefined) ? null : Number(order)
     });
@@ -2448,7 +2454,8 @@ const ICONS = {
   chevronLeft: '<path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
   chevronRight: '<path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
   plus: '<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
-  close: '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>'
+  close: '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>',
+  stopRepeat: '<path d="M4 4v5h5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.6 9A8 8 0 1 1 6.3 16.2" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M3.5 20.5l17-17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>'
 };
 
 function icon(name) {
@@ -5915,6 +5922,11 @@ function dateKey(y, m, d) {
 // sebelum tanggal awalnya (reminder.date).
 function occursOnDate(reminder, dateKeyStr) {
   if (!reminder.date || dateKeyStr < reminder.date) return false;
+  // "Hentikan Pengulangan": kalau diisi, pengingat tidak pernah muncul
+  // lagi SETELAH tanggal ini (tanggal repeatUntil itu sendiri masih
+  // boleh muncul). Diset lewat tombol "Hentikan Pengulangan" di modal
+  // edit — mis. tugas berulang yang sudah selesai per tanggal tertentu.
+  if (reminder.repeatUntil && dateKeyStr > reminder.repeatUntil) return false;
   const repeat = reminder.repeat || 'none';
   const [by, bm, bd] = reminder.date.split('-').map(Number);
   const [ky, km, kd] = dateKeyStr.split('-').map(Number);
@@ -5948,6 +5960,16 @@ function occursOnDate(reminder, dateKeyStr) {
     const baseDow = new Date(by, bm - 1, bd).getDay();
     return baseDow === curDow;
   }
+  if (repeat === 'weeklyCustom') {
+    // "Mingguan, Hari Tertentu": berulang TIAP MINGGU pada hari (Senin/
+    // Selasa/dst.) yang dicentang di reminder.customDays, TANPA terikat
+    // pada hari-dalam-minggu tanggal awal (reminder.date) — beda dengan
+    // repeat "Mingguan" biasa yang cuma mengulang di 1 hari yang sama
+    // dgn tanggal awal. Cocok utk agenda tetap tiap minggu di hari
+    // tertentu, mis. rapat tiap Sabtu.
+    if (filterDays.length === 0) return false;
+    return filterDays.includes(curDow);
+  }
   if (repeat === 'monthly') {
     // Kalau tanggal awal (mis. 31) tidak ada di bulan tsb (mis.
     // Februari), dianggap jatuh di tanggal terakhir bulan itu.
@@ -5959,6 +5981,25 @@ function occursOnDate(reminder, dateKeyStr) {
       return kd >= startDayEff && kd <= endDayEff && passesWeekdayFilter();
     }
     const targetDay = Math.min(bd, daysInCurMonth);
+    // "Geser jika Sabtu/Minggu": tiap hari (Sabtu dan/atau Minggu) bisa
+    // ditandai terpisah sebagai hari yang harus dihindari. Kalau tanggal
+    // target jatuh di salah satu hari yang ditandai, majukan tanggal
+    // hari demi hari sampai ketemu hari yang TIDAK ditandai (mis. kalau
+    // hanya Minggu yang ditandai: Sabtu tetap muncul apa adanya, tapi
+    // Minggu digeser ke Senin; kalau keduanya ditandai: Sabtu digeser
+    // ke Senin juga karena Minggu pun dihindari). Data lama yang masih
+    // pakai field shiftWeekend (checkbox tunggal) diperlakukan sebagai
+    // Sabtu & Minggu keduanya ditandai, demi kompatibilitas mundur.
+    const legacyBoth = reminder.shiftWeekend && reminder.shiftSaturday === undefined && reminder.shiftSunday === undefined;
+    const avoidSaturday = legacyBoth ? true : !!reminder.shiftSaturday;
+    const avoidSunday = legacyBoth ? true : !!reminder.shiftSunday;
+    if (avoidSaturday || avoidSunday) {
+      const targetDate = new Date(ky, km - 1, targetDay);
+      while ((avoidSaturday && targetDate.getDay() === 6) || (avoidSunday && targetDate.getDay() === 0)) {
+        targetDate.setDate(targetDate.getDate() + 1);
+      }
+      return dateKeyStr === dateKey(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+    }
     return kd === targetDay;
   }
   if (repeat === 'custom') {
@@ -5999,7 +6040,7 @@ function remindersForDate(dateKeyStr) {
     });
 }
 
-const REPEAT_LABELS = { none: 'Tidak berulang', daily: 'Harian', weekday: 'Weekday (Senin–Jumat)', weekly: 'Mingguan', monthly: 'Bulanan', custom: 'Bulanan, Hari Tertentu' };
+const REPEAT_LABELS = { none: 'Tidak berulang', daily: 'Harian', weekday: 'Weekday (Senin–Jumat)', weekly: 'Mingguan', weeklyCustom: 'Mingguan, Hari Tertentu', monthly: 'Bulanan', custom: 'Bulanan, Hari Tertentu' };
 // Label singkat hari berdasarkan konvensi Date.getDay() (0=Minggu...6=Sabtu),
 // dipakai untuk menampilkan pilihan hari pada repeat "Bulanan, Hari Tertentu".
 const CAL_DOW_BY_JSDOW = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -6017,6 +6058,10 @@ function repeatDisplayLabel(item) {
     }
     return `${REPEAT_LABELS.custom}${dayPart} · ${days.map(d => CAL_DOW_BY_JSDOW[d]).join(', ')}`;
   }
+  if (repeat === 'weeklyCustom') {
+    if (days.length === 0) return REPEAT_LABELS.weeklyCustom;
+    return `${REPEAT_LABELS.weeklyCustom} · ${days.map(d => CAL_DOW_BY_JSDOW[d]).join(', ')}`;
+  }
   let label = REPEAT_LABELS[repeat] || REPEAT_LABELS.none;
   if (hasEndDate) {
     const [, , bd] = item.date.split('-').map(Number);
@@ -6024,6 +6069,15 @@ function repeatDisplayLabel(item) {
     label += ` (tgl ${bd}-${ed})`;
   }
   if (days.length > 0) label += ` · ${days.map(d => CAL_DOW_BY_JSDOW[d]).join(', ')}`;
+  if (repeat === 'monthly' && !hasEndDate) {
+    const legacyBoth = item.shiftWeekend && item.shiftSaturday === undefined && item.shiftSunday === undefined;
+    const avoidSaturday = legacyBoth ? true : !!item.shiftSaturday;
+    const avoidSunday = legacyBoth ? true : !!item.shiftSunday;
+    if (avoidSaturday && avoidSunday) label += ' · geser jika Sabtu/Minggu';
+    else if (avoidSaturday) label += ' · geser jika Sabtu';
+    else if (avoidSunday) label += ' · geser jika Minggu';
+  }
+  if (item.repeatUntil) label += ` · berhenti stlh ${formatDateID(item.repeatUntil)}`;
   return label;
 }
 
@@ -6143,7 +6197,7 @@ function renderCalendarGrid() {
       e.stopPropagation();
       if (e.target.closest('[data-cal-reminder-done]')) return;
       const item = state.reminders.find(r => r.id === row.dataset.calReminder);
-      if (item) openReminderModal(item);
+      if (item) openReminderModal(item, null, row.dataset.calOccurrenceDate);
     });
   });
   grid.querySelectorAll('[data-cal-reminder-done]').forEach(checkbox => {
@@ -6177,7 +6231,7 @@ function calCellHTML(y, m, d, outside, remindersByDate, todayKey) {
   if (key === todayKey) classes.push('cal-today');
   if (key === state.calendarSelectedDate) classes.push('cal-selected');
   const remindersHTML = (!outside && items.length > 0)
-    ? `<div class="cal-cell-reminders">${items.map((item, idx) => calCellReminderHTML(item, idx)).join('')}</div>`
+    ? `<div class="cal-cell-reminders">${items.map((item, idx) => calCellReminderHTML(item, idx, key)).join('')}</div>`
     : '';
   return `<div class="${classes.join(' ')}" data-cal-date="${key}"${holidayName ? ` title="${escapeHTML(holidayName)}"` : ''}>
     ${outside ? '' : `<span class="cal-cell-date">${d}</span>`}
@@ -6185,9 +6239,9 @@ function calCellHTML(y, m, d, outside, remindersByDate, todayKey) {
   </div>`;
 }
 
-function calCellReminderHTML(item, idx) {
+function calCellReminderHTML(item, idx, occurrenceDate) {
   const num = (item.order !== null && item.order !== undefined && item.order !== '') ? item.order : (idx + 1);
-  return `<div class="cal-cell-reminder${item.done ? ' cal-cell-reminder-done' : ''}" data-cal-reminder="${item.id}" title="${escapeHTML(item.title)}">
+  return `<div class="cal-cell-reminder${item.done ? ' cal-cell-reminder-done' : ''}" data-cal-reminder="${item.id}" data-cal-occurrence-date="${occurrenceDate}" title="${escapeHTML(item.title)}">
     <input type="checkbox" class="cal-cell-reminder-done-check" data-cal-reminder-done="${item.id}" ${item.done ? 'checked' : ''} title="Tandai selesai">
     <span class="cal-cell-reminder-num">${escapeHTML(String(num))}.</span>
     <span class="cal-cell-reminder-title">${escapeHTML(item.title)}</span>
@@ -6284,7 +6338,9 @@ function reminderRowHTML(item) {
 
 // item kosong/undefined => mode tambah baru; defaultDate dipakai untuk
 // mengisi tanggal awal sesuai hari yang sedang dipilih di grid kalender.
-function openReminderModal(item, defaultDate) {
+// occurrenceDate: tanggal kemunculan spesifik yang sedang dilihat saat
+// modal dibuka dari sel kalender (dipakai fitur "Hentikan Pengulangan").
+function openReminderModal(item, defaultDate, occurrenceDate) {
   const isEdit = !!item;
   const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:460px;">
     <button class="modal-close" id="close-modal" title="Tutup">${icon('close')}</button>
@@ -6322,9 +6378,21 @@ function openReminderModal(item, defaultDate) {
         <option value="daily" ${item && item.repeat === 'daily' ? 'selected' : ''}>Harian</option>
         <option value="weekday" ${item && item.repeat === 'weekday' ? 'selected' : ''}>Weekday (Senin–Jumat)</option>
         <option value="weekly" ${item && item.repeat === 'weekly' ? 'selected' : ''}>Mingguan</option>
+        <option value="weeklyCustom" ${item && item.repeat === 'weeklyCustom' ? 'selected' : ''}>Mingguan, Hari Tertentu</option>
         <option value="monthly" ${item && item.repeat === 'monthly' ? 'selected' : ''}>Bulanan</option>
         <option value="custom" ${item && item.repeat === 'custom' ? 'selected' : ''}>Bulanan, Hari Tertentu</option>
       </select>
+    </div>
+    <div class="field" id="reminder-shiftweekend-row" style="display:none;">
+      <label style="font-size:12.5px;color:var(--slate);font-weight:500;display:block;margin-bottom:6px;" title="Kalau tanggal jatuh di hari yang dicentang, pengingat otomatis digeser maju ke hari kerja berikutnya. Cocok utk hal seperti 'finalisasi laporan tgl 4 tiap bulan, kalau tgl 4 libur akhir pekan geser ke hari kerja setelahnya'. Kalau hanya salah satu yang dicentang, hari yang tidak dicentang tetap muncul apa adanya.">Geser ke hari kerja berikutnya kalau jatuh:</label>
+      <div style="display:flex;gap:14px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--slate);cursor:pointer;user-select:none;border:1px solid var(--border);border-radius:7px;padding:6px 10px;">
+          <input type="checkbox" id="reminder-shiftsaturday-input" ${item && (item.shiftSaturday || (item.shiftWeekend && item.shiftSaturday === undefined && item.shiftSunday === undefined)) ? 'checked' : ''}><span>Sabtu</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--slate);cursor:pointer;user-select:none;border:1px solid var(--border);border-radius:7px;padding:6px 10px;">
+          <input type="checkbox" id="reminder-shiftsunday-input" ${item && (item.shiftSunday || (item.shiftWeekend && item.shiftSaturday === undefined && item.shiftSunday === undefined)) ? 'checked' : ''}><span>Minggu</span>
+        </label>
+      </div>
     </div>
     <div class="field" id="reminder-customdays-row" style="display:none;">
       <label id="reminder-customdays-label">Ulangi di hari (centang hari yang dipilih)</label>
@@ -6338,7 +6406,10 @@ function openReminderModal(item, defaultDate) {
     </div>
     <div class="field"><label>Keterangan (opsional)</label><textarea id="reminder-desc-input" rows="4" placeholder="Detail tambahan...">${escapeHTML(item ? item.description : '')}</textarea></div>
     <div class="modal-actions" style="justify-content:${isEdit ? 'space-between' : 'flex-end'};">
-      ${isEdit ? `<button class="btn ghost danger-action" id="delete-reminder" title="Hapus" style="color:var(--danger);border-color:var(--danger);width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:17px;height:17px;">${ICONS.trash}</svg></button>` : ''}
+      ${isEdit ? `<div style="display:flex;gap:8px;">
+        <button class="btn ghost danger-action" id="delete-reminder" title="Hapus" style="color:var(--danger);border-color:var(--danger);width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:17px;height:17px;">${ICONS.trash}</svg></button>
+        ${(item.repeat && item.repeat !== 'none') ? `<button class="btn ghost" id="stop-repeat-reminder" title="Hentikan Pengulangan mulai tanggal berikutnya" style="color:var(--slate);border-color:var(--border);width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:17px;height:17px;">${ICONS.stopRepeat}</svg></button>` : ''}
+      </div>` : ''}
       <button class="btn primary" id="save-reminder" title="Simpan" style="width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:18px;height:18px;">${ICONS.check}</svg></button>
     </div>
   </div></div>`);
@@ -6359,6 +6430,33 @@ function openReminderModal(item, defaultDate) {
         toast('Gagal menghapus: ' + err.message, 'error');
       }
     });
+    const stopRepeatBtn = backdrop.querySelector('#stop-repeat-reminder');
+    if (stopRepeatBtn) {
+      stopRepeatBtn.addEventListener('click', async () => {
+        // Tanggal setelah mana pengulangan dihentikan: tanggal kemunculan
+        // yang sedang dilihat (occurrenceDate, dari sel kalender yang
+        // diklik) kalau ada, kalau tidak jatuh balik ke tanggal dasar
+        // (item.date). Kemunculan pada tanggal ini SENDIRI tetap muncul;
+        // hanya kemunculan SETELAHNYA yang disembunyikan (lihat
+        // occursOnDate: reminder.repeatUntil).
+        const stopDate = occurrenceDate || item.date;
+        if (!stopDate) { toast('Tidak ada tanggal acuan untuk menghentikan pengulangan', 'error'); return; }
+        if (!confirm(`Hentikan pengulangan "${item.title}" mulai setelah tgl ${formatDateID(stopDate)}? Pengingat masih muncul di tgl ${formatDateID(stopDate)}, tapi tidak lagi di tanggal-tanggal sesudahnya.`)) return;
+        try {
+          await DB.updateReminder(item.id, {
+            title: item.title, description: item.description, date: item.date, time: item.time,
+            repeat: item.repeat, priority: item.priority, order: item.order,
+            customDays: item.customDays, endDate: item.endDate,
+            shiftSaturday: item.shiftSaturday, shiftSunday: item.shiftSunday,
+            repeatUntil: stopDate
+          });
+          toast('Pengulangan dihentikan', 'success');
+          backdrop.remove();
+        } catch (err) {
+          toast('Gagal menghentikan pengulangan: ' + err.message, 'error');
+        }
+      });
+    }
   }
 
   const pendingCheckbox = backdrop.querySelector('#reminder-pending-input');
@@ -6369,6 +6467,9 @@ function openReminderModal(item, defaultDate) {
   const repeatRow = backdrop.querySelector('#reminder-repeat-row');
   const customDaysRow = backdrop.querySelector('#reminder-customdays-row');
   const customDaysLabel = backdrop.querySelector('#reminder-customdays-label');
+  const shiftWeekendRow = backdrop.querySelector('#reminder-shiftweekend-row');
+  const shiftSaturdayInput = backdrop.querySelector('#reminder-shiftsaturday-input');
+  const shiftSundayInput = backdrop.querySelector('#reminder-shiftsunday-input');
   const priorityGroup = backdrop.querySelector('#reminder-priority-group');
   const dateRangeCheckbox = backdrop.querySelector('#reminder-daterange-input');
   const dateRangeLabel = backdrop.querySelector('#reminder-daterange-label');
@@ -6377,17 +6478,29 @@ function openReminderModal(item, defaultDate) {
   const applyRepeatState = () => {
     const notPending = repeatRow.style.display !== 'none';
     const isCustomRepeat = repeatSelect.value === 'custom';
+    const isWeeklyCustom = repeatSelect.value === 'weeklyCustom';
     // "s.d. tgl lain" tetap bisa dipakai walau repeat = "Bulanan, Hari
     // Tertentu": kalau diaktifkan, tanggal tunggalnya melebar jadi
     // rentang tanggal tiap bulan (lihat occursOnDate), sementara filter
-    // hari yang dicentang tetap berlaku.
-    const isRange = dateRangeCheckbox.checked;
+    // hari yang dicentang tetap berlaku. Tidak berlaku utk "Mingguan,
+    // Hari Tertentu" (repeat tiap minggu di hari tsb, konsep rentang
+    // tanggal tidak relevan di sini), jadi checkbox-nya disembunyikan.
+    dateRangeLabel.style.display = (notPending && !isWeeklyCustom) ? 'flex' : 'none';
+    if (isWeeklyCustom) dateRangeCheckbox.checked = false;
+    const isRange = !isWeeklyCustom && dateRangeCheckbox.checked;
     enddateRow.style.display = (notPending && isRange) ? '' : 'none';
     if (!isRange) enddateInput.value = '';
-    customDaysRow.style.display = (notPending && (isCustomRepeat || isRange)) ? '' : 'none';
+    customDaysRow.style.display = (notPending && (isCustomRepeat || isWeeklyCustom || isRange)) ? '' : 'none';
     customDaysLabel.textContent = isCustomRepeat
       ? 'Hanya jika tanggal ini jatuh di hari (centang hari yang dipilih)'
+      : isWeeklyCustom
+      ? 'Ulangi tiap minggu di hari (centang hari yang dipilih)'
       : 'Hanya muncul di hari berikut (opsional, kosongkan utk semua hari)';
+    // "Geser jika Sabtu/Minggu" hanya berlaku utk repeat "Bulanan" tanpa
+    // rentang tanggal (satu tanggal tunggal tiap bulan).
+    const isPlainMonthly = repeatSelect.value === 'monthly' && !isRange;
+    shiftWeekendRow.style.display = (notPending && isPlainMonthly) ? '' : 'none';
+    if (!isPlainMonthly) { shiftSaturdayInput.checked = false; shiftSundayInput.checked = false; }
   };
   const applyPendingState = () => {
     const isPending = pendingCheckbox.checked;
@@ -6411,17 +6524,22 @@ function openReminderModal(item, defaultDate) {
     const time = isPending ? '' : timeInput.value;
     const repeat = isPending ? 'none' : repeatSelect.value;
     const isCustomRepeat = repeat === 'custom';
-    const isRange = !isPending && dateRangeCheckbox.checked;
+    const isWeeklyCustom = repeat === 'weeklyCustom';
+    const isRange = !isPending && !isWeeklyCustom && dateRangeCheckbox.checked;
     const endDate = isRange ? enddateInput.value : '';
-    const customDays = (isCustomRepeat || isRange)
+    const customDays = (isCustomRepeat || isWeeklyCustom || isRange)
       ? Array.from(backdrop.querySelectorAll('.reminder-customday-checkbox:checked')).map(cb => Number(cb.value))
       : [];
+    const shiftSaturday = (repeat === 'monthly' && !isRange) ? shiftSaturdayInput.checked : false;
+    const shiftSunday = (repeat === 'monthly' && !isRange) ? shiftSundayInput.checked : false;
     const priority = isPending ? (backdrop.querySelector('input[name="reminder-priority"]:checked').value) : 'standard';
     const description = backdrop.querySelector('#reminder-desc-input').value.trim();
     if (!title) { toast('Judul wajib diisi', 'error'); return; }
     if (title.length > 22) { toast('Judul maksimal 22 karakter', 'error'); return; }
     if (isCustomRepeat && customDays.length === 0) { toast('Pilih minimal satu hari untuk repeat "Bulanan, Hari Tertentu"', 'error'); return; }
     if (isCustomRepeat && !date) { toast('Isi Tanggal untuk repeat "Bulanan, Hari Tertentu" (menentukan tanggal yang diulang tiap bulan)', 'error'); return; }
+    if (isWeeklyCustom && customDays.length === 0) { toast('Pilih minimal satu hari untuk repeat "Mingguan, Hari Tertentu"', 'error'); return; }
+    if (isWeeklyCustom && !date) { toast('Isi Tanggal (tanggal mulai berlaku) untuk repeat "Mingguan, Hari Tertentu"', 'error'); return; }
     if (isRange) {
       if (!date) { toast('Isi tanggal awal untuk rentang tanggal', 'error'); return; }
       if (!endDate) { toast('Isi tanggal akhir ("s.d. Tanggal") untuk rentang tanggal', 'error'); return; }
@@ -6429,10 +6547,10 @@ function openReminderModal(item, defaultDate) {
     }
     try {
       if (isEdit) {
-        await DB.updateReminder(item.id, { title, description, date, time, repeat, priority, order, customDays, endDate });
+        await DB.updateReminder(item.id, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil: item.repeatUntil || '' });
         toast('Pengingat diperbarui', 'success');
       } else {
-        await DB.addReminder(state.user.uid, { title, description, date, time, repeat, priority, order, customDays, endDate });
+        await DB.addReminder(state.user.uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday });
         toast('Pengingat ditambahkan', 'success');
       }
       backdrop.remove();
