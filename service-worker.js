@@ -221,7 +221,84 @@
 //      Sekarang urutannya dibalik (aturan dasar duluan, override
 //      responsif belakangan) sehingga tombol benar-benar tampil di
 //      layar <=900px seperti seharusnya.
-const CACHE_NAME = 'integrida-cache-v35';
+// v36: index.html diperbarui — tampilan "Pending Reminder" (menu Kalender)
+//      diubah dari daftar kartu menjadi tabel (memakai .table-wrap/<table>
+//      yang sama dengan tabel lain di aplikasi), dengan pengingat berlabel
+//      Prioritas dikelompokkan di baris atas dan pengingat Standar di baris
+//      bawah, masing-masing didahului baris judul grup. Tampilan daftar
+//      pengingat per-tanggal (bukan Pending) tidak berubah, tetap kartu.
+// v37: index.html diperbarui — kalender (menu Kalender) kini membedakan
+//      warna latar sel tanggal: Sabtu memakai hijau pastel (--success-light),
+//      sementara Minggu, cuti bersama, & hari libur nasional (daftar SKB 3
+//      Menteri 2026 baru ditambahkan sebagai ID_HOLIDAYS_2026, perlu
+//      diperbarui manual tiap tahun) memakai merah pastel (--danger-light);
+//      hari libur juga menampilkan nama liburnya lewat tooltip saat kursor
+//      diarahkan ke sel tanggal. Selain itu, posisi nomor tanggal dalam sel
+//      dipindah dari tengah kotak ke bagian atas-tengah kotak.
+// v38: index.html diperbarui — checkbox "Pending" pada modal "Tambah
+//      Pengingat" sekarang SELALU default tidak tercentang (sebelumnya
+//      otomatis tercentang kalau tombol "+" diklik saat sedang berada di
+//      tab Pending Reminder), karena tidak semua pengingat baru dimaksudkan
+//      masuk Pending Reminder — pengguna tetap bisa mencentangnya manual
+//      bila memang perlu.
+// v39: index.html diperbarui — baris nama hari (SEN/SEL/RAB/.../MIN) di
+//      atas grid Kalender sekarang position:sticky (menempel tepat di
+//      bawah topbar, top:62px, dengan latar belakang solid) supaya tetap
+//      terlihat saat halaman di-scroll ke bawah — sebelumnya baris ini
+//      ikut tergulung ke atas layar sehingga sulit tahu tanggal yang
+//      sedang dilihat jatuh pada hari apa.
+// v40: index.html diperbarui — sel tanggal bulan sebelumnya/berikutnya
+//      (pengisi awal/akhir grid Kalender) tidak lagi menampilkan nomor
+//      tanggalnya sama sekali (sebelumnya nomor tetap tampil, hanya
+//      dibuat transparan/pudar lewat opacity). Kotak sel & warna latar
+//      (termasuk hijau/merah pastel Sabtu/Minggu/libur) tetap tampil
+//      seperti biasa, hanya angkanya yang dihilangkan.
+// v41: index.html diperbarui — sel tanggal bulan sebelumnya/berikutnya
+//      (pengisi awal/akhir grid Kalender) kini juga tidak lagi punya
+//      latar belakang sama sekali (transparan), baik latar abu-abu
+//      normal maupun hijau/merah pastel Sabtu/Minggu/libur — sebelumnya
+//      (v40) hanya nomor tanggalnya yang dihilangkan tapi latar
+//      belakangnya masih tampak pudar (opacity). Border kotak tetap ada.
+// v42: index.html diperbarui — modal "Tambah Pengingat"/"Edit Pengingat"
+//      kini punya kolom baru "Urutan" (angka, opsional) di sebelah kolom
+//      Judul. Angka ini dipakai sebagai urutan tampil pengingat pada
+//      rincian jadwal per-tanggal (remindersForDate()): pengingat dengan
+//      angka Urutan lebih kecil tampil lebih dulu (yang belum diisi tetap
+//      diurutkan berdasarkan jam seperti sebelumnya, dan selalu tampil
+//      setelah yang sudah diberi Urutan). Field baru `order` disimpan di
+//      dokumen reminder Firestore (null bila kosong).
+// v43: index.html diperbarui — posisi kolom "Urutan" & "Judul" pada modal
+//      Tambah/Edit Pengingat ditukar: Urutan sekarang di sebelah KIRI,
+//      Judul di sebelah kanan (sebelumnya Judul di kiri, Urutan di kanan),
+//      keduanya tetap dalam satu deret. Kolom Judul juga diberi
+//      min-width:0 supaya tidak lagi berpotensi meluber/membuat baris
+//      pecah pada layar sempit.
+// v44: index.html diperbarui — perbaikan bug tampilan dari v43: kolom
+//      Urutan & Judul pada modal Pengingat masih tampil bertumpuk
+//      vertikal (bukan sejajar satu baris) karena div pembungkusnya
+//      memakai class "field" yang sudah punya aturan CSS
+//      "flex-direction:column", sementara inline style baris tersebut
+//      hanya menambahkan "display:flex" tanpa mengganti arahnya —
+//      sehingga aturan class tetap menang. Sekarang inline style
+//      menambahkan "flex-direction:row" secara eksplisit supaya kedua
+//      kolom benar-benar sejajar dalam satu baris.
+// v45: index.html diperbarui — perbaikan bug tampilan lanjutan: setelah
+//      v44 kolom Urutan & Judul sudah sejajar satu baris, tapi kotak
+//      input Judul sendiri masih pendek/tidak melebar penuh, karena input
+//      itu adalah anak block biasa dari div pembungkusnya (bukan flex
+//      item langsung) sehingga tidak ikut stretch otomatis seperti input
+//      pada field lain. Sekarang input Judul diberi width:100% eksplisit
+//      supaya melebar penuh mengikuti lebar kolomnya.
+// v46: index.html diperbarui — pilihan Ulangi pada Pengingat kini punya
+//      opsi baru "Hari Tertentu": saat dipilih, muncul checkbox 7 hari
+//      (Sen–Min) untuk memilih hari-hari mana pengingat itu berulang
+//      (mis. hanya Senin/Rabu/Jumat — secara efektif ini juga berfungsi
+//      sebagai "kecuali hari X" karena hari yang tidak dicentang otomatis
+//      dikecualikan). Field baru `customDays` (array angka, konvensi
+//      Date.getDay(): 0=Minggu...6=Sabtu) disimpan di dokumen reminder;
+//      occursOnDate() & label repeat pada daftar pengingat (mis. "↻ Sen,
+//      Rab, Jum") sudah menyesuaikan.
+const CACHE_NAME = 'integrida-cache-v46';
 const APP_SHELL = [
   './',
   './index.html',
