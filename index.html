@@ -25,7 +25,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" crossorigin="anonymous">
 <style>
 :root{
   /* Warna aksen brand (tetap sama di light & dark mode, dipakai untuk
@@ -33,8 +33,8 @@
      konten yang perlu berganti antar tema). */
   --ink:#16213A;
   --ink-soft:#22314f;
-  --teal:#1B7A6B;
-  --teal-light:#e6f2f0;
+  --teal:#2F6FE4;
+  --teal-light:#e8f0fe;
   --gold:#C08A3E;
   --gold-light:#faf1e2;
   --danger:#B5453B;
@@ -67,14 +67,19 @@
   --sidebar-border:var(--border);
   --sidebar-hover-bg:rgba(20,30,50,0.05);
   --sidebar-active-bg:var(--teal-light);
-  --sidebar-active-border:rgba(27,122,107,0.35);
+  --sidebar-active-border:rgba(47,111,228,0.35);
   --sidebar-text:var(--slate);
   --sidebar-text-muted:var(--slate-light);
   --sidebar-text-strong:var(--text);
 
   --radius:10px;
-  --font-body:'Inter',system-ui,sans-serif;
-  --font-display:'Space Grotesk',var(--font-body);
+  /* Satu keluarga font untuk seluruh aplikasi (body & display) — sans
+     geometris/rounded yang lebih "friendly" & modern dibanding Inter,
+     dibedakan lewat bobot (weight), bukan lewat typeface terpisah.
+     Font mono tetap dipakai khusus untuk tabel akun/rincian angka padat
+     yang butuh perataan kolom presisi (bukan untuk angka besar/KPI). */
+  --font-body:'Plus Jakarta Sans',system-ui,sans-serif;
+  --font-display:'Plus Jakarta Sans',var(--font-body);
   --font-mono:'IBM Plex Mono',ui-monospace,monospace;
 }
 
@@ -96,8 +101,8 @@
 
   --ink:#2A3C63;
   --ink-soft:#38507f;
-  --teal:#2CA893;
-  --teal-light:#123832;
+  --teal:#5B93FF;
+  --teal-light:#16223f;
   --gold:#D9A65D;
   --gold-light:#3A2C14;
   --danger:#E2695D;
@@ -110,8 +115,8 @@
   --sidebar-bg:#0B0F1C;
   --sidebar-border:rgba(255,255,255,0.07);
   --sidebar-hover-bg:rgba(255,255,255,0.05);
-  --sidebar-active-bg:rgba(44,168,147,0.2);
-  --sidebar-active-border:rgba(44,168,147,0.38);
+  --sidebar-active-bg:rgba(91,147,255,0.2);
+  --sidebar-active-border:rgba(91,147,255,0.38);
   --sidebar-text:#b7c0d6;
   --sidebar-text-muted:#5c6785;
   --sidebar-text-strong:#ffffff;
@@ -164,10 +169,8 @@ input,select{font-family:inherit;}
   border-bottom:1px solid var(--sidebar-border);
 }
 .sidebar-brand .mark{
-  width:32px;height:32px;border-radius:8px;
-  background:linear-gradient(135deg,var(--teal),#0e4e44);
-  display:flex;align-items:center;justify-content:center;
-  font-family:var(--font-display);font-weight:700;color:#fff;font-size:15px;
+  width:32px;height:32px;border-radius:8px;flex-shrink:0;
+  object-fit:contain;background:var(--card);
 }
 .sidebar-brand .name{font-family:var(--font-display);font-weight:600;font-size:18px;color:var(--sidebar-text-strong);letter-spacing:.2px;}
 .sidebar-brand .tag{font-size:10.5px;color:var(--sidebar-text-muted);letter-spacing:.6px;text-transform:uppercase;}
@@ -211,9 +214,7 @@ input,select{font-family:inherit;}
 .topbar .sub{font-size:12.5px;color:var(--slate);margin-top:2px;}
 .topbar-brand{
   width:32px;height:32px;border-radius:8px;flex-shrink:0;
-  background:linear-gradient(135deg,var(--teal),#0e4e44);
-  display:flex;align-items:center;justify-content:center;
-  font-family:var(--font-display);font-weight:700;color:#fff;font-size:13px;
+  object-fit:contain;
 }
 .content{padding:26px;flex:1;padding-bottom:100px;}
 
@@ -265,9 +266,9 @@ input,select{font-family:inherit;}
 .sync-checkbox-label.is-synced{color:var(--teal);font-weight:600;}
 
 .kpi-card{display:flex;flex-direction:column;gap:6px;}
-.kpi-label{font-size:12px;color:var(--slate);text-transform:uppercase;letter-spacing:.5px;}
-.kpi-value{font-family:var(--font-mono);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;}
-.kpi-delta{font-size:12.5px;font-family:var(--font-mono);}
+.kpi-label{font-size:12px;color:var(--slate);letter-spacing:.2px;}
+.kpi-value{font-family:var(--font-display);font-size:25px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums;}
+.kpi-delta{font-size:12.5px;font-family:var(--font-display);font-weight:600;}
 .kpi-delta.up{color:var(--teal);}
 .kpi-delta.down{color:var(--danger);}
 
@@ -289,7 +290,7 @@ tbody tr:hover{background:var(--surface-2);}
 }
 .btn:hover{background:var(--ink-soft);}
 .btn.primary{background:var(--teal);}
-.btn.primary:hover{background:#156357;}
+.btn.primary:hover{background:#1f56c9;}
 .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border);}
 .btn.ghost:hover{background:var(--surface-2);}
 .btn.danger{background:var(--danger);}
@@ -397,6 +398,43 @@ tbody tr:hover{background:var(--surface-2);}
 }
 .pill.active{background:var(--ink);color:#fff;border-color:var(--ink);}
 
+/* ---------- Filter halaman Perbandingan (kartu, chip, search, segmented) ---------- */
+.compare-filter-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px 22px 22px;}
+.compare-filter-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+.compare-filter-label{font-family:var(--font-display);font-weight:600;font-size:13.5px;color:var(--text);}
+.compare-filter-actions{display:flex;gap:16px;}
+.compare-filter-action{background:none;border:none;padding:0;color:var(--teal);font-size:12.5px;font-weight:600;cursor:pointer;}
+.compare-filter-action:hover{text-decoration:underline;}
+.compare-search-wrap{position:relative;max-width:320px;margin-bottom:14px;}
+.compare-search-wrap .compare-search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--slate-light);pointer-events:none;}
+.compare-search-wrap .compare-search-icon svg{width:100%;height:100%;}
+.compare-search-input{width:100%;padding:8px 12px 8px 34px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface-2);color:var(--text);}
+.compare-search-input:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:var(--teal);}
+.chip-row{display:flex;flex-wrap:wrap;gap:8px;}
+.chip{
+  display:inline-flex;align-items:center;gap:7px;padding:7px 14px 7px 10px;border-radius:100px;
+  border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:13px;
+  cursor:pointer;user-select:none;transition:background-color .15s,border-color .15s,color .15s;
+}
+.chip:hover{border-color:var(--teal);}
+.chip.hidden{display:none;}
+.chip-check{
+  width:15px;height:15px;border-radius:50%;border:1.5px solid var(--slate-light);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;transition:background-color .15s,border-color .15s;
+}
+.chip-check svg{width:9px;height:9px;color:#fff;display:none;}
+.chip.active{background:var(--teal-light);border-color:var(--teal);color:var(--teal);font-weight:600;}
+.chip.active .chip-check{background:var(--teal);border-color:var(--teal);}
+.chip.active .chip-check svg{display:block;}
+.segmented{display:inline-flex;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:3px;gap:2px;}
+.seg-item{padding:7px 15px;border-radius:7px;font-size:13px;color:var(--slate);cursor:pointer;}
+.seg-item.active{background:var(--card);color:var(--text);font-weight:600;box-shadow:0 1px 3px rgba(20,30,50,.14);}
+.compare-empty-state{text-align:center;padding:46px 20px;color:var(--slate);}
+.compare-empty-icon{width:44px;height:44px;margin:0 auto 14px;color:var(--teal);background:var(--teal-light);border-radius:12px;display:flex;align-items:center;justify-content:center;padding:10px;box-sizing:border-box;}
+.compare-empty-icon svg{width:100%;height:100%;}
+.compare-empty-title{font-family:var(--font-display);font-weight:600;font-size:15px;color:var(--text);margin-bottom:5px;}
+.compare-empty-sub{font-size:13px;max-width:380px;margin:0 auto;line-height:1.6;}
+
 .empty-state{
   text-align:center;padding:50px 20px;color:var(--slate);
 }
@@ -426,7 +464,7 @@ tbody tr:hover{background:var(--surface-2);}
   background-image:repeating-linear-gradient(to bottom, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 30px);}
 .auth-card{width:380px;max-width:92vw;background:#fff;border-radius:14px;padding:32px 28px;}
 .auth-brand{display:flex;align-items:center;gap:10px;margin-bottom:22px;}
-.auth-brand .mark{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--teal),#0e4e44);display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--font-display);font-weight:700;}
+.auth-brand .mark{width:36px;height:36px;border-radius:9px;object-fit:contain;flex-shrink:0;}
 .auth-brand .name{font-family:var(--font-display);font-weight:700;font-size:20px;}
 .auth-tabs{display:flex;gap:6px;margin-bottom:18px;background:#f2f3f4;padding:4px;border-radius:9px;}
 .auth-tab{flex:1;text-align:center;padding:8px;border-radius:7px;font-size:13px;cursor:pointer;color:var(--slate);}
@@ -436,6 +474,35 @@ tbody tr:hover{background:var(--surface-2);}
 
 .chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
 .chart-box canvas{max-height:280px;}
+
+/* ---------- Dashboard: kartu "melayang" & widget ringkas ---------- */
+.dash-hero{
+  position:relative;background:var(--card);border:1px solid var(--border);
+  border-radius:22px;padding:24px 24px 14px 24px;
+  box-shadow:0 22px 44px -18px rgba(22,33,58,.28),0 4px 14px rgba(22,33,58,.06);
+}
+[data-theme="dark"] .dash-hero{box-shadow:0 22px 44px -18px rgba(0,0,0,.6),0 4px 14px rgba(0,0,0,.3);}
+.dash-hero-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:6px;}
+.dash-hero-title{font-family:var(--font-display);font-weight:700;font-size:16.5px;}
+.dash-hero-sub{font-size:12.5px;color:var(--slate);margin-top:2px;}
+.dash-hero-stats{display:flex;gap:26px;flex-wrap:wrap;}
+.dash-hero-stat-label{font-size:12px;color:var(--slate);}
+.dash-hero-stat-value{font-family:var(--font-display);font-weight:800;font-size:19px;letter-spacing:-.01em;margin-top:2px;font-variant-numeric:tabular-nums;}
+.dash-hero-chart-wrap{position:relative;height:270px;margin-top:10px;}
+
+.dash-widgets{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:16px;}
+@media(max-width:1100px){.dash-widgets{grid-template-columns:1fr 1fr;}}
+@media(max-width:640px){.dash-widgets{grid-template-columns:1fr;}}
+.dash-widget-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px 18px;}
+.dash-widget-title{font-family:var(--font-display);font-weight:600;font-size:13px;color:var(--text);margin-bottom:10px;}
+.dash-widget-chart-wrap{position:relative;height:150px;}
+.dash-donut-wrap{display:flex;align-items:center;gap:14px;}
+.dash-donut-canvas{position:relative;width:104px;height:104px;flex-shrink:0;}
+.dash-donut-legend{display:flex;flex-direction:column;gap:7px;flex:1;min-width:0;}
+.dash-donut-legend-row{display:flex;align-items:center;gap:7px;font-size:12px;}
+.dash-donut-legend-dot{width:8px;height:8px;border-radius:2.5px;flex-shrink:0;}
+.dash-donut-legend-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);}
+.dash-donut-legend-pct{font-family:var(--font-display);font-weight:700;color:var(--slate);}
 
 .ratio-note{font-size:12px;color:var(--slate);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:10px;line-height:1.5;}
 .bb-akun-row:hover{background:var(--teal-light);}
@@ -498,9 +565,9 @@ tbody tr:hover{background:var(--surface-2);}
 }
 .bottom-nav-item svg{width:18px;height:18px;flex-shrink:0;opacity:.85;}
 .bottom-nav-item span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
-.bottom-nav-item.active{background:rgba(27,122,107,0.14);color:var(--teal);font-weight:600;}
+.bottom-nav-item.active{background:rgba(47,111,228,0.14);color:var(--teal);font-weight:600;}
 .bottom-nav-item.active svg{opacity:1;}
-[data-theme="dark"] .bottom-nav-item.active{background:rgba(27,122,107,0.24);color:#4fd8bf;}
+[data-theme="dark"] .bottom-nav-item.active{background:rgba(47,111,228,0.24);color:#7fb0ff;}
 
 @media(max-width:480px){
   .bottom-nav-item span{font-size:9.5px;}
@@ -2040,7 +2107,7 @@ const state = {
 // =============================================================
 const SYNC_META = {
   connecting: { dot: '#9aa3b2', label: 'Menghubungkan…', pulse: true },
-  synced:     { dot: '#1B7A6B', label: 'Tersinkron',      pulse: false },
+  synced:     { dot: '#2F6FE4', label: 'Tersinkron',      pulse: false },
   syncing:    { dot: '#C08A3E', label: 'Menyinkronkan…',  pulse: true },
   offline:    { dot: '#B5453B', label: 'Offline',         pulse: false }
 };
@@ -2122,7 +2189,9 @@ const ICONS = {
   upload: '<path d="M12 16V4M12 4l-4 4M12 4l4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
   bars: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>',
   pulse: '<path d="M3 12h4l2 7 4-14 2 7h6" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
-  gear: '<path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/>'
+  gear: '<path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/>',
+  search: '<circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M21 21l-4.3-4.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
+  check: '<path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
 };
 
 function icon(name) {
@@ -2133,6 +2202,20 @@ function icon(name) {
 function formatIDR(v) {
   if (v === null || v === undefined || isNaN(v)) return '–';
   return 'Rp ' + Math.round(v).toLocaleString('id-ID');
+}
+
+// Format ringkas untuk label sumbu chart (mis. "1,2jt", "850rb") supaya
+// sumbu tidak penuh sesak dengan angka rupiah lengkap.
+function formatIDRShort(v) {
+  if (v === null || v === undefined || isNaN(v)) return '–';
+  const n = Number(v);
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1e12) return sign + (abs / 1e12).toLocaleString('id-ID', { maximumFractionDigits: 1 }) + 'T';
+  if (abs >= 1e9) return sign + (abs / 1e9).toLocaleString('id-ID', { maximumFractionDigits: 1 }) + 'M';
+  if (abs >= 1e6) return sign + (abs / 1e6).toLocaleString('id-ID', { maximumFractionDigits: 1 }) + 'jt';
+  if (abs >= 1e3) return sign + (abs / 1e3).toLocaleString('id-ID', { maximumFractionDigits: 0 }) + 'rb';
+  return sign + abs.toLocaleString('id-ID');
 }
 
 function escapeHTML(str) {
@@ -2163,7 +2246,7 @@ function renderAuthScreen(mode = 'login', errorMsg = '') {
     <div class="auth-wrap">
       <div class="auth-card">
         <div class="auth-brand">
-          <div class="mark">IN</div>
+          <img class="mark" src="icons/icon-192.png" alt="Integrida">
           <div class="name">Integrida</div>
         </div>
         <div class="auth-tabs">
@@ -2269,7 +2352,7 @@ function renderShell() {
     <div id="app-shell">
       <nav class="sidebar" id="sidebar">
         <div class="sidebar-brand">
-          <div class="mark">IN</div>
+          <img class="mark" src="icons/icon-192.png" alt="Integrida">
           <div>
             <div class="name">Integrida</div>
             <div class="tag">Konsolidasi Keuangan</div>
@@ -2281,7 +2364,7 @@ function renderShell() {
       <div class="main">
         <div class="topbar">
           <div style="display:flex;align-items:center;gap:12px;min-width:0;">
-            <div class="topbar-brand">IN</div>
+            <img class="topbar-brand" src="icons/icon-192.png" alt="Integrida">
             <div style="min-width:0;">
               <h1 id="topbar-title">Dashboard</h1>
               <div class="sub" id="topbar-sub">Ringkasan seluruh perusahaan</div>
@@ -2395,6 +2478,32 @@ function paintDashboard(allStatements) {
     ? latestList.reduce((a, s) => a + (computeRatios(s).likuiditas.currentRatio || 0), 0) / latestList.length
     : 0;
 
+  // Tren gabungan seluruh perusahaan per periode, dipakai untuk kartu
+  // utama (hero) — total aset (batang) berdampingan dengan laba bersih
+  // (garis), 8 periode terakhir yang tersedia.
+  const periodMap = {};
+  allStatements.forEach(s => {
+    const key = `${s.year}-${String(s.periodIndex).padStart(3, '0')}`;
+    if (!periodMap[key]) periodMap[key] = { label: s.periodLabel, year: s.year, periodIndex: s.periodIndex, aset: 0, laba: 0 };
+    periodMap[key].aset += (s.neraca.totalAset || 0);
+    periodMap[key].laba += (s.labaRugi.labaBersih || 0);
+  });
+  const trend = Object.values(periodMap).sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex).slice(-8);
+
+  // Komposisi total aset per perusahaan (periode terbaru masing-masing),
+  // 5 terbesar + sisanya digabung jadi "Lainnya".
+  const composition = state.companies
+    .map(c => ({ name: c.name, value: latestByCompany[c.id]?.neraca.totalAset || 0 }))
+    .filter(x => x.value > 0)
+    .sort((a, b) => b.value - a.value);
+  const compTop = composition.slice(0, 5);
+  const compOtherTotal = composition.slice(5).reduce((a, x) => a + x.value, 0);
+  if (compOtherTotal > 0) compTop.push({ name: 'Lainnya', value: compOtherTotal });
+  const compGrandTotal = compTop.reduce((a, x) => a + x.value, 0) || 1;
+  const donutPalette = ['#12306B', '#2F6FE4', '#5B93FF', '#8FB6FF', '#C3DAFF', '#7A8699'];
+
+  const labels = latestList.map(s => state.companies.find(c => c.id === s.companyId)?.name || '?');
+
   root.innerHTML = `
     <div class="section-block grid grid-4">
       <div class="card kpi-card">
@@ -2415,18 +2524,55 @@ function paintDashboard(allStatements) {
       </div>
     </div>
 
-    <div class="section-block grid grid-2">
-      <div class="chart-box">
-        <div class="section-title">Total Aset per Perusahaan (Periode Terbaru)</div>
-        <canvas id="chart-aset"></canvas>
+    <div class="section-block dash-hero">
+      <div class="dash-hero-head">
+        <div>
+          <div class="dash-hero-title">Tren Aset &amp; Laba Bersih</div>
+          <div class="dash-hero-sub">Gabungan seluruh perusahaan, per periode</div>
+        </div>
+        <div class="dash-hero-stats">
+          <div>
+            <div class="dash-hero-stat-label">Pendapatan</div>
+            <div class="dash-hero-stat-value">${formatIDR(sumPendapatan)}</div>
+          </div>
+          <div>
+            <div class="dash-hero-stat-label">Laba Bersih</div>
+            <div class="dash-hero-stat-value" style="color:${sumLabaBersih >= 0 ? 'var(--teal)' : 'var(--danger)'};">${formatIDR(sumLabaBersih)}</div>
+          </div>
+        </div>
       </div>
-      <div class="chart-box">
-        <div class="section-title">Laba Bersih per Perusahaan (Periode Terbaru)</div>
-        <canvas id="chart-laba"></canvas>
+      <div class="dash-hero-chart-wrap">
+        ${trend.length ? '<canvas id="dash-hero-chart"></canvas>' : '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--slate-light);font-size:13px;">Belum ada data periode untuk ditampilkan</div>'}
       </div>
     </div>
 
-    <div class="section-block">
+    <div class="dash-widgets">
+      <div class="dash-widget-card">
+        <div class="dash-widget-title">Total Aset per Perusahaan</div>
+        <div class="dash-widget-chart-wrap"><canvas id="chart-aset"></canvas></div>
+      </div>
+      <div class="dash-widget-card">
+        <div class="dash-widget-title">Laba Bersih per Perusahaan</div>
+        <div class="dash-widget-chart-wrap"><canvas id="chart-laba"></canvas></div>
+      </div>
+      <div class="dash-widget-card">
+        <div class="dash-widget-title">Komposisi Total Aset</div>
+        <div class="dash-donut-wrap">
+          <div class="dash-donut-canvas">${compTop.length ? '<canvas id="dash-donut"></canvas>' : ''}</div>
+          <div class="dash-donut-legend">
+            ${compTop.length ? compTop.map((x, i) => `
+              <div class="dash-donut-legend-row">
+                <span class="dash-donut-legend-dot" style="background:${donutPalette[i % donutPalette.length]};"></span>
+                <span class="dash-donut-legend-name">${x.name}</span>
+                <span class="dash-donut-legend-pct">${Math.round(x.value / compGrandTotal * 100)}%</span>
+              </div>
+            `).join('') : '<div style="color:var(--slate-light);font-size:12.5px;">Belum ada data</div>'}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-block" style="margin-top:26px;">
       <div class="section-title">Ringkasan Perusahaan</div>
       <div class="table-wrap">
         <table>
@@ -2451,9 +2597,10 @@ function paintDashboard(allStatements) {
     </div>
   `;
 
-  const labels = latestList.map(s => state.companies.find(c => c.id === s.companyId)?.name || '?');
-  renderBarChart('chart-aset', labels, [{ label: 'Total Aset', data: latestList.map(s => s.neraca.totalAset || 0), color: '#1B7A6B' }]);
-  renderBarChart('chart-laba', labels, [{ label: 'Laba Bersih', data: latestList.map(s => s.labaRugi.labaBersih || 0), color: '#C08A3E' }]);
+  if (trend.length) renderHeroChart('dash-hero-chart', trend.map(t => t.label), trend.map(t => t.aset), trend.map(t => t.laba));
+  renderMiniBarChart('chart-aset', labels, latestList.map(s => s.neraca.totalAset || 0), '#2F6FE4');
+  renderMiniBarChart('chart-laba', labels, latestList.map(s => s.labaRugi.labaBersih || 0), '#C08A3E');
+  if (compTop.length) renderDonutChart('dash-donut', compTop.map(x => x.name), compTop.map(x => x.value), donutPalette);
 }
 
 function emptyState(title, desc, navTarget, actionLabel) {
@@ -4937,31 +5084,80 @@ function renderCompare() {
     return;
   }
   root.innerHTML = `
-    <div class="section-block">
-      <div class="pill-row" id="company-pills">
-        ${state.companies.map(c => `<div class="pill ${state.compareCompanyIds.includes(c.id) ? 'active' : ''}" data-id="${c.id}">${c.name}</div>`).join('')}
+    <div class="section-block compare-filter-card">
+      <div class="compare-filter-head">
+        <div class="compare-filter-label">Pilih Perusahaan <span id="cmp-selected-count" style="color:var(--slate-light);font-weight:500;">(${state.compareCompanyIds.length} dipilih)</span></div>
+        <div class="compare-filter-actions">
+          <button type="button" class="compare-filter-action" id="cmp-select-all">Pilih semua</button>
+          <button type="button" class="compare-filter-action" id="cmp-clear-all">Hapus semua</button>
+        </div>
       </div>
-      <div class="pill-row" id="period-pills">
-        ${Object.entries(PERIOD_LABELS).map(([k, v]) => `<div class="pill ${state.comparePeriodType === k ? 'active' : ''}" data-period="${k}">${v}</div>`).join('')}
+      <div class="compare-search-wrap">
+        <span class="compare-search-icon">${icon('search')}</span>
+        <input type="text" id="cmp-search" class="compare-search-input" placeholder="Cari nama perusahaan…">
+      </div>
+      <div class="chip-row" id="company-pills">
+        ${state.companies.map(c => `
+          <div class="chip ${state.compareCompanyIds.includes(c.id) ? 'active' : ''}" data-id="${c.id}" data-name="${escapeHTML(c.name.toLowerCase())}">
+            <span class="chip-check">${icon('check')}</span>${c.name}
+          </div>
+        `).join('')}
+      </div>
+      <div class="compare-filter-label" style="margin-top:20px;margin-bottom:9px;">Jenis Periode</div>
+      <div class="segmented" id="period-pills">
+        ${Object.entries(PERIOD_LABELS).map(([k, v]) => `<div class="seg-item ${state.comparePeriodType === k ? 'active' : ''}" data-period="${k}">${v}</div>`).join('')}
       </div>
     </div>
-    <div id="compare-result"><div class="card" style="color:var(--slate);">Pilih minimal satu perusahaan untuk melihat perbandingan.</div></div>
+    <div id="compare-result"></div>
   `;
 
-  document.querySelectorAll('#company-pills .pill').forEach(p => {
-    p.addEventListener('click', () => {
-      const id = p.dataset.id;
+  document.querySelectorAll('#company-pills .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const id = chip.dataset.id;
       const idx = state.compareCompanyIds.indexOf(id);
       if (idx >= 0) state.compareCompanyIds.splice(idx, 1); else state.compareCompanyIds.push(id);
-      renderCompare();
+      chip.classList.toggle('active');
+      const countEl = document.getElementById('cmp-selected-count');
+      if (countEl) countEl.textContent = `(${state.compareCompanyIds.length} dipilih)`;
+      subscribeCompareData();
     });
   });
-  document.querySelectorAll('#period-pills .pill').forEach(p => {
-    p.addEventListener('click', () => { state.comparePeriodType = p.dataset.period; renderCompare(); });
+  document.querySelectorAll('#period-pills .seg-item').forEach(seg => {
+    seg.addEventListener('click', () => {
+      state.comparePeriodType = seg.dataset.period;
+      document.querySelectorAll('#period-pills .seg-item').forEach(s => s.classList.toggle('active', s === seg));
+      subscribeCompareData();
+    });
+  });
+  document.getElementById('cmp-select-all').addEventListener('click', () => {
+    state.compareCompanyIds = state.companies.map(c => c.id);
+    renderCompare();
+  });
+  document.getElementById('cmp-clear-all').addEventListener('click', () => {
+    state.compareCompanyIds = [];
+    renderCompare();
+  });
+  document.getElementById('cmp-search').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    document.querySelectorAll('#company-pills .chip').forEach(chip => {
+      chip.classList.toggle('hidden', !!q && !chip.dataset.name.includes(q));
+    });
   });
 
-  if (state.compareCompanyIds.length === 0) return;
+  subscribeCompareData();
+}
 
+function subscribeCompareData() {
+  teardownActiveDataListener();
+  const resultEl = document.getElementById('compare-result');
+  if (state.compareCompanyIds.length === 0) {
+    if (resultEl) resultEl.innerHTML = `<div class="card compare-empty-state">
+      <div class="compare-empty-icon">${icon('bars')}</div>
+      <div class="compare-empty-title">Pilih perusahaan untuk membandingkan</div>
+      <div class="compare-empty-sub">Pilih minimal satu perusahaan dari daftar di atas untuk melihat grafik dan tabel perbandingan kinerjanya.</div>
+    </div>`;
+    return;
+  }
   // Listener realtime untuk kombinasi perusahaan yang dipilih.
   state.unsubData = DB.watchAllStatements(state.compareCompanyIds, (allStatements, meta) => {
     Sync.report('statements', meta);
@@ -5109,7 +5305,7 @@ function paintRatios(statements) {
   const trendLabels = statements.map(s => s.periodLabel);
   const trendData = statements.map(s => computeRatios(s));
   renderLineChart('ratio-trend', trendLabels, [
-    { label: 'Current Ratio', data: trendData.map(r => r.likuiditas.currentRatio), color: '#1B7A6B' },
+    { label: 'Current Ratio', data: trendData.map(r => r.likuiditas.currentRatio), color: '#2F6FE4' },
     { label: 'Debt to Equity', data: trendData.map(r => r.solvabilitas.debtToEquityRatio), color: '#C08A3E' },
     { label: 'Net Profit Margin', data: trendData.map(r => r.profitabilitas.netProfitMargin), color: '#B5453B' }
   ]);
@@ -5162,6 +5358,121 @@ function renderLineChart(canvasId, labels, datasets) {
     type: 'line',
     data: { labels, datasets: datasets.map(d => ({ label: d.label, data: d.data, borderColor: d.color, backgroundColor: d.color, tension: 0.3, spanGaps: true })) },
     options: { responsive: true, plugins: { legend: { display: true } } }
+  });
+}
+
+// Kartu utama dashboard: batang Total Aset (gradasi navy → teal, sudut
+// membulat) berdampingan dengan garis Laba Bersih pada sumbu kedua.
+function renderHeroChart(canvasId, labels, asetData, labaData) {
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(20,30,50,.06)';
+  const tickColor = isDark ? '#A9B2C7' : '#5B6472';
+  state.chartInstances[canvasId] = new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Total Aset',
+          data: asetData,
+          borderRadius: 8,
+          borderSkipped: false,
+          maxBarThickness: 38,
+          order: 2,
+          backgroundColor: (c) => {
+            const { ctx: cctx, chartArea } = c.chart;
+            if (!chartArea) return '#2F6FE4';
+            const g = cctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            g.addColorStop(0, isDark ? '#8FB6FF' : '#5B93FF');
+            g.addColorStop(1, isDark ? '#1E3E7A' : '#16213A');
+            return g;
+          }
+        },
+        {
+          type: 'line',
+          label: 'Laba Bersih',
+          data: labaData,
+          borderColor: '#C08A3E',
+          backgroundColor: '#C08A3E',
+          borderWidth: 2.5,
+          tension: 0.35,
+          pointRadius: 4,
+          pointHoverRadius: 5,
+          pointBackgroundColor: isDark ? '#161D2E' : '#FFFFFF',
+          pointBorderColor: '#C08A3E',
+          pointBorderWidth: 2,
+          yAxisID: 'y1',
+          order: 1
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true, position: 'top', align: 'end',
+          labels: { boxWidth: 9, boxHeight: 9, usePointStyle: true, pointStyle: 'circle', color: tickColor, font: { family: "'Plus Jakarta Sans'", size: 11.5, weight: '600' } }
+        },
+        tooltip: {
+          callbacks: {
+            label: (item) => `${item.dataset.label}: ${formatIDR(item.raw)}`
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: tickColor, font: { family: "'Plus Jakarta Sans'", size: 11.5 } } },
+        y: { grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: "'Plus Jakarta Sans'", size: 11 }, callback: v => formatIDRShort(v) } },
+        y1: { position: 'right', grid: { display: false }, border: { display: false }, ticks: { color: tickColor, font: { family: "'Plus Jakarta Sans'", size: 11 }, callback: v => formatIDRShort(v) } }
+      }
+    }
+  });
+}
+
+// Kartu widget kecil di dashboard: batang tunggal, sudut membulat,
+// tanpa sumbu/label berlebih supaya tetap ringkas.
+function renderMiniBarChart(canvasId, labels, data, color) {
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(20,30,50,.06)';
+  const tickColor = isDark ? '#A9B2C7' : '#5B6472';
+  state.chartInstances[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: color, borderRadius: 6, borderSkipped: false, maxBarThickness: 30 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (item) => formatIDR(item.raw) } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: tickColor, font: { family: "'Plus Jakarta Sans'", size: 10.5 }, maxRotation: 0, autoSkip: true } },
+        y: { grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: "'Plus Jakarta Sans'", size: 10 }, callback: v => formatIDRShort(v) } }
+      }
+    }
+  });
+}
+
+// Donut komposisi (mis. total aset per perusahaan) — legendanya dirender
+// terpisah sebagai HTML di sebelah kanvas, bukan legend bawaan Chart.js.
+function renderDonutChart(canvasId, labels, data, palette) {
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  state.chartInstances[canvasId] = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: palette, borderColor: isDark ? '#161D2E' : '#FFFFFF', borderWidth: 2 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '68%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (item) => `${item.label}: ${formatIDR(item.raw)}` } }
+      }
+    }
   });
 }
 
