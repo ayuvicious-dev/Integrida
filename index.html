@@ -201,14 +201,21 @@ input,select{font-family:inherit;}
 .logout-btn{margin-top:10px;width:100%;background:transparent;border:1px solid var(--sidebar-border);color:var(--sidebar-text);padding:7px;border-radius:7px;font-size:12.5px;cursor:pointer;}
 .logout-btn:hover{background:var(--sidebar-hover-bg);}
 
-.main{margin-left:250px;flex:1;display:flex;flex-direction:column;min-height:100vh;}
+.sidebar{display:none;}
+.main{margin-left:0;flex:1;display:flex;flex-direction:column;min-height:100vh;}
 .topbar{
   height:62px;flex-shrink:0;background:var(--card);border-bottom:1px solid var(--border);
   display:flex;align-items:center;justify-content:space-between;padding:0 26px;position:sticky;top:0;z-index:5;
 }
 .topbar h1{font-family:var(--font-display);font-size:19px;margin:0;font-weight:600;}
 .topbar .sub{font-size:12.5px;color:var(--slate);margin-top:2px;}
-.content{padding:26px;flex:1;}
+.topbar-brand{
+  width:32px;height:32px;border-radius:8px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--teal),#0e4e44);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-display);font-weight:700;color:#fff;font-size:13px;
+}
+.content{padding:26px;flex:1;padding-bottom:100px;}
 
 /* ---------- Cards / generic ---------- */
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;}
@@ -459,32 +466,47 @@ tbody tr:hover{background:var(--surface-2);}
 @media(max-width:640px){ .sync-badge .sync-time{display:none;} }
 
 @media(max-width:900px){
-  .sidebar{transform:translateX(-100%);transition:transform .2s ease;}
-  .sidebar.open{transform:translateX(0);}
-  .main{margin-left:0;}
   .grid-4,.grid-3,.grid-2{grid-template-columns:1fr;}
 }
 
-/* ---------- Tombol menu (hamburger) & backdrop untuk sidebar mobile ---------- */
-.menu-toggle-btn{
-  display:none;align-items:center;justify-content:center;flex-shrink:0;
-  width:36px;height:36px;border-radius:8px;
-  border:1px solid var(--border);background:var(--surface-2);color:var(--text);
+/* ---------- Bottom navigation ---------- */
+.bottom-nav{
+  display:flex;
+  position:fixed;left:50%;bottom:14px;transform:translateX(-50%);
+  width:calc(100% - 20px);max-width:720px;
+  z-index:45;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:20px;
+  box-shadow:0 10px 28px rgba(10,14,24,0.18);
+  padding:7px 4px calc(7px + env(safe-area-inset-bottom)) 4px;
+  align-items:stretch;
+  justify-content:space-between;
+  gap:2px;
+}
+.bottom-nav-item{
+  flex:1;min-width:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;
+  padding:7px 3px;
+  border-radius:14px;
+  color:var(--slate);
+  font-size:11px;
+  text-align:center;
   cursor:pointer;
+  transition:background-color .15s ease,color .15s ease;
 }
-.menu-toggle-btn:hover{background:var(--border);}
-.menu-toggle-btn svg{width:18px;height:18px;flex-shrink:0;}
-.sidebar-backdrop{
-  display:none;position:fixed;inset:0;background:rgba(10,14,24,0.5);z-index:39;
+.bottom-nav-item svg{width:18px;height:18px;flex-shrink:0;opacity:.85;}
+.bottom-nav-item span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.bottom-nav-item.active{background:rgba(27,122,107,0.14);color:var(--teal);font-weight:600;}
+.bottom-nav-item.active svg{opacity:1;}
+[data-theme="dark"] .bottom-nav-item.active{background:rgba(27,122,107,0.24);color:#4fd8bf;}
+
+@media(max-width:480px){
+  .bottom-nav-item span{font-size:9.5px;}
 }
-/* Aturan responsif ditulis SETELAH aturan dasar di atas supaya menang
-   pada urutan cascade (spesifisitas sama, urutan sumber yang menentukan)
-   — kalau ditulis sebelum aturan dasar, display:none dasar akan selalu
-   menimpa display:flex ini walau media query aktif. */
-@media(max-width:900px){
-  .menu-toggle-btn{display:flex;}
-  .sidebar-backdrop.show{display:block;}
-}
+
+
 
 </style>
 </head>
@@ -2255,21 +2277,11 @@ function renderShell() {
           </div>
         </div>
         <div class="sidebar-section" id="nav-list"></div>
-        <div class="sidebar-footer">
-          <div class="user-chip">
-            <div class="dot">${(state.user.email || '?')[0].toUpperCase()}</div>
-            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${state.user.email}</div>
-          </div>
-          <button class="logout-btn" id="logout-btn">Keluar</button>
-        </div>
       </nav>
-      <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
       <div class="main">
         <div class="topbar">
           <div style="display:flex;align-items:center;gap:12px;min-width:0;">
-            <button class="menu-toggle-btn" id="menu-toggle-btn" title="Buka menu" aria-label="Buka menu">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-            </button>
+            <div class="topbar-brand">IN</div>
             <div style="min-width:0;">
               <h1 id="topbar-title">Dashboard</h1>
               <div class="sub" id="topbar-sub">Ringkasan seluruh perusahaan</div>
@@ -2283,6 +2295,9 @@ function renderShell() {
         </div>
         <div class="content" id="view-root"></div>
       </div>
+      <nav class="bottom-nav" id="bottom-nav">
+        ${NAV_ITEMS.map(item => `<div class="bottom-nav-item" data-view="${item.id}">${icon(item.icon)}<span>${item.label}</span></div>`).join('')}
+      </nav>
     </div>
     <div class="toast-wrap" id="toast-wrap"></div>
   `;
@@ -2290,38 +2305,24 @@ function renderShell() {
   const navList = document.getElementById('nav-list');
   NAV_ITEMS.forEach(item => {
     const navEl = el(`<div class="nav-item" data-view="${item.id}">${icon(item.icon)}<span>${item.label}</span></div>`);
-    navEl.addEventListener('click', () => { setView(item.id); closeMobileSidebar(); });
+    navEl.addEventListener('click', () => setView(item.id));
     navList.appendChild(navEl);
   });
 
-  document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
+  document.querySelectorAll('#bottom-nav .bottom-nav-item').forEach(navEl => {
+    navEl.addEventListener('click', () => setView(navEl.dataset.view));
+  });
+
   document.getElementById('refresh-btn').addEventListener('click', reloadCompanies);
 
   paintThemeToggleBtn();
   document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
-
-  document.getElementById('menu-toggle-btn').addEventListener('click', openMobileSidebar);
-  document.getElementById('sidebar-backdrop').addEventListener('click', closeMobileSidebar);
-}
-
-// ---------- Sidebar mobile (drawer) ----------
-// Di layar sempit (<=900px, lihat media query .sidebar) sidebar
-// disembunyikan lewat transform:translateX(-100%) supaya tidak memakan
-// tempat konten. Fungsi berikut menampilkannya sebagai drawer di atas
-// konten (dengan backdrop gelap yang bisa diklik untuk menutup).
-function openMobileSidebar() {
-  document.getElementById('sidebar').classList.add('open');
-  document.getElementById('sidebar-backdrop').classList.add('show');
-}
-function closeMobileSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebar-backdrop').classList.remove('show');
 }
 
 function setView(viewId) {
   teardownActiveDataListener();
   state.view = viewId;
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === viewId));
+  document.querySelectorAll('.nav-item, .bottom-nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === viewId));
   const titles = {
     dashboard: ['Dashboard', 'Ringkasan seluruh perusahaan'],
     companies: ['Perusahaan', 'Kelola daftar entitas yang dikonsolidasikan'],
@@ -5120,7 +5121,11 @@ function renderSettings() {
   root.innerHTML = `
     <div class="card" style="max-width:520px;">
       <div class="section-title">Akun</div>
-      <p style="font-size:13.5px;color:var(--slate);">Masuk sebagai <strong>${state.user.email}</strong></p>
+      <div class="user-chip" style="color:var(--text);font-size:13.5px;margin-top:6px;">
+        <div class="dot">${(state.user.email || '?')[0].toUpperCase()}</div>
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${state.user.email}</div>
+      </div>
+      <button class="logout-btn" id="logout-btn-2" style="border-color:var(--border);color:var(--text);">Keluar</button>
       <div class="section-title" style="margin-top:20px;">Tentang Integrida</div>
       <p style="font-size:13.5px;color:var(--slate);line-height:1.6;">
         Integrida adalah aplikasi konsolidasi laporan keuangan untuk beberapa perusahaan.
@@ -5128,7 +5133,6 @@ function renderSettings() {
         semester, maupun tahunan, lengkap dengan analisis likuiditas, solvabilitas, dan profitabilitas.
         Seluruh data tersimpan pada Firebase project yang Anda konfigurasikan sendiri.
       </p>
-      <button class="btn ghost" id="logout-btn-2">Keluar dari akun</button>
     </div>
   `;
   document.getElementById('logout-btn-2').addEventListener('click', () => auth.signOut());
