@@ -308,6 +308,29 @@ tbody tr:hover{background:var(--surface-2);}
 .ownership-row .pct-wrap{position:relative;}
 .ownership-row .pct-wrap input{padding:8px 22px 8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;width:100%;text-align:right;}
 .ownership-row .pct-wrap span{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--slate);pointer-events:none;}
+
+.upgrade-progress-wrap{margin:2px 0 18px 0;}
+.upgrade-progress-bar{height:8px;border-radius:999px;background:var(--border);overflow:hidden;width:100%;}
+.upgrade-progress-fill{height:100%;border-radius:999px;background:var(--teal);transition:width .25s ease;}
+.upgrade-progress-label{display:flex;justify-content:space-between;font-size:12px;color:var(--slate);margin-top:6px;}
+.upgrade-progress-label strong{color:var(--text);font-size:13px;}
+.upgrade-list{display:flex;flex-direction:column;gap:10px;}
+.upgrade-item{display:flex;gap:11px;align-items:flex-start;border:1px solid var(--border);border-radius:9px;padding:12px 13px;background:var(--surface-2);}
+.upgrade-item input[type="checkbox"]{width:19px;height:19px;flex-shrink:0;margin-top:1px;cursor:pointer;accent-color:var(--teal);}
+.upgrade-item-body{flex:1;min-width:0;}
+.upgrade-item-title{font-size:14px;font-weight:600;color:var(--text);word-break:break-word;}
+.upgrade-item-desc{font-size:12.5px;color:var(--slate);line-height:1.55;margin-top:4px;white-space:pre-wrap;word-break:break-word;}
+.upgrade-item-more{font-size:12px;color:var(--teal);cursor:pointer;font-weight:600;margin-top:4px;display:inline-block;}
+.upgrade-item-actions{display:flex;gap:6px;flex-shrink:0;margin-top:1px;}
+.upgrade-item-actions button{
+  width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--slate);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+}
+.upgrade-item-actions button:hover{background:var(--surface-3,rgba(0,0,0,.05));color:var(--text);}
+.upgrade-item-actions button.danger-action:hover{color:var(--danger);border-color:var(--danger);}
+.upgrade-item-actions svg{width:14px;height:14px;}
+.upgrade-empty{font-size:13px;color:var(--slate-light);padding:14px 2px;text-align:center;}
+.upgrade-toggle-done{font-size:12px;color:var(--teal);cursor:pointer;font-weight:600;background:none;border:none;padding:0;margin-bottom:12px;display:inline-block;}
 .ownership-row .remove-ownership{background:transparent;border:1px solid var(--border);border-radius:7px;color:var(--slate);cursor:pointer;height:34px;}
 .ownership-row .remove-ownership:hover{color:#c0392b;border-color:#c0392b;}
 
@@ -450,10 +473,33 @@ tbody tr:hover{background:var(--surface-2);}
 
 .dropzone{
   border:2px dashed var(--border);border-radius:var(--radius);padding:34px 20px;text-align:center;
-  cursor:pointer;color:var(--slate);background:var(--surface-2);
+  cursor:pointer;color:var(--slate);background:var(--surface-2);transition:border-color .15s,background .15s;
 }
+.dropzone:hover{border-color:var(--teal);}
 .dropzone.drag{border-color:var(--teal);background:var(--teal-light);color:var(--teal);}
 .dropzone svg{width:30px;height:30px;margin-bottom:8px;opacity:.6;}
+.dropzone-icon-circle{
+  width:52px;height:52px;border-radius:50%;background:var(--teal-light);color:var(--teal);
+  display:flex;align-items:center;justify-content:center;margin:0 auto 12px auto;
+}
+.dropzone-icon-circle svg{width:24px;height:24px;margin-bottom:0;opacity:1;}
+
+/* ---------- Header langkah bernomor (mis. halaman Impor Data) ---------- */
+.step-head{display:flex;align-items:center;gap:10px;}
+.step-head .step-badge{
+  width:26px;height:26px;border-radius:50%;background:var(--teal);color:#fff;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;font-family:var(--font-display);
+}
+.step-head .step-badge.step-badge-outline{background:transparent;border:2px solid var(--teal);color:var(--teal);}
+.step-head .step-title{font-family:var(--font-display);font-size:15.5px;font-weight:600;color:var(--text);}
+.import-preview-card{display:flex;flex-direction:column;}
+.import-preview-empty{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  color:var(--slate-light);padding:30px 16px;gap:12px;
+}
+.import-preview-empty .dropzone-icon-circle{margin-bottom:0;}
+.import-preview-empty .import-preview-empty-title{font-size:13.5px;font-weight:600;color:var(--slate);}
+.import-preview-empty .import-preview-empty-sub{font-size:12px;line-height:1.5;max-width:260px;}
 
 .toast-wrap{position:fixed;bottom:20px;right:20px;z-index:80;display:flex;flex-direction:column;gap:8px;}
 .toast{background:var(--ink);color:#fff;padding:11px 16px;border-radius:8px;font-size:13px;box-shadow:0 6px 18px rgba(0,0,0,.18);}
@@ -888,6 +934,45 @@ const DB = {
       emit();
     }, onError));
     return () => unsubs.forEach(u => { if (typeof u === 'function') u(); });
+  },
+
+  // ---- Setting → Upgrade Aplikasi (checklist poin rencana/progres upgrade) ----
+  watchUpgradeItems(uid, onData, onError) {
+    return db.collection('upgradeItems').where('ownerUid', '==', uid)
+      .onSnapshot({ includeMetadataChanges: true }, (snap) => {
+        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
+        onData(items, {
+          pendingWrites: snap.metadata.hasPendingWrites,
+          fromCache: snap.metadata.fromCache
+        });
+      }, (err) => { if (onError) onError(err); else console.error('watchUpgradeItems error', err); });
+  },
+
+  async addUpgradeItem(uid, title, description) {
+    await db.collection('upgradeItems').add({
+      title: title || '',
+      description: description || '',
+      checked: false,
+      ownerUid: uid,
+      createdAtMs: Date.now(),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  },
+
+  async updateUpgradeItem(itemId, { title, description }) {
+    await db.collection('upgradeItems').doc(itemId).update({
+      title: title || '',
+      description: description || ''
+    });
+  },
+
+  async setUpgradeItemChecked(itemId, checked) {
+    await db.collection('upgradeItems').doc(itemId).update({ checked: !!checked });
+  },
+
+  async deleteUpgradeItem(itemId) {
+    await db.collection('upgradeItems').doc(itemId).delete();
   }
 };
 
@@ -2090,6 +2175,7 @@ const state = {
   view: 'dashboard',
   compareCompanyIds: [],
   comparePeriodType: 'tahunan',
+  reportView: 'compare', // tab aktif di menu Report: 'compare' atau 'ratios'
   ratioCompanyId: null,
   ratioStatementId: null,
   chartInstances: {},
@@ -2099,7 +2185,10 @@ const state = {
   importCompanyId: null,
   importType: 'bukuBesar', // jenis data yang sedang dipilih di halaman Impor Data
   companyDetailId: null,      // perusahaan yang sedang dilihat rinciannya
-  companyDetailPeriodId: null // periode (statementId) yang sedang dipilih di halaman rincian
+  companyDetailPeriodId: null, // periode (statementId) yang sedang dipilih di halaman rincian
+  upgradeItems: [],           // daftar poin checklist Upgrade Aplikasi (menu Setting)
+  upgradeShowDone: false,     // true = tampilkan juga poin yang sudah dicentang (biasanya auto-hide)
+  upgradeExpanded: {}         // itemId -> true jika keterangan panjang sedang ditampilkan penuh
 };
 
 // =============================================================
@@ -2177,10 +2266,8 @@ const PERIOD_LABELS = {
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid' },
   { id: 'companies', label: 'Perusahaan', icon: 'building' },
-  { id: 'import', label: 'Impor Data', icon: 'upload' },
-  { id: 'compare', label: 'Perbandingan', icon: 'bars' },
-  { id: 'ratios', label: 'Analisis Rasio', icon: 'pulse' },
-  { id: 'settings', label: 'Pengaturan', icon: 'gear' }
+  { id: 'report', label: 'Report', icon: 'bars' },
+  { id: 'settings', label: 'Setting', icon: 'gear' }
 ];
 
 const ICONS = {
@@ -2191,7 +2278,10 @@ const ICONS = {
   pulse: '<path d="M3 12h4l2 7 4-14 2 7h6" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
   gear: '<path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/>',
   search: '<circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M21 21l-4.3-4.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
-  check: '<path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+  check: '<path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>',
+  edit: '<path d="M12 20h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linejoin="round"/>',
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
 };
 
 function icon(name) {
@@ -2410,9 +2500,8 @@ function setView(viewId) {
     dashboard: ['Dashboard', 'Ringkasan seluruh perusahaan'],
     companies: ['Perusahaan', 'Kelola daftar entitas yang dikonsolidasikan'],
     import: ['Impor Data', 'Unggah neraca & laba rugi dari file Excel'],
-    compare: ['Perbandingan', 'Bandingkan kinerja antar perusahaan & periode'],
-    ratios: ['Analisis Rasio', 'Likuiditas, solvabilitas, dan profitabilitas'],
-    settings: ['Pengaturan', 'Akun dan konfigurasi']
+    report: ['Report', 'Perbandingan kinerja & analisis rasio antar perusahaan/periode'],
+    settings: ['Setting', 'Akun dan konfigurasi']
   };
   document.getElementById('topbar-title').textContent = titles[viewId][0];
   document.getElementById('topbar-sub').textContent = titles[viewId][1];
@@ -2425,8 +2514,7 @@ function renderCurrentView() {
     companies: renderCompanies,
     'company-detail': renderCompanyDetail,
     import: renderImport,
-    compare: renderCompare,
-    ratios: renderRatios,
+    report: renderReport,
     settings: renderSettings
   };
   (map[state.view] || renderDashboard)();
@@ -2713,28 +2801,52 @@ function getDescendantIds(companyId) {
   return result;
 }
 
+// Bilah tab "Grid / Bagan Struktur / Impor Data" — dipakai bersama di
+// halaman Perusahaan maupun Impor Data supaya tetap terlihat & bisa
+// dipakai berpindah menu tanpa harus balik ke Perusahaan dulu.
+function companiesTabBarHTML(active) {
+  return `
+    <div class="pill-row" id="companies-view-tabs" style="margin-bottom:0;">
+      <div class="pill ${active === 'table' ? 'active' : ''}" data-tab="table">Grid</div>
+      <div class="pill ${active === 'chart' ? 'active' : ''}" data-tab="chart">Bagan Struktur</div>
+      <div class="pill ${active === 'import' ? 'active' : ''}" data-tab="import">Impor Data</div>
+    </div>
+  `;
+}
+
+function bindCompaniesTabBar() {
+  document.querySelectorAll('#companies-view-tabs .pill[data-tab]').forEach(p => {
+    p.addEventListener('click', () => {
+      const tab = p.dataset.tab;
+      if (tab === 'import') {
+        if (state.view !== 'import') setView('import');
+        return;
+      }
+      if (state.view !== 'companies') {
+        state.companiesView = tab;
+        setView('companies');
+        return;
+      }
+      if (state.companiesView === tab) return;
+      state.companiesView = tab;
+      renderCompanies();
+    });
+  });
+}
+
 function renderCompanies() {
   teardownActiveDataListener();
   const root = document.getElementById('view-root');
   const view = state.companiesView === 'chart' ? 'chart' : 'table';
   root.innerHTML = `
     <div class="section-block" style="display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;">
-      <div class="pill-row" id="companies-view-tabs" style="margin-bottom:0;">
-        <div class="pill ${view === 'table' ? 'active' : ''}" data-tab="table">Grid</div>
-        <div class="pill ${view === 'chart' ? 'active' : ''}" data-tab="chart">Bagan Struktur</div>
-      </div>
+      ${companiesTabBarHTML(view)}
       <button class="btn primary" id="add-company-btn">+ Tambah Perusahaan</button>
     </div>
     <div id="companies-view-body"></div>
   `;
   document.getElementById('add-company-btn').addEventListener('click', openAddCompanyModal);
-  document.querySelectorAll('#companies-view-tabs .pill').forEach(p => {
-    p.addEventListener('click', () => {
-      if (state.companiesView === p.dataset.tab) return;
-      state.companiesView = p.dataset.tab;
-      renderCompanies();
-    });
-  });
+  bindCompaniesTabBar();
   if (view === 'chart') {
     renderCompaniesChartView();
   } else {
@@ -4870,31 +4982,33 @@ function renderImport() {
   }
 
   root.innerHTML = `
-    <div class="grid grid-2" style="align-items:start;">
+    <div class="section-block" style="margin-bottom:16px;">
+      ${companiesTabBarHTML('import')}
+    </div>
+    <div class="grid grid-2" style="align-items:stretch;">
       <div class="card">
-        <div class="section-title">1. Pilih Perusahaan Tujuan</div>
-        <div class="field combo-wrap">
+        <div class="step-head"><span class="step-badge">1</span><span class="step-title">Pilih Perusahaan Tujuan</span></div>
+        <div class="field combo-wrap" style="margin-top:14px;">
           <label>Perusahaan</label>
           <input type="text" id="import-company" placeholder="Ketik kode atau nama perusahaan…" autocomplete="off">
           <div id="import-company-dropdown" class="combo-dropdown" style="display:none;"></div>
         </div>
 
-        <div class="section-title" style="margin-top:20px;">2. Unggah File Excel Buku Besar</div>
-        <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 16px 0;line-height:1.5;">
+        <div class="step-head" style="margin-top:22px;"><span class="step-badge">2</span><span class="step-title">Unggah File Excel Buku Besar</span></div>
+        <div style="font-size:11.5px;color:var(--slate);margin:8px 0 14px 36px;line-height:1.5;">
           Neraca, Laba Rugi, Arus Kas Metode Langsung, & Perubahan Modal untuk periode ini akan diturunkan otomatis
           dari file Buku Besar yang Anda unggah — tidak perlu diimpor terpisah.
         </div>
 
         <div class="dropzone" id="dropzone">
-          ${icon('upload')}
+          <div class="dropzone-icon-circle">${icon('upload')}</div>
           <div>Seret file .xlsx <strong id="dropzone-type-label"></strong> ke sini, atau klik untuk memilih</div>
-          <div style="font-size:11.5px;margin-top:6px;" id="dropzone-hint"></div>
         </div>
         <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none;">
       </div>
-      <div class="card" id="preview-panel">
-        <div class="section-title">Pratinjau Data</div>
-        <div style="color:var(--slate);font-size:13px;">Belum ada file dipilih.</div>
+      <div class="card import-preview-card" id="preview-panel">
+        <div class="step-head"><span class="step-badge step-badge-outline">3</span><span class="step-title">Pratinjau Data</span></div>
+        ${importPreviewEmptyHTML()}
       </div>
     </div>
 
@@ -4906,6 +5020,7 @@ function renderImport() {
 
   updateDropzoneAndTemplate();
   loadImportStatus();
+  bindCompaniesTabBar();
 
   const companyInput = document.getElementById('import-company');
   const initialCompany = state.companies.find(c => c.id === state.importCompanyId);
@@ -4941,14 +5056,25 @@ function updateDropzoneAndTemplate() {
   const type = IMPORT_TYPES[state.importType];
   const label = document.getElementById('dropzone-type-label');
   if (label) label.textContent = type.label;
-  const hint = document.getElementById('dropzone-hint');
-  if (hint) hint.textContent = `Unggah Buku Besar apa adanya, hasil export langsung dari software akuntansi Anda (per akun: Saldo Awal, daftar transaksi, Ending Balance). Neraca, Laba Rugi, Arus Kas Metode Langsung, & Perubahan Modal periode ini akan dihitung & diisi otomatis dari kode akun (1=Aset, 2=Kewajiban, 3=Ekuitas, 4=Pendapatan, 5=HPP, 6=Beban Operasional, 7=Pendapatan Lainnya, 8=Beban Lainnya, 9=Beban Pajak) & mutasi Saldo Awal → Saldo Akhir tiap akun.`;
+}
+
+// Tampilan kosong panel Pratinjau Data (dipakai saat pertama render halaman
+// Impor Data maupun saat pratinjau direset) — dibuat seimbang secara visual
+// dengan kartu di sebelah kiri (ikon + judul + keterangan, memenuhi ruang).
+function importPreviewEmptyHTML() {
+  return `
+    <div class="import-preview-empty">
+      <div class="dropzone-icon-circle">${icon('upload')}</div>
+      <div class="import-preview-empty-title">Belum ada file dipilih</div>
+      <div class="import-preview-empty-sub">Pilih perusahaan &amp; unggah file Excel Buku Besar di sebelah kiri untuk melihat pratinjau data di sini.</div>
+    </div>
+  `;
 }
 
 function resetPreview() {
   pendingImport = null;
   const panel = document.getElementById('preview-panel');
-  if (panel) panel.innerHTML = `<div class="section-title">Pratinjau Data</div><div style="color:var(--slate);font-size:13px;">Belum ada file dipilih.</div>`;
+  if (panel) panel.innerHTML = `<div class="step-head"><span class="step-badge step-badge-outline">3</span><span class="step-title">Pratinjau Data</span></div>${importPreviewEmptyHTML()}`;
 }
 
 function hasSectionData(v) {
@@ -5009,7 +5135,7 @@ async function handleImportFile(file) {
     pendingImport = result;
 
     panel.innerHTML = `
-      <div class="section-title">Pratinjau Data</div>
+      <div class="step-head" style="margin-bottom:14px;"><span class="step-badge step-badge-outline">3</span><span class="step-title">Pratinjau Data</span></div>
       <div style="font-size:13px;margin-bottom:10px;">
         ${result.companyName ? `<strong>${result.companyName}</strong><br>` : ''}
         Periode: ${result.period.periodLabel} &middot; Jenis: ${PERIOD_LABELS[result.period.periodType]} &middot; Tahun: ${result.period.year}
@@ -5035,7 +5161,7 @@ async function handleImportFile(file) {
     `;
     document.getElementById('confirm-import').addEventListener('click', confirmImport);
   } catch (err) {
-    panel.innerHTML = `<div class="section-title">Pratinjau Data</div><div class="auth-error">${err.message}</div>`;
+    panel.innerHTML = `<div class="step-head" style="margin-bottom:14px;"><span class="step-badge step-badge-outline">3</span><span class="step-title">Pratinjau Data</span></div><div class="auth-error">${err.message}</div>`;
   }
 }
 
@@ -5074,10 +5200,44 @@ async function confirmImport() {
   }
 }
 
-// ---------- Perbandingan ----------
-function renderCompare() {
-  teardownActiveDataListener();
+// ---------- Report (gabungan Perbandingan & Analisis Rasio) ----------
+function renderReport() {
   const root = document.getElementById('view-root');
+  const active = state.reportView === 'ratios' ? 'ratios' : 'compare';
+  root.innerHTML = `
+    <div class="section-block" style="margin-bottom:16px;">
+      <div class="pill-row" id="report-view-tabs" style="margin-bottom:0;">
+        <div class="pill ${active === 'compare' ? 'active' : ''}" data-tab="compare">Perbandingan</div>
+        <div class="pill ${active === 'ratios' ? 'active' : ''}" data-tab="ratios">Analisis Rasio</div>
+      </div>
+    </div>
+    <div id="report-body"></div>
+  `;
+  document.querySelectorAll('#report-view-tabs .pill[data-tab]').forEach(p => {
+    p.addEventListener('click', () => {
+      if (state.reportView === p.dataset.tab) return;
+      state.reportView = p.dataset.tab;
+      renderReportBody();
+    });
+  });
+  renderReportBody();
+}
+
+function renderReportBody() {
+  document.querySelectorAll('#report-view-tabs .pill[data-tab]').forEach(p => {
+    p.classList.toggle('active', p.dataset.tab === state.reportView);
+  });
+  if (state.reportView === 'ratios') {
+    renderRatios('report-body');
+  } else {
+    renderCompare('report-body');
+  }
+}
+
+// ---------- Perbandingan ----------
+function renderCompare(rootId = 'view-root') {
+  teardownActiveDataListener();
+  const root = document.getElementById(rootId);
   if (state.companies.length === 0) {
     root.innerHTML = emptyState('Belum ada perusahaan', 'Tambahkan perusahaan dan data untuk mulai membandingkan.', 'companies', 'Tambah Perusahaan');
     bindEmptyStateNav(root);
@@ -5131,11 +5291,11 @@ function renderCompare() {
   });
   document.getElementById('cmp-select-all').addEventListener('click', () => {
     state.compareCompanyIds = state.companies.map(c => c.id);
-    renderCompare();
+    renderCompare(rootId);
   });
   document.getElementById('cmp-clear-all').addEventListener('click', () => {
     state.compareCompanyIds = [];
-    renderCompare();
+    renderCompare(rootId);
   });
   document.getElementById('cmp-search').addEventListener('input', (e) => {
     const q = e.target.value.trim().toLowerCase();
@@ -5161,7 +5321,7 @@ function subscribeCompareData() {
   // Listener realtime untuk kombinasi perusahaan yang dipilih.
   state.unsubData = DB.watchAllStatements(state.compareCompanyIds, (allStatements, meta) => {
     Sync.report('statements', meta);
-    if (state.view !== 'compare') return;
+    if (state.view !== 'report' || state.reportView !== 'compare') return;
     const statements = allStatements
       .filter(s => s.periodType === state.comparePeriodType)
       .sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex);
@@ -5230,9 +5390,9 @@ function palette(i) {
 }
 
 // ---------- Rasio ----------
-function renderRatios() {
+function renderRatios(rootId = 'view-root') {
   teardownActiveDataListener();
-  const root = document.getElementById('view-root');
+  const root = document.getElementById(rootId);
   if (state.companies.length === 0) {
     root.innerHTML = emptyState('Belum ada perusahaan', 'Tambahkan perusahaan dan data untuk melihat analisis rasio.', 'companies', 'Tambah Perusahaan');
     bindEmptyStateNav(root);
@@ -5253,14 +5413,14 @@ function renderRatios() {
   `;
   document.getElementById('ratio-company').addEventListener('change', (e) => {
     state.ratioCompanyId = e.target.value;
-    renderRatios();
+    renderRatios(rootId);
   });
 
   // Listener realtime: analisis rasio otomatis diperbarui saat ada
   // periode baru yang diimpor dari perangkat manapun.
   state.unsubData = DB.watchStatements(state.ratioCompanyId, (rawStatements, meta) => {
     Sync.report('statements', meta);
-    if (state.view !== 'ratios') return;
+    if (state.view !== 'report' || state.reportView !== 'ratios') return;
     const statements = rawStatements.sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex);
     paintRatios(statements);
   }, (err) => toast('Gagal memuat data laporan: ' + err.message, 'error'));
@@ -5311,27 +5471,210 @@ function paintRatios(statements) {
   ]);
 }
 
-// ---------- Pengaturan ----------
+// ---------- Setting ----------
 function renderSettings() {
   const root = document.getElementById('view-root');
   root.innerHTML = `
-    <div class="card" style="max-width:520px;">
-      <div class="section-title">Akun</div>
-      <div class="user-chip" style="color:var(--text);font-size:13.5px;margin-top:6px;">
-        <div class="dot">${(state.user.email || '?')[0].toUpperCase()}</div>
-        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${state.user.email}</div>
+    <div style="max-width:900px;margin:0 auto;">
+      <div class="card" style="width:100%;">
+        <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+          <span>Upgrade Aplikasi</span>
+          <button class="btn primary" id="add-upgrade-btn" style="font-size:12.5px;padding:7px 12px;">+ Tambah Poin</button>
+        </div>
+        <div id="upgrade-body">
+          <div class="upgrade-empty">Memuat…</div>
+        </div>
       </div>
-      <button class="logout-btn" id="logout-btn-2" style="border-color:var(--border);color:var(--text);">Keluar</button>
-      <div class="section-title" style="margin-top:20px;">Tentang Integrida</div>
-      <p style="font-size:13.5px;color:var(--slate);line-height:1.6;">
-        Integrida adalah aplikasi konsolidasi laporan keuangan untuk beberapa perusahaan.
-        Data neraca dan laba rugi diimpor dari Excel, kemudian dibandingkan per bulan, triwulan,
-        semester, maupun tahunan, lengkap dengan analisis likuiditas, solvabilitas, dan profitabilitas.
-        Seluruh data tersimpan pada Firebase project yang Anda konfigurasikan sendiri.
-      </p>
+
+      <div class="card" style="width:100%;margin-top:16px;">
+        <div class="section-title">Akun</div>
+        <div class="user-chip" style="color:var(--text);font-size:13.5px;margin-top:6px;">
+          <div class="dot">${(state.user.email || '?')[0].toUpperCase()}</div>
+          <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${state.user.email}</div>
+        </div>
+        <button class="logout-btn" id="logout-btn-2" style="border-color:var(--border);color:var(--text);max-width:260px;">Keluar</button>
+        <div class="section-title" style="margin-top:20px;">Tentang Integrida</div>
+        <p style="font-size:13.5px;color:var(--slate);line-height:1.6;max-width:640px;">
+          Integrida adalah aplikasi konsolidasi laporan keuangan untuk beberapa perusahaan.
+          Data neraca dan laba rugi diimpor dari Excel, kemudian dibandingkan per bulan, triwulan,
+          semester, maupun tahunan, lengkap dengan analisis likuiditas, solvabilitas, dan profitabilitas.
+          Seluruh data tersimpan pada Firebase project yang Anda konfigurasikan sendiri.
+        </p>
+      </div>
     </div>
   `;
   document.getElementById('logout-btn-2').addEventListener('click', () => auth.signOut());
+  document.getElementById('add-upgrade-btn').addEventListener('click', () => openUpgradeItemModal());
+
+  state.unsubData = DB.watchUpgradeItems(state.user.uid, (items) => {
+    state.upgradeItems = items;
+    renderUpgradeBody();
+  }, (err) => {
+    const body = document.getElementById('upgrade-body');
+    if (body) body.innerHTML = `<div class="upgrade-empty">Gagal memuat: ${escapeHTML(err.message)}</div>`;
+  });
+}
+
+// Merender ulang isi daftar checklist Upgrade Aplikasi saja (dipanggil
+// setiap ada perubahan realtime, atau setelah aksi lokal seperti
+// expand/collapse keterangan panjang & toggle tampilkan yang selesai),
+// tanpa perlu menggambar ulang seluruh halaman Setting.
+function renderUpgradeBody() {
+  const body = document.getElementById('upgrade-body');
+  if (!body) return; // pengguna sudah pindah dari menu Setting
+  const items = state.upgradeItems;
+  const total = items.length;
+  const doneCount = items.filter(i => i.checked).length;
+  const pct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
+  const visibleItems = items.filter(i => state.upgradeShowDone ? true : !i.checked);
+
+  body.innerHTML = `
+    <div class="upgrade-progress-wrap">
+      <div class="upgrade-progress-bar"><div class="upgrade-progress-fill" style="width:${pct}%;"></div></div>
+      <div class="upgrade-progress-label"><span>Progres upgrade</span><strong>${pct}% (${doneCount}/${total} selesai)</strong></div>
+    </div>
+    ${doneCount > 0 ? `<button class="upgrade-toggle-done" id="toggle-upgrade-done">${state.upgradeShowDone ? 'Sembunyikan poin yang sudah selesai' : `Tampilkan poin yang sudah selesai (${doneCount})`}</button>` : ''}
+    <div class="upgrade-list" id="upgrade-list">
+      ${visibleItems.length === 0
+        ? `<div class="upgrade-empty">${total === 0 ? 'Belum ada poin upgrade. Klik "+ Tambah Poin" untuk menambahkan.' : 'Semua poin sudah selesai dicentang.'}</div>`
+        : visibleItems.map(item => upgradeItemHTML(item)).join('')}
+    </div>
+  `;
+
+  const toggleBtn = document.getElementById('toggle-upgrade-done');
+  if (toggleBtn) toggleBtn.addEventListener('click', () => { state.upgradeShowDone = !state.upgradeShowDone; renderUpgradeBody(); });
+
+  body.querySelectorAll('[data-upgrade-check]').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      const id = cb.dataset.upgradeCheck;
+      try {
+        await DB.setUpgradeItemChecked(id, cb.checked);
+      } catch (err) {
+        toast('Gagal memperbarui status: ' + err.message, 'error');
+      }
+    });
+  });
+
+  body.querySelectorAll('[data-upgrade-more]').forEach(a => {
+    a.addEventListener('click', () => {
+      const id = a.dataset.upgradeMore;
+      state.upgradeExpanded[id] = !state.upgradeExpanded[id];
+      renderUpgradeBody();
+    });
+  });
+
+  body.querySelectorAll('[data-upgrade-copy]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = items.find(i => i.id === btn.dataset.upgradeCopy);
+      if (!item) return;
+      const text = item.description ? `${item.title}\n\n${item.description}` : item.title;
+      copyToClipboard(text);
+    });
+  });
+
+  body.querySelectorAll('[data-upgrade-edit]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = items.find(i => i.id === btn.dataset.upgradeEdit);
+      if (item) openUpgradeItemModal(item);
+    });
+  });
+
+  body.querySelectorAll('[data-upgrade-delete]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const item = items.find(i => i.id === btn.dataset.upgradeDelete);
+      if (!item) return;
+      if (!confirm(`Hapus poin "${item.title}"?`)) return;
+      try {
+        await DB.deleteUpgradeItem(item.id);
+        toast('Poin dihapus', 'success');
+      } catch (err) {
+        toast('Gagal menghapus poin: ' + err.message, 'error');
+      }
+    });
+  });
+}
+
+// Keterangan boleh sangat panjang (>500 karakter) sehingga dipotong
+// ringkas di daftar dengan tautan "Lihat selengkapnya" per poin.
+function upgradeItemHTML(item) {
+  const desc = item.description || '';
+  const isLong = desc.length > 220;
+  const expanded = !!state.upgradeExpanded[item.id];
+  const shown = isLong && !expanded ? desc.slice(0, 220) + '…' : desc;
+  return `
+    <div class="upgrade-item">
+      <input type="checkbox" data-upgrade-check="${item.id}" ${item.checked ? 'checked' : ''} title="Tandai selesai">
+      <div class="upgrade-item-body">
+        <div class="upgrade-item-title" style="${item.checked ? 'text-decoration:line-through;color:var(--slate-light);' : ''}">${escapeHTML(item.title)}</div>
+        ${desc ? `<div class="upgrade-item-desc">${escapeHTML(shown)}</div>` : ''}
+        ${isLong ? `<span class="upgrade-item-more" data-upgrade-more="${item.id}">${expanded ? 'Sembunyikan' : 'Lihat selengkapnya'}</span>` : ''}
+      </div>
+      <div class="upgrade-item-actions">
+        <button data-upgrade-copy="${item.id}" title="Salin judul & keterangan">${icon('copy')}</button>
+        <button data-upgrade-edit="${item.id}" title="Edit poin">${icon('edit')}</button>
+        <button class="danger-action" data-upgrade-delete="${item.id}" title="Hapus poin">${icon('trash')}</button>
+      </div>
+    </div>
+  `;
+}
+
+// item kosong/undefined => mode tambah baru; item terisi => mode edit.
+function openUpgradeItemModal(item) {
+  const isEdit = !!item;
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:520px;">
+    <h3>${isEdit ? 'Edit Poin Upgrade' : 'Tambah Poin Upgrade'}</h3>
+    <div class="modal-sub">Judul singkat dan keterangan rinci mengenai rencana/progres upgrade aplikasi. Keterangan tidak dibatasi panjangnya (boleh lebih dari 500 karakter).</div>
+    <div class="field"><label>Judul</label><input type="text" id="upgrade-title-input" placeholder="Contoh: Tambah fitur ekspor PDF" value="${escapeHTML(item ? item.title : '')}"></div>
+    <div class="field"><label>Keterangan</label><textarea id="upgrade-desc-input" rows="7" placeholder="Jelaskan detail poin ini...">${escapeHTML(item ? item.description : '')}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="cancel-modal">Batal</button>
+      <button class="btn primary" id="save-upgrade-item">Simpan</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#cancel-modal').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelector('#upgrade-title-input').focus();
+  backdrop.querySelector('#save-upgrade-item').addEventListener('click', async () => {
+    const title = backdrop.querySelector('#upgrade-title-input').value.trim();
+    const description = backdrop.querySelector('#upgrade-desc-input').value.trim();
+    if (!title) { toast('Judul wajib diisi', 'error'); return; }
+    try {
+      if (isEdit) {
+        await DB.updateUpgradeItem(item.id, { title, description });
+        toast('Poin diperbarui', 'success');
+      } else {
+        await DB.addUpgradeItem(state.user.uid, title, description);
+        toast('Poin ditambahkan', 'success');
+      }
+      backdrop.remove();
+    } catch (err) {
+      toast('Gagal menyimpan: ' + err.message, 'error');
+    }
+  });
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(() => toast('Disalin ke clipboard', 'success'))
+      .catch(() => toast('Gagal menyalin', 'error'));
+    return;
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    toast('Disalin ke clipboard', 'success');
+  } catch (err) {
+    toast('Gagal menyalin', 'error');
+  }
 }
 
 // ---------- Charts ----------
@@ -5492,7 +5835,7 @@ auth.onAuthStateChanged(async (user) => {
     state.unsubCompanies = DB.watchCompanies(user.uid, (companies, meta) => {
       state.companies = companies;
       Sync.report('companies', meta);
-      const safeToRerender = ['dashboard', 'companies', 'company-detail', 'compare', 'ratios'].includes(state.view)
+      const safeToRerender = ['dashboard', 'companies', 'company-detail', 'report'].includes(state.view)
         && !document.querySelector('.modal-backdrop');
       if (safeToRerender) renderCurrentView();
     }, (err) => toast('Gagal memuat data perusahaan: ' + err.message, 'error'));

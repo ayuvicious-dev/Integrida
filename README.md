@@ -62,6 +62,10 @@ Jika suatu saat Anda ingin mengedit config Firebase, cari komentar
              get(/databases/$(database)/documents/companies/$(companyId)).data.ownerUid == request.auth.uid;
          }
        }
+       match /upgradeItems/{itemId} {
+         allow read, delete, update: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+         allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+       }
      }
    }
    ```
@@ -177,7 +181,18 @@ Rasio** sekarang memakai listener realtime — jadi kalau ada data baru
 yang diimpor dari perangkat lain, tampilan di perangkat ini akan
 otomatis ikut ter-update tanpa perlu menekan "Muat ulang data".
 
-## 7. Teknologi
+## 7. Menu Setting — Upgrade Aplikasi
+
+Menu **Setting** (sebelumnya "Pengaturan") memiliki bagian **Upgrade
+Aplikasi**: checklist poin rencana/progres pengembangan aplikasi, dengan
+persentase progres keseluruhan, tombol Salin/Edit/Hapus per poin, dan
+poin yang sudah dicentang akan otomatis disembunyikan dari daftar (masih
+bisa dimunculkan kembali lewat tautan "Tampilkan poin yang sudah
+selesai"). Keterangan tiap poin tidak dibatasi panjangnya. Data disimpan
+di koleksi Firestore `upgradeItems` — pastikan Firestore Rules pada
+bagian 1 sudah termasuk aturan untuk koleksi ini.
+
+## 8. Teknologi
 
 - **Firebase Authentication** — login email/password.
 - **Firebase Firestore** — penyimpanan data perusahaan & laporan keuangan.
