@@ -378,9 +378,13 @@ tbody tr:hover{background:var(--surface-2);}
 .cal-pending-btn.active{background:var(--teal);color:#fff;}
 .cal-pending-badge{display:inline-flex;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-left:6px;}
 .cal-pending-btn.active .cal-pending-badge{background:#fff;}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;align-items:start;}
-.cal-dow{font-size:11px;font-weight:600;color:var(--slate-light);text-align:center;padding:6px 0 10px 0;text-transform:uppercase;letter-spacing:.4px;position:sticky;top:62px;background:var(--card);z-index:2;}
-.cal-cell{position:relative;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;display:flex;flex-direction:column;align-items:stretch;gap:3px;font-size:13px;color:var(--text);min-height:38px;padding:8px 0 6px 0;}
+.cal-grid-scroll{overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;}
+.cal-dow-sticky{position:sticky;top:62px;z-index:4;background:var(--card);padding-top:6px;margin-bottom:5px;}
+.cal-dow-clip{overflow:hidden;}
+.cal-dow-row{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;min-width:980px;will-change:transform;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:auto;gap:5px;min-width:980px;}
+.cal-dow{font-size:11px;font-weight:600;color:var(--slate-light);text-align:center;padding:6px 0 4px 0;text-transform:uppercase;letter-spacing:.4px;background:var(--card);}
+.cal-cell{position:relative;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;display:flex;flex-direction:column;align-items:stretch;gap:3px;font-size:13px;color:var(--text);height:100px;padding:8px 0 6px 0;overflow:hidden;}
 .cal-cell:hover{background:var(--teal-light);}
 .cal-cell.cal-outside{background:transparent!important;}
 .cal-cell.cal-saturday{background:var(--success-light);}
@@ -389,13 +393,15 @@ tbody tr:hover{background:var(--surface-2);}
 .cal-cell.cal-selected{background:var(--teal);color:#fff;border-color:var(--teal);}
 .cal-cell.cal-selected:hover{background:var(--teal);}
 .cal-cell-date{text-align:center;flex-shrink:0;}
-.cal-cell-reminders{display:flex;flex-direction:column;gap:2px;margin-top:3px;padding:0 4px;}
-.cal-cell-reminder{display:flex;align-items:baseline;gap:3px;font-size:10.5px;line-height:1.35;border-radius:4px;padding:1px 3px;cursor:pointer;overflow:hidden;}
+.cal-cell-reminders{display:flex;flex-direction:column;gap:2px;margin-top:3px;padding:0 4px;flex:1;min-height:0;overflow-y:auto;}
+.cal-cell-reminder{display:flex;align-items:baseline;gap:3px;font-size:10px;line-height:1.3;border-radius:4px;padding:1px 3px;cursor:pointer;}
+.cal-cell-reminder-done-check{flex-shrink:0;width:11px;height:11px;margin:0;cursor:pointer;accent-color:var(--teal);align-self:center;}
+.cal-cell.cal-selected .cal-cell-reminder-done-check{accent-color:#fff;}
 .cal-cell-reminder:hover{background:rgba(0,0,0,.08);}
 .cal-cell.cal-selected .cal-cell-reminder:hover{background:rgba(255,255,255,.2);}
-.cal-cell-reminder-num{font-weight:700;color:var(--teal);flex-shrink:0;}
+.cal-cell-reminder-num{flex-shrink:0;font-weight:700;color:var(--teal);}
 .cal-cell.cal-selected .cal-cell-reminder-num{color:#fff;}
-.cal-cell-reminder-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;text-align:left;color:var(--text);}
+.cal-cell-reminder-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;text-align:left;color:var(--text);}
 .cal-cell.cal-selected .cal-cell-reminder-title{color:#fff;}
 .cal-cell-reminder.cal-cell-reminder-done .cal-cell-reminder-title{text-decoration:line-through;color:var(--slate-light);}
 .cal-dot{width:5px;height:5px;border-radius:50%;background:var(--gold);}
@@ -5931,6 +5937,7 @@ function occursOnDate(reminder, dateKeyStr) {
     return dateKeyStr === reminder.date;
   }
   if (repeat === 'daily') return passesWeekdayFilter();
+  if (repeat === 'weekday') return curDow >= 1 && curDow <= 5;
   if (repeat === 'weekly') {
     if (hasEndDate) {
       const diffDays = Math.round((new Date(ky, km - 1, kd) - new Date(by, bm - 1, bd)) / 86400000);
@@ -5992,7 +5999,7 @@ function remindersForDate(dateKeyStr) {
     });
 }
 
-const REPEAT_LABELS = { none: 'Tidak berulang', daily: 'Harian', weekly: 'Mingguan', monthly: 'Bulanan', custom: 'Bulanan, Hari Tertentu' };
+const REPEAT_LABELS = { none: 'Tidak berulang', daily: 'Harian', weekday: 'Weekday (Senin–Jumat)', weekly: 'Mingguan', monthly: 'Bulanan', custom: 'Bulanan, Hari Tertentu' };
 // Label singkat hari berdasarkan konvensi Date.getDay() (0=Minggu...6=Sabtu),
 // dipakai untuk menampilkan pilihan hari pada repeat "Bulanan, Hari Tertentu".
 const CAL_DOW_BY_JSDOW = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -6023,7 +6030,7 @@ function repeatDisplayLabel(item) {
 function renderCalendar() {
   const root = document.getElementById('view-root');
   root.innerHTML = `
-    <div style="max-width:900px;margin:0 auto;">
+    <div style="max-width:1200px;margin:0 auto;">
       <div class="card" style="width:100%;">
         <div class="cal-header">
           <div class="cal-nav">
@@ -6035,7 +6042,14 @@ function renderCalendar() {
             <button class="cal-pending-btn" id="cal-pending-btn">Pending Reminder<span class="cal-pending-badge" id="cal-pending-badge" style="display:none;"></span></button>
           </div>
         </div>
-        <div class="cal-grid" id="cal-grid"></div>
+        <div class="cal-dow-sticky">
+          <div class="cal-dow-clip">
+            <div class="cal-dow-row" id="cal-dow-row"></div>
+          </div>
+        </div>
+        <div class="cal-grid-scroll" id="cal-grid-scroll">
+          <div class="cal-grid" id="cal-grid"></div>
+        </div>
       </div>
     </div>
     <button class="cal-fab" id="add-reminder-btn" title="Tambah Pengingat">${icon('plus')}</button>
@@ -6044,6 +6058,13 @@ function renderCalendar() {
   document.getElementById('cal-next').addEventListener('click', () => shiftCalendarMonth(1));
   document.getElementById('cal-pending-btn').addEventListener('click', () => openPendingRemindersModal());
   document.getElementById('add-reminder-btn').addEventListener('click', () => openReminderModal(null, state.calendarSelectedDate));
+
+  document.getElementById('cal-dow-row').innerHTML = CAL_DOW.map(d => `<div class="cal-dow">${d}</div>`).join('');
+  const calGridScroll = document.getElementById('cal-grid-scroll');
+  const calDowRow = document.getElementById('cal-dow-row');
+  calGridScroll.addEventListener('scroll', () => {
+    calDowRow.style.transform = `translateX(-${calGridScroll.scrollLeft}px)`;
+  });
 
   state.unsubData = DB.watchReminders(state.user.uid, (items) => {
     state.reminders = items;
@@ -6083,7 +6104,6 @@ function renderCalendarGrid() {
   const daysInPrevMonth = new Date(year, month, 0).getDate();
 
   let cells = '';
-  CAL_DOW.forEach(d => { cells += `<div class="cal-dow">${d}</div>`; });
 
   // Sel tanggal bulan sebelumnya (pengisi awal grid)
   for (let i = 0; i < firstDow; i++) {
@@ -6121,8 +6141,21 @@ function renderCalendarGrid() {
   grid.querySelectorAll('[data-cal-reminder]').forEach(row => {
     row.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (e.target.closest('[data-cal-reminder-done]')) return;
       const item = state.reminders.find(r => r.id === row.dataset.calReminder);
       if (item) openReminderModal(item);
+    });
+  });
+  grid.querySelectorAll('[data-cal-reminder-done]').forEach(checkbox => {
+    checkbox.addEventListener('click', (e) => e.stopPropagation());
+    checkbox.addEventListener('change', async (e) => {
+      const id = checkbox.dataset.calReminderDone;
+      try {
+        await DB.setReminderDone(id, e.target.checked);
+      } catch (err) {
+        toast('Gagal memperbarui status: ' + err.message, 'error');
+        e.target.checked = !e.target.checked;
+      }
     });
   });
 }
@@ -6155,6 +6188,7 @@ function calCellHTML(y, m, d, outside, remindersByDate, todayKey) {
 function calCellReminderHTML(item, idx) {
   const num = (item.order !== null && item.order !== undefined && item.order !== '') ? item.order : (idx + 1);
   return `<div class="cal-cell-reminder${item.done ? ' cal-cell-reminder-done' : ''}" data-cal-reminder="${item.id}" title="${escapeHTML(item.title)}">
+    <input type="checkbox" class="cal-cell-reminder-done-check" data-cal-reminder-done="${item.id}" ${item.done ? 'checked' : ''} title="Tandai selesai">
     <span class="cal-cell-reminder-num">${escapeHTML(String(num))}.</span>
     <span class="cal-cell-reminder-title">${escapeHTML(item.title)}</span>
   </div>`;
@@ -6254,13 +6288,12 @@ function openReminderModal(item, defaultDate) {
   const isEdit = !!item;
   const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:460px;">
     <button class="modal-close" id="close-modal" title="Tutup">${icon('close')}</button>
-    <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+    <h3 style="padding-right:34px;">
       <span>${isEdit ? 'Edit Pengingat' : 'Tambah Pengingat'}</span>
-      ${isEdit ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--slate);cursor:pointer;user-select:none;"><input type="checkbox" id="reminder-done-input" ${item.done ? 'checked' : ''}><span>Selesai</span></label>` : ''}
     </h3>
     <div class="field" style="display:flex;flex-direction:row;gap:10px;align-items:flex-end;">
       <div style="width:70px;flex-shrink:0;"><label style="font-size:12.5px;color:var(--slate);font-weight:500;display:block;margin-bottom:5px;" title="Urutan tampil pada rincian jadwal hari itu (opsional)">Urutan</label><input type="number" id="reminder-order-input" placeholder="-" value="${item && item.order !== null && item.order !== undefined ? item.order : ''}" style="width:100%;padding:9px 8px;border:1px solid var(--border);border-radius:7px;font-size:13.5px;background:var(--card);color:var(--text);text-align:center;"></div>
-      <div style="flex:1;min-width:0;"><label style="font-size:12.5px;color:var(--slate);font-weight:500;display:block;margin-bottom:5px;">Judul</label><input type="text" id="reminder-title-input" placeholder="Contoh: Follow up dokumen pajak" value="${escapeHTML(item ? item.title : '')}" style="width:100%;"></div>
+      <div style="flex:1;min-width:0;"><label style="font-size:12.5px;color:var(--slate);font-weight:500;display:block;margin-bottom:5px;">Judul</label><input type="text" id="reminder-title-input" maxlength="22" placeholder="Contoh: Follow up dokumen pajak" value="${escapeHTML(item ? item.title : '')}" style="width:100%;"></div>
     </div>
     <div class="reminder-pending-row">
       <label class="reminder-pending-check"><input type="checkbox" id="reminder-pending-input" ${(item ? !item.date : false) ? 'checked' : ''}><span>Pending</span></label>
@@ -6287,6 +6320,7 @@ function openReminderModal(item, defaultDate) {
       <select id="reminder-repeat-input">
         <option value="none" ${(!item || !item.repeat || item.repeat === 'none') ? 'selected' : ''}>Tidak berulang</option>
         <option value="daily" ${item && item.repeat === 'daily' ? 'selected' : ''}>Harian</option>
+        <option value="weekday" ${item && item.repeat === 'weekday' ? 'selected' : ''}>Weekday (Senin–Jumat)</option>
         <option value="weekly" ${item && item.repeat === 'weekly' ? 'selected' : ''}>Mingguan</option>
         <option value="monthly" ${item && item.repeat === 'monthly' ? 'selected' : ''}>Bulanan</option>
         <option value="custom" ${item && item.repeat === 'custom' ? 'selected' : ''}>Bulanan, Hari Tertentu</option>
@@ -6304,29 +6338,17 @@ function openReminderModal(item, defaultDate) {
     </div>
     <div class="field"><label>Keterangan (opsional)</label><textarea id="reminder-desc-input" rows="4" placeholder="Detail tambahan...">${escapeHTML(item ? item.description : '')}</textarea></div>
     <div class="modal-actions" style="justify-content:${isEdit ? 'space-between' : 'flex-end'};">
-      ${isEdit ? `<button class="btn ghost danger-action" id="delete-reminder" style="color:var(--danger);border-color:var(--danger);">Hapus</button>` : ''}
-      <div style="display:flex;gap:10px;">
-        <button class="btn ghost" id="cancel-modal">Batal</button>
-        <button class="btn primary" id="save-reminder">Simpan</button>
-      </div>
+      ${isEdit ? `<button class="btn ghost danger-action" id="delete-reminder" title="Hapus" style="color:var(--danger);border-color:var(--danger);width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:17px;height:17px;">${ICONS.trash}</svg></button>` : ''}
+      <button class="btn primary" id="save-reminder" title="Simpan" style="width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:18px;height:18px;">${ICONS.check}</svg></button>
     </div>
   </div></div>`);
   document.body.appendChild(backdrop);
   backdrop.querySelector('#close-modal').addEventListener('click', () => backdrop.remove());
-  backdrop.querySelector('#cancel-modal').addEventListener('click', () => backdrop.remove());
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
   backdrop.querySelector('#reminder-title-input').focus();
   enhanceDateInputs(backdrop);
 
   if (isEdit) {
-    backdrop.querySelector('#reminder-done-input').addEventListener('change', async (e) => {
-      try {
-        await DB.setReminderDone(item.id, e.target.checked);
-      } catch (err) {
-        toast('Gagal memperbarui status: ' + err.message, 'error');
-        e.target.checked = !e.target.checked;
-      }
-    });
     backdrop.querySelector('#delete-reminder').addEventListener('click', async () => {
       if (!confirm(`Hapus pengingat "${item.title}"?`)) return;
       try {
@@ -6397,6 +6419,7 @@ function openReminderModal(item, defaultDate) {
     const priority = isPending ? (backdrop.querySelector('input[name="reminder-priority"]:checked').value) : 'standard';
     const description = backdrop.querySelector('#reminder-desc-input').value.trim();
     if (!title) { toast('Judul wajib diisi', 'error'); return; }
+    if (title.length > 22) { toast('Judul maksimal 22 karakter', 'error'); return; }
     if (isCustomRepeat && customDays.length === 0) { toast('Pilih minimal satu hari untuk repeat "Bulanan, Hari Tertentu"', 'error'); return; }
     if (isCustomRepeat && !date) { toast('Isi Tanggal untuk repeat "Bulanan, Hari Tertentu" (menentukan tanggal yang diulang tiap bulan)', 'error'); return; }
     if (isRange) {
