@@ -381,20 +381,26 @@ tbody tr:hover{background:var(--surface-2);}
 .cal-analisis-btn{color:var(--gold);border-color:var(--gold);}
 .cal-analisis-btn:hover{background:var(--gold-light);}
 .cal-analisis-btn.active{background:var(--gold);color:#fff;}
+.cal-agenda-btn{display:inline-flex;align-items:center;gap:6px;}
+.cal-agenda-btn svg{width:13px;height:13px;}
+.cal-agenda-btn:disabled{opacity:.55;cursor:default;}
 .analisis-day-label{font-size:11.5px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.03em;padding:10px 4px 4px;}
 .analisis-tier-heading{font-size:13px;font-weight:700;color:var(--ink);margin:14px 0 6px;padding-bottom:5px;border-bottom:1px solid var(--border);}
 .analisis-tier-heading:first-of-type{margin-top:2px;}
 .cal-grid-scroll{overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;}
 .cal-dow-sticky{position:sticky;top:62px;z-index:4;background:var(--card);padding-top:6px;margin-bottom:5px;}
 .cal-dow-clip{overflow:hidden;}
-.cal-dow-row{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;min-width:980px;will-change:transform;}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:auto;gap:5px;min-width:980px;}
+.cal-dow-row{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;min-width:1160px;will-change:transform;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:auto;gap:5px;min-width:1160px;}
 .cal-dow{font-size:11px;font-weight:600;color:var(--slate-light);text-align:center;padding:6px 0 4px 0;text-transform:uppercase;letter-spacing:.4px;background:var(--card);}
-.cal-cell{position:relative;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;display:flex;flex-direction:column;align-items:stretch;gap:3px;font-size:13px;color:var(--text);height:122px;padding:8px 0 6px 0;overflow:hidden;}
+.cal-cell{position:relative;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;display:flex;flex-direction:column;align-items:stretch;gap:3px;font-size:13px;color:var(--text);height:140px;padding:8px 0 6px 0;overflow:hidden;}
 .cal-cell:hover{background:var(--teal-light);}
 .cal-cell.cal-outside{background:transparent!important;}
 .cal-cell.cal-saturday{background:var(--success-light);}
 .cal-cell.cal-sunday-holiday{background:var(--danger-light);}
+.cal-cell.cal-dayoff{background:var(--danger-light);}
+.cal-cell-dayoff-check{position:absolute;top:4px;left:6px;width:13px;height:13px;margin:0;padding:0;cursor:pointer;z-index:2;appearance:none;-webkit-appearance:none;border:1.6px solid var(--danger);border-radius:50%;background:transparent;}
+.cal-cell-dayoff-check:checked{background:var(--danger);}
 .cal-cell.cal-today{border-color:var(--teal);font-weight:700;}
 .cal-cell.cal-selected{background:var(--teal);color:#fff;border-color:var(--teal);}
 .cal-cell.cal-selected:hover{background:var(--teal);}
@@ -584,6 +590,13 @@ tbody tr:hover{background:var(--surface-2);}
 .modal h3{font-family:var(--font-display);margin:0 0 4px 0;}
 .modal .modal-sub{font-size:12.5px;color:var(--slate);margin-bottom:16px;}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+
+.info-popover-wrap{position:relative;display:inline-flex;vertical-align:middle;}
+.info-icon-btn{width:19px;height:19px;border-radius:50%;background:var(--surface-2);border:none;cursor:pointer;color:var(--slate);display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;}
+.info-icon-btn:hover{background:var(--border);color:var(--text);}
+.info-icon-btn svg{width:13px;height:13px;}
+.info-popover{position:absolute;top:24px;left:0;z-index:5;display:none;width:280px;max-width:75vw;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.2);padding:10px 12px;font-size:11.5px;line-height:1.5;color:var(--slate);font-weight:400;}
+.info-popover.is-open{display:block;}
 
 .dropzone{
   border:2px dashed var(--border);border-radius:var(--radius);padding:34px 20px;text-align:center;
@@ -1168,6 +1181,30 @@ const DB = {
 
   async deleteReminder(id) {
     await db.collection('reminders').doc(id).delete();
+  },
+
+  // ---- Kalender → Libur/Cuti/Sakit (tanggal tidak masuk kerja) ----
+  // Disimpan sebagai 1 dokumen per tanggal per pengguna (id dokumen
+  // "<uid>_<yyyy-mm-dd>") supaya idempotent — toggle ulang tanggal yang
+  // sama cukup timpa/hapus dokumen yang sama, tidak membuat duplikat.
+  watchDayOffDates(uid, onData, onError) {
+    return db.collection('dayOff').where('ownerUid', '==', uid)
+      .onSnapshot({ includeMetadataChanges: true }, (snap) => {
+        const dates = snap.docs.map(d => d.data().date).filter(Boolean);
+        onData(dates, {
+          pendingWrites: snap.metadata.hasPendingWrites,
+          fromCache: snap.metadata.fromCache
+        });
+      }, (err) => { if (onError) onError(err); else console.error('watchDayOffDates error', err); });
+  },
+
+  async setDayOff(uid, dateKeyStr, isOff) {
+    const docId = `${uid}_${dateKeyStr}`;
+    if (isOff) {
+      await db.collection('dayOff').doc(docId).set({ ownerUid: uid, date: dateKeyStr });
+    } else {
+      await db.collection('dayOff').doc(docId).delete();
+    }
   }
 };
 
@@ -2385,6 +2422,8 @@ const state = {
   upgradeShowDone: false,     // true = tampilkan juga poin yang sudah dicentang (biasanya auto-hide)
   upgradeExpanded: {},        // itemId -> true jika keterangan panjang sedang ditampilkan penuh
   reminders: [],              // daftar pengingat/catatan tugas bebas (menu Kalender)
+  dayOffDates: [],             // daftar tanggal (yyyy-mm-dd) yang ditandai Libur/Cuti/Sakit — lihat DB.watchDayOffDates & isDayOff()
+  unsubDayOff: null,           // listener realtime khusus dayOffDates (terpisah dari unsubData supaya tidak bentrok dgn listener reminders di menu Kalender)
   onlineHolidays: null,        // cache hari libur nasional dari API online: {tanggal: nama} (null = belum berhasil dimuat, pakai fallback statis ID_HOLIDAYS_2026)
   calendarCursor: (() => { const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() }; })(), // bulan yang sedang ditampilkan di grid kalender
   calendarSelectedDate: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })() // tanggal (YYYY-MM-DD) yang sedang dipilih; dipakai sbg default tanggal saat menambah pengingat baru lewat tombol "+"
@@ -2452,6 +2491,7 @@ function renderSyncBadge() {
 // (dipanggil sebelum pindah menu / berganti pilihan perusahaan).
 function teardownActiveDataListener() {
   if (state.unsubData) { state.unsubData(); state.unsubData = null; }
+  if (state.unsubDayOff) { state.unsubDayOff(); state.unsubDayOff = null; }
   Sync.clear('statements');
 }
 
@@ -2487,7 +2527,9 @@ const ICONS = {
   chevronRight: '<path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
   plus: '<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
   close: '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>',
-  stopRepeat: '<path d="M4 4v5h5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.6 9A8 8 0 1 1 6.3 16.2" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M3.5 20.5l17-17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>'
+  stopRepeat: '<path d="M4 4v5h5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.6 9A8 8 0 1 1 6.3 16.2" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M3.5 20.5l17-17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
+  info: '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.7" r="1.15" fill="currentColor"/>',
+  download: '<path d="M12 4v11M12 15l-4-4M12 15l4-4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
 };
 
 function icon(name) {
@@ -5981,6 +6023,16 @@ function dateKey(y, m, d) {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
+// Apakah tanggal ini ditandai Libur/Cuti/Sakit (tidak masuk kerja) oleh
+// pengguna sendiri lewat checkbox bundar di pojok kiri-atas sel kalender
+// (lihat calCellHTML & wiring [data-cal-dayoff] di renderCalendarGrid).
+// Dipakai sebagai salah satu kondisi "blokir" saat menghitung ulang
+// alokasi tanggal jadwal Bulanan (monthlyDatesForMonth) dan Reminder
+// Analisis (analysisSlotsForMonth) — sama seperti Minggu/libur nasional.
+function isDayOff(dateKeyStr) {
+  return state.dayOffDates.includes(dateKeyStr);
+}
+
 // Menentukan apakah sebuah pengingat "terjadi" pada tanggal tertentu,
 // dengan mempertimbangkan pengaturan Ulangi (Harian/Mingguan/Bulanan/Hari
 // Tertentu) serta rentang tanggal opsional (reminder.endDate, lihat
@@ -6140,11 +6192,64 @@ function reminderOrderForDate(item, dateKeyStr) {
   return (item.order === null || item.order === undefined || item.order === '') ? Infinity : Number(item.order);
 }
 
+// Pengingat berulang "Bulanan" / "Bulanan, Hari Tertentu" (TANPA rentang
+// "s.d. tgl lain") yang tanggal kemunculan normalnya (hasil occursOnDate)
+// jatuh di tanggal yang ditandai Libur/Cuti/Sakit (isDayOff) otomatis
+// digeser ke tanggal lain yang masih kosong bulan ini — meniru cara
+// Reminder Analisis dialokasikan ulang saat jatuh Minggu/libur nasional
+// (lihat analysisSlotsForMonth). Dicari maju dulu dari tanggal asli
+// (tanggal terdekat berikutnya yang kosong), lalu berputar dari awal
+// bulan kalau mentok akhir bulan. Rentang tanggal (endDate) sengaja
+// TIDAK digeser karena sudah berupa beberapa hari sekaligus, bukan 1
+// tanggal tunggal — tetap tampil apa adanya di rentang aslinya.
+function monthlyDatesForMonth(year, month) {
+  const map = new Map(); // reminder id -> dateKeyStr kemunculannya bulan ini
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const monthlyItems = state.reminders.filter(r => {
+    if (r.analisis) return false;
+    const repeat = r.repeat || 'none';
+    if (repeat !== 'monthly' && repeat !== 'custom') return false;
+    if (r.endDate && r.endDate >= r.date) return false; // rentang tanggal: tidak digeser
+    return true;
+  });
+  if (monthlyItems.length === 0) return map;
+
+  const usedDates = new Set();
+  monthlyItems.forEach(r => {
+    let naiveDay = null;
+    for (let d = 1; d <= daysInMonth; d++) {
+      if (occursOnDate(r, dateKey(year, month, d))) { naiveDay = d; break; }
+    }
+    if (naiveDay == null) return; // repeat "custom" bisa saja tidak muncul sama sekali bulan ini
+    const naiveKey = dateKey(year, month, naiveDay);
+    if (!isDayOff(naiveKey) && !usedDates.has(naiveKey)) {
+      usedDates.add(naiveKey);
+      map.set(r.id, naiveKey);
+      return;
+    }
+    let fallbackKey = null;
+    for (let offset = 1; offset <= daysInMonth; offset++) {
+      const d = ((naiveDay - 1 + offset) % daysInMonth) + 1;
+      const key = dateKey(year, month, d);
+      if (!isDayOff(key) && !usedDates.has(key)) { fallbackKey = key; break; }
+    }
+    const finalKey = fallbackKey || naiveKey; // seluruh bulan Libur/Cuti/Sakit: tampilkan apa adanya
+    usedDates.add(finalKey);
+    map.set(r.id, finalKey);
+  });
+  return map;
+}
+
 function remindersForDate(dateKeyStr) {
   const [ky, km] = dateKeyStr.split('-').map(Number);
   const analisisMap = analisisDatesForMonth(ky, km - 1);
+  const monthlyMap = monthlyDatesForMonth(ky, km - 1);
   return state.reminders
-    .filter(r => r.analisis ? analisisMap.get(r.id) === dateKeyStr : occursOnDate(r, dateKeyStr))
+    .filter(r => {
+      if (r.analisis) return analisisMap.get(r.id) === dateKeyStr;
+      if (monthlyMap.has(r.id)) return monthlyMap.get(r.id) === dateKeyStr;
+      return occursOnDate(r, dateKeyStr);
+    })
     .sort((a, b) => {
       const ao = reminderOrderForDate(a, dateKeyStr);
       const bo = reminderOrderForDate(b, dateKeyStr);
@@ -6194,10 +6299,108 @@ function repeatDisplayLabel(item) {
   return label;
 }
 
+// Mengekspor seluruh jadwal agenda bulan yang sedang ditampilkan di
+// grid kalender (state.calendarCursor) sebagai satu file PDF, satu blok
+// per tanggal (1 s.d. akhir bulan) berisi daftar pengingat yang muncul
+// pada tanggal itu — sudah termasuk hasil realokasi otomatis (Reminder
+// Analisis & jadwal Bulanan yang digeser krn Minggu/libur nasional/
+// Libur-Cuti-Sakit, lihat remindersForDate). Ditulis manual dgn teks
+// jsPDF (bukan screenshot html2canvas) supaya hasilnya tajam & rapi
+// dicetak, dengan pagination otomatis kalau 1 bulan tidak muat 1 halaman.
+async function exportCalendarAgendaPDF() {
+  const btn = document.getElementById('cal-agenda-pdf-btn');
+  if (btn) { btn.disabled = true; }
+  try {
+    const { year, month } = state.calendarCursor;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    // Pastikan status Minggu/libur nasional yang ditampilkan di PDF
+    // sudah pakai data online terbaru (kalau berhasil dimuat).
+    await fetchOnlineHolidays().catch(() => {});
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    const pageW = 595.28, pageH = 841.89;
+    const margin = 42;
+    const contentW = pageW - margin * 2;
+    let y = margin;
+
+    const INK = [22, 33, 58];
+    const SLATE = [91, 100, 114];
+    const BORDER = [228, 230, 233];
+    const DANGER = [181, 69, 59];
+    const monthLabel = `${CAL_MONTH_NAMES[month]} ${year}`;
+
+    function drawPageHeader() {
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15);
+      pdf.setTextColor(...INK);
+      pdf.text(`Agenda Bulanan — ${monthLabel}`, margin, y);
+      y += 20;
+      pdf.setDrawColor(...BORDER); pdf.setLineWidth(0.75);
+      pdf.line(margin, y, pageW - margin, y);
+      y += 16;
+    }
+    drawPageHeader();
+
+    function ensureSpace(neededH) {
+      if (y + neededH > pageH - margin) {
+        pdf.addPage();
+        y = margin;
+      }
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = dateKey(year, month, d);
+      const items = remindersForDate(key);
+      const dow = new Date(year, month, d).getDay();
+      const holidayName = idHolidayName(key);
+      const dayOff = isDayOff(key);
+      const dateLabel = `${String(d).padStart(2, '0')} ${CAL_DOW_BY_JSDOW[dow]}`;
+
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9);
+      const itemLines = items.length
+        ? items.map(it => pdf.splitTextToSize(`•  ${it.title || '(Tanpa judul)'}${it.done ? '  (selesai)' : ''}`, contentW - 12))
+        : [['(Tidak ada jadwal)']];
+      const totalItemLines = itemLines.reduce((sum, l) => sum + l.length, 0);
+      const blockH = 16 + totalItemLines * 12 + 8;
+      ensureSpace(blockH);
+
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10.5);
+      pdf.setTextColor(...INK);
+      pdf.text(dateLabel, margin, y);
+      let tagX = margin + pdf.getTextWidth(dateLabel) + 8;
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8);
+      pdf.setTextColor(...DANGER);
+      if (holidayName) {
+        const tag = `(${holidayName})`;
+        pdf.text(tag, tagX, y);
+        tagX += pdf.getTextWidth(tag) + 6;
+      } else if (dow === 0) {
+        pdf.text('(Minggu)', tagX, y);
+        tagX += pdf.getTextWidth('(Minggu)') + 6;
+      }
+      if (dayOff) pdf.text('(Libur/Cuti/Sakit)', tagX, y);
+      y += 14;
+
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9);
+      pdf.setTextColor(...SLATE);
+      itemLines.forEach(lines => {
+        lines.forEach((line) => { pdf.text(line, margin + 10, y); y += 12; });
+      });
+      y += 6;
+    }
+
+    pdf.save(`Agenda-${CAL_MONTH_NAMES[month]}-${year}.pdf`);
+  } catch (err) {
+    toast('Gagal membuat PDF agenda: ' + err.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function renderCalendar() {
   const root = document.getElementById('view-root');
   root.innerHTML = `
-    <div style="max-width:1200px;margin:0 auto;">
+    <div style="max-width:1240px;margin:0 auto;">
       <div class="card" style="width:100%;">
         <div class="cal-header">
           <div class="cal-nav">
@@ -6206,6 +6409,7 @@ function renderCalendar() {
             <button id="cal-next" title="Bulan berikutnya">${icon('chevronRight')}</button>
           </div>
           <div style="display:flex;align-items:center;gap:10px;">
+            <button class="cal-pending-btn cal-agenda-btn" id="cal-agenda-pdf-btn" title="Download jadwal agenda bulan ini sebagai PDF">${icon('download')}<span>Unduh Agenda PDF</span></button>
             <button class="cal-pending-btn cal-analisis-btn" id="cal-analisis-btn">Reminder Analisis<span class="cal-pending-badge" id="cal-analisis-badge" style="display:none;"></span></button>
             <button class="cal-pending-btn" id="cal-pending-btn">Pending Reminder<span class="cal-pending-badge" id="cal-pending-badge" style="display:none;"></span></button>
           </div>
@@ -6226,6 +6430,7 @@ function renderCalendar() {
   document.getElementById('cal-next').addEventListener('click', () => shiftCalendarMonth(1));
   document.getElementById('cal-pending-btn').addEventListener('click', () => openPendingRemindersModal());
   document.getElementById('cal-analisis-btn').addEventListener('click', () => openAnalisisScheduleModal());
+  document.getElementById('cal-agenda-pdf-btn').addEventListener('click', () => exportCalendarAgendaPDF());
   document.getElementById('add-reminder-btn').addEventListener('click', () => openReminderModal(null, state.calendarSelectedDate));
 
   // Muat data hari libur online di latar belakang; kalau berhasil,
@@ -6247,6 +6452,13 @@ function renderCalendar() {
     renderCalendarGrid();
   }, (err) => {
     toast('Gagal memuat pengingat: ' + err.message, 'error');
+  });
+
+  state.unsubDayOff = DB.watchDayOffDates(state.user.uid, (dates) => {
+    state.dayOffDates = dates;
+    renderCalendarGrid();
+  }, (err) => {
+    toast('Gagal memuat data Libur/Cuti/Sakit: ' + err.message, 'error');
   });
 
   renderCalendarGrid();
@@ -6408,6 +6620,28 @@ function renderCalendarGrid() {
       }
     });
   });
+
+  // Checkbox "Libur/Cuti/Sakit" di pojok kiri-atas tiap sel — lihat
+  // calCellHTML & DB.setDayOff. Konfirmasi dulu saat DICENTANG (bukan
+  // saat dibatalkan) karena aksi ini memindahkan jadwal Bulanan &
+  // Reminder Analisis tanggal tsb ke tanggal lain.
+  grid.querySelectorAll('[data-cal-dayoff]').forEach(cb => {
+    cb.addEventListener('click', (e) => e.stopPropagation());
+    cb.addEventListener('change', async (e) => {
+      const dateKeyStr = cb.dataset.calDayoff;
+      const checked = e.target.checked;
+      if (checked && !confirm(`Tandai ${formatDateID(dateKeyStr)} sebagai Libur/Cuti/Sakit (tidak masuk kerja)?\n\nJadwal Bulanan & Reminder Analisis pada tanggal ini akan otomatis dipindah ke tanggal lain yang masih kosong bulan ini.`)) {
+        cb.checked = false;
+        return;
+      }
+      try {
+        await DB.setDayOff(state.user.uid, dateKeyStr, checked);
+      } catch (err) {
+        cb.checked = !checked;
+        toast('Gagal memperbarui status Libur/Cuti/Sakit: ' + err.message, 'error');
+      }
+    });
+  });
 }
 
 // Menampilkan ringkasan pengingat langsung di dalam sel kalender (nomor
@@ -6420,10 +6654,12 @@ function calCellHTML(y, m, d, outside, remindersByDate, todayKey) {
   const items = remindersByDate[key];
   const dow = new Date(y, m, d).getDay(); // 0 = Minggu, 6 = Sabtu
   const holidayName = idHolidayName(key);
+  const dayOff = !outside && isDayOff(key);
   const classes = ['cal-cell'];
   if (outside) classes.push('cal-outside');
   if (dow === 0 || holidayName) classes.push('cal-sunday-holiday');
   else if (dow === 6) classes.push('cal-saturday');
+  if (dayOff) classes.push('cal-dayoff');
   if (key === todayKey) classes.push('cal-today');
   if (key === state.calendarSelectedDate) classes.push('cal-selected');
   const remindersHTML = (!outside && items.length > 0)
@@ -6435,7 +6671,14 @@ function calCellHTML(y, m, d, outside, remindersByDate, todayKey) {
   const copyBtnHTML = (!outside && items.length > 0)
     ? `<button class="cal-cell-copy-btn" data-cal-copy-date="${key}" title="Salin sebagai Daily Report">${icon('copy')}</button>`
     : '';
+  // Checkbox bundar di pojok kiri-atas sel: menandai tanggal ini sebagai
+  // Libur/Cuti/Sakit (tidak masuk kerja). Saat dicentang, background sel
+  // berubah merah dan jadwal Bulanan & Reminder Analisis pada tanggal ini
+  // otomatis dialokasikan ulang ke tanggal lain yang masih kosong bulan
+  // ini (lihat monthlyDatesForMonth & analysisSlotsForMonth/isBlocked).
+  const dayoffCheckHTML = outside ? '' : `<input type="checkbox" class="cal-cell-dayoff-check" data-cal-dayoff="${key}" ${dayOff ? 'checked' : ''} title="Tandai Libur/Cuti/Sakit (tidak masuk kerja) — jadwal Bulanan &amp; Reminder Analisis tanggal ini otomatis dipindah ke tanggal lain">`;
   return `<div class="${classes.join(' ')}" data-cal-date="${key}"${holidayName ? ` title="${escapeHTML(holidayName)}"` : ''}>
+    ${dayoffCheckHTML}
     ${copyBtnHTML}
     ${outside ? '' : `<span class="cal-cell-date">${d}</span>`}
     ${remindersHTML}
@@ -6584,7 +6827,9 @@ function analysisSlotsForMonth(year, month) {
   const isBlocked = (d) => {
     const dow = new Date(year, month, d).getDay(); // 0=Minggu
     if (dow === 0) return true;
-    if (idHolidayName(dateKey(year, month, d))) return true;
+    const key = dateKey(year, month, d);
+    if (idHolidayName(key)) return true;
+    if (isDayOff(key)) return true;
     return false;
   };
   const toSlot = (d) => ({ key: dateKey(year, month, d), day: d, dow: new Date(year, month, d).getDay(), items: [] });
@@ -6655,12 +6900,35 @@ function openAnalisisScheduleModal() {
   const { year, month } = state.calendarCursor;
   const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:560px;">
     <button class="modal-close" id="close-modal" title="Tutup">${icon('close')}</button>
-    <h3>Reminder Analisis — ${CAL_MONTH_NAMES[month]} ${year}</h3>
+    <h3 style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">Reminder Analisis — ${CAL_MONTH_NAMES[month]} ${year}
+      <span class="info-popover-wrap">
+        <button type="button" class="info-icon-btn" id="analisis-schedule-info-btn" title="Keterangan">${icon('info')}</button>
+        <div class="info-popover" id="analisis-schedule-info-popover"></div>
+      </span>
+    </h3>
     <div id="analisis-schedule-body"><div class="upgrade-empty">Memuat data hari libur…</div></div>
   </div></div>`);
   document.body.appendChild(backdrop);
   backdrop.querySelector('#close-modal').addEventListener('click', () => backdrop.remove());
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+
+  const infoBtn = backdrop.querySelector('#analisis-schedule-info-btn');
+  const infoPopover = backdrop.querySelector('#analisis-schedule-info-popover');
+  infoBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = infoPopover.classList.toggle('is-open');
+    if (isOpen) {
+      const closeOnOutsideClick = (evt) => {
+        if (!infoPopover.contains(evt.target) && evt.target !== infoBtn) {
+          infoPopover.classList.remove('is-open');
+          document.removeEventListener('click', closeOnOutsideClick);
+        }
+      };
+      // Ditunda 1 tick supaya klik yang membuka popover ini sendiri
+      // tidak langsung terhitung sebagai "klik di luar" dan menutupnya.
+      setTimeout(() => document.addEventListener('click', closeOnOutsideClick), 0);
+    }
+  });
 
   fetchOnlineHolidays().finally(() => {
     if (!document.body.contains(backdrop)) return; // modal sudah ditutup sebelum data siap
@@ -6673,16 +6941,20 @@ function renderAnalisisScheduleBody(backdrop, year, month) {
   if (!body) return;
   const { prioritySlots, standardSlots, priorityCount, standardCount } = analysisSlotsForMonth(year, month);
 
+  const usingFallback = !state.onlineHolidays;
+  const infoPopover = backdrop.querySelector('#analisis-schedule-info-popover');
+  if (infoPopover) {
+    infoPopover.textContent = `Tiap pengingat Analisis berulang tiap bulan di tanggal pilihannya sendiri (Prioritas: ${ANALISIS_PRIORITY_DATES.join(', ')}; Standar: ${ANALISIS_FALLBACK_DATES.join(', ')}). Kalau tanggal itu jatuh Minggu/libur nasional, ditandai Libur/Cuti/Sakit, atau bentrok pengingat lain, otomatis dipindah ke tanggal cadangan berikutnya yang masih kosong — satu hari maksimal satu Analisis.${usingFallback ? ' Data hari libur online gagal dimuat, memakai daftar cadangan bawaan aplikasi.' : ''}`;
+  }
+
   if (priorityCount === 0 && standardCount === 0) {
     body.innerHTML = `<div class="upgrade-empty">Belum ada pengingat yang ditandai "Analisis".</div>`;
     return;
   }
 
-  const usingFallback = !state.onlineHolidays;
-  const noteHTML = `<div style="font-size:11.5px;color:var(--slate);margin-bottom:6px;">Tiap pengingat Analisis berulang tiap bulan di tanggal pilihannya sendiri (Prioritas: ${ANALISIS_PRIORITY_DATES.join(', ')}; Standar: ${ANALISIS_FALLBACK_DATES.join(', ')}). Kalau tanggal itu jatuh Minggu/libur nasional atau bentrok pengingat lain, otomatis dipindah ke tanggal cadangan berikutnya yang masih kosong — satu hari maksimal satu Analisis.${usingFallback ? ' Data hari libur online gagal dimuat, memakai daftar cadangan bawaan aplikasi.' : ''}</div>`;
   const prioritySectionHTML = `<div class="analisis-tier-heading">Prioritas</div>${priorityCount > 0 ? (prioritySlots.length > 0 ? analisisScheduleTableHTML(year, month, prioritySlots) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada slot tanggal Prioritas tersedia bulan ini.</div>`) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada pengingat Analisis berprioritas.</div>`}`;
   const standardSectionHTML = `<div class="analisis-tier-heading">Standar</div>${standardCount > 0 ? (standardSlots.length > 0 ? analisisScheduleTableHTML(year, month, standardSlots) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada slot tanggal Standar tersisa bulan ini.</div>`) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada pengingat Analisis standar.</div>`}`;
-  body.innerHTML = noteHTML + prioritySectionHTML + standardSectionHTML;
+  body.innerHTML = prioritySectionHTML + standardSectionHTML;
 
   body.querySelectorAll('[data-reminder-check]').forEach(cb => {
     cb.addEventListener('change', async () => {
