@@ -374,7 +374,29 @@
 // v63: index.html diperbarui — tombol copy "Daily Report" (fitur v61)
 //      latar bulat merahnya dihapus, sekarang cuma ikon copy polos
 //      berwarna merah tanpa background/bayangan.
-const CACHE_NAME = 'integrida-cache-v63';
+// v64: index.html diperbarui — fitur "Unduh Agenda PDF" (exportCalendarAgendaPDF)
+//      ditulis ulang total: sebelumnya PDF berupa daftar teks memanjang
+//      satu blok per tanggal, sekarang digambar sebagai GRID KALENDER 7
+//      kolom (Sen–Min, landscape A4) sama persis strukturnya seperti grid
+//      kalender di menu Kalender aplikasi — termasuk warna latar sel
+//      Sabtu/Minggu-libur nasional/Libur-Cuti-Sakit, sel bulan
+//      sebelum/sesudah diredupkan, bingkai teal pada sel hari ini, dan
+//      judul tiap pengingat dipotong satu baris dgn "…" (pdfEllipsize())
+//      persis seperti CSS .cal-cell-reminder-title. Kalau pengingat dalam
+//      1 sel tidak muat, sisanya diringkas "+N lainnya".
+// v65: index.html diperbarui — perbaikan tampilan mobile (HP) secara umum:
+//      angka besar pada kartu KPI Dashboard (mis. Total Aset, Pendapatan)
+//      & angka pada kartu "hero" tren sekarang bisa turun baris
+//      (overflow-wrap) alih-alih meluber keluar kartu; padding
+//      konten/topbar diperkecil supaya proporsional di layar sempit;
+//      kartu "hero" Dashboard (judul + Pendapatan/Laba Bersih) disusun
+//      vertikal & simetris di layar <900px alih-alih flex-wrap yang bisa
+//      pecah tidak rapi; komposisi donut chart ditumpuk vertikal (bukan
+//      berdampingan) di layar sempit; ditambahkan breakpoint khusus HP
+//      kecil (<480px) yang memperkecil padding kartu, ukuran angka KPI,
+//      dan padding sel tabel supaya tetap proporsional & tidak
+//      berantakan.
+const CACHE_NAME = 'integrida-cache-v65';
 const APP_SHELL = [
   './',
   './index.html',

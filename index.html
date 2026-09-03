@@ -271,7 +271,7 @@ input,select{font-family:inherit;}
 
 .kpi-card{display:flex;flex-direction:column;gap:6px;}
 .kpi-label{font-size:12px;color:var(--slate);letter-spacing:.2px;}
-.kpi-value{font-family:var(--font-display);font-size:25px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums;}
+.kpi-value{font-family:var(--font-display);font-size:25px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums;overflow-wrap:break-word;word-break:break-word;}
 .kpi-delta{font-size:12.5px;font-family:var(--font-display);font-weight:600;}
 .kpi-delta.up{color:var(--teal);}
 .kpi-delta.down{color:var(--danger);}
@@ -660,7 +660,7 @@ tbody tr:hover{background:var(--surface-2);}
 .dash-hero-sub{font-size:12.5px;color:var(--slate);margin-top:2px;}
 .dash-hero-stats{display:flex;gap:26px;flex-wrap:wrap;}
 .dash-hero-stat-label{font-size:12px;color:var(--slate);}
-.dash-hero-stat-value{font-family:var(--font-display);font-weight:800;font-size:19px;letter-spacing:-.01em;margin-top:2px;font-variant-numeric:tabular-nums;}
+.dash-hero-stat-value{font-family:var(--font-display);font-weight:800;font-size:19px;letter-spacing:-.01em;margin-top:2px;font-variant-numeric:tabular-nums;overflow-wrap:break-word;word-break:break-word;}
 .dash-hero-chart-wrap{position:relative;height:270px;margin-top:10px;}
 
 .dash-widgets{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:16px;}
@@ -707,6 +707,25 @@ tbody tr:hover{background:var(--surface-2);}
 
 @media(max-width:900px){
   .grid-4,.grid-3,.grid-2{grid-template-columns:1fr;}
+  .content{padding:16px;padding-bottom:100px;}
+  .topbar{padding:0 16px;}
+  .dash-hero{padding:18px 16px 14px 16px;border-radius:16px;}
+  .dash-hero-head{flex-direction:column;align-items:flex-start;gap:12px;}
+  .dash-hero-stats{width:100%;gap:16px;}
+  .dash-hero-stats>div{flex:1 1 0;min-width:0;}
+  .dash-hero-chart-wrap{height:220px;}
+  .dash-widget-card{padding:14px 16px;}
+  .dash-donut-wrap{flex-direction:column;align-items:stretch;gap:12px;}
+  .dash-donut-canvas{align-self:center;}
+}
+@media(max-width:480px){
+  .content{padding:12px;padding-bottom:96px;}
+  .topbar{padding:0 12px;}
+  .card{padding:14px 16px;}
+  .kpi-value{font-size:20px;}
+  .dash-hero-stat-value{font-size:16.5px;}
+  .dash-hero-title{font-size:15px;}
+  th,td{padding:8px 8px;font-size:12.5px;}
 }
 
 /* ---------- Bottom navigation ---------- */
@@ -6299,95 +6318,166 @@ function repeatDisplayLabel(item) {
   return label;
 }
 
-// Mengekspor seluruh jadwal agenda bulan yang sedang ditampilkan di
-// grid kalender (state.calendarCursor) sebagai satu file PDF, satu blok
-// per tanggal (1 s.d. akhir bulan) berisi daftar pengingat yang muncul
-// pada tanggal itu — sudah termasuk hasil realokasi otomatis (Reminder
-// Analisis & jadwal Bulanan yang digeser krn Minggu/libur nasional/
-// Libur-Cuti-Sakit, lihat remindersForDate). Ditulis manual dgn teks
-// jsPDF (bukan screenshot html2canvas) supaya hasilnya tajam & rapi
-// dicetak, dengan pagination otomatis kalau 1 bulan tidak muat 1 halaman.
+// Memotong teks satu baris supaya pas dalam lebar tertentu, menambahkan
+// "…" di akhir kalau kepanjangan — meniru perilaku CSS
+// "white-space:nowrap;text-overflow:ellipsis" yang dipakai judul
+// pengingat di sel kalender aplikasi (.cal-cell-reminder-title).
+function pdfEllipsize(pdf, text, maxWidth) {
+  if (pdf.getTextWidth(text) <= maxWidth) return text;
+  let lo = 0, hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    const candidate = text.slice(0, mid) + '…';
+    if (pdf.getTextWidth(candidate) <= maxWidth) lo = mid; else hi = mid - 1;
+  }
+  return lo > 0 ? text.slice(0, lo) + '…' : '…';
+}
+
+// Mengekspor jadwal agenda bulan yang sedang ditampilkan (state.calendarCursor)
+// sebagai satu file PDF berupa GRID KALENDER — bukan daftar memanjang per
+// tanggal seperti sebelumnya — supaya tampilannya sama seperti grid kalender
+// di menu Kalender aplikasi (7 kolom Sen–Min, sel bulan sebelum/sesudah
+// diredupkan, sel Sabtu/Minggu-libur nasional/Libur-Cuti-Sakit diberi warna
+// latar sama seperti CSS .cal-cell, sel hari ini diberi bingkai teal, dan
+// judul tiap pengingat dipotong satu baris dengan "…" sama seperti
+// .cal-cell-reminder-title). Sudah termasuk hasil realokasi otomatis
+// (Reminder Analisis & jadwal Bulanan yang digeser krn Minggu/libur
+// nasional/Libur-Cuti-Sakit, lihat remindersForDate). Ditulis manual dgn
+// teks+vektor jsPDF (bukan screenshot html2canvas) supaya hasilnya tajam.
 async function exportCalendarAgendaPDF() {
   const btn = document.getElementById('cal-agenda-pdf-btn');
   if (btn) { btn.disabled = true; }
   try {
     const { year, month } = state.calendarCursor;
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
     // Pastikan status Minggu/libur nasional yang ditampilkan di PDF
     // sudah pakai data online terbaru (kalau berhasil dimuat).
     await fetchOnlineHolidays().catch(() => {});
 
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-    const pageW = 595.28, pageH = 841.89;
-    const margin = 42;
+    // Landscape supaya 7 kolom grid kalender cukup lega, sama semangatnya
+    // dengan grid kalender aplikasi yang scroll ke samping di layar sempit.
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    const pageW = 841.89, pageH = 595.28;
+    const margin = 26;
     const contentW = pageW - margin * 2;
-    let y = margin;
 
-    const INK = [22, 33, 58];
-    const SLATE = [91, 100, 114];
-    const BORDER = [228, 230, 233];
-    const DANGER = [181, 69, 59];
+    // Warna diambil dari CSS var tema terang aplikasi (lihat :root),
+    // supaya nuansanya sama dengan tampilan kalender di layar.
+    const INK = [22, 33, 58];         // --text
+    const SLATE = [154, 163, 178];    // --slate-light
+    const BORDER = [228, 230, 233];   // --border
+    const DANGER = [181, 69, 59];     // --danger
+    const DANGER_LIGHT = [251, 236, 235]; // --danger-light (Minggu/libur/Cuti-Sakit)
+    const SUCCESS_LIGHT = [231, 245, 236]; // --success-light (Sabtu)
+    const SURFACE = [250, 251, 251];  // --surface-2 (sel biasa)
+    const TEAL = [47, 111, 228];      // --teal (bingkai hari ini)
     const monthLabel = `${CAL_MONTH_NAMES[month]} ${year}`;
 
-    function drawPageHeader() {
-      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15);
-      pdf.setTextColor(...INK);
-      pdf.text(`Agenda Bulanan — ${monthLabel}`, margin, y);
-      y += 20;
-      pdf.setDrawColor(...BORDER); pdf.setLineWidth(0.75);
-      pdf.line(margin, y, pageW - margin, y);
-      y += 16;
-    }
-    drawPageHeader();
+    let y = margin;
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15);
+    pdf.setTextColor(...INK);
+    pdf.text(`Agenda Bulanan — ${monthLabel}`, margin, y);
+    y += 18;
+    pdf.setDrawColor(...BORDER); pdf.setLineWidth(0.75);
+    pdf.line(margin, y, pageW - margin, y);
+    y += 16;
 
-    function ensureSpace(neededH) {
-      if (y + neededH > pageH - margin) {
-        pdf.addPage();
-        y = margin;
+    // Baris header nama hari (Sen..Min), sama urutannya seperti CAL_DOW.
+    const colW = contentW / 7;
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9);
+    pdf.setTextColor(...SLATE);
+    CAL_DOW.forEach((d, i) => {
+      pdf.text(d.toUpperCase(), margin + i * colW + colW / 2, y, { align: 'center' });
+    });
+    y += 12;
+
+    // Susun daftar sel grid persis seperti renderCalendarGrid(): sel
+    // pengisi dari bulan sebelumnya, sel bulan ini, lalu sel pengisi dari
+    // bulan berikutnya sampai genap kelipatan 7.
+    const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // Senin=0..Minggu=6
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+    const trailing = (7 - ((firstDow + daysInMonth) % 7)) % 7;
+
+    const cellsData = [];
+    for (let i = 0; i < firstDow; i++) {
+      const d = daysInPrevMonth - firstDow + i + 1;
+      const m = month === 0 ? 11 : month - 1;
+      const yy = month === 0 ? year - 1 : year;
+      cellsData.push({ y: yy, m, d, outside: true });
+    }
+    for (let d = 1; d <= daysInMonth; d++) cellsData.push({ y: year, m: month, d, outside: false });
+    for (let d = 1; d <= trailing; d++) {
+      const m = month === 11 ? 0 : month + 1;
+      const yy = month === 11 ? year + 1 : year;
+      cellsData.push({ y: yy, m, d, outside: true });
+    }
+
+    const rows = cellsData.length / 7;
+    const gridTop = y;
+    const rowH = (pageH - margin - gridTop) / rows;
+
+    const today = new Date();
+    const todayKey = dateKey(today.getFullYear(), today.getMonth(), today.getDate());
+
+    cellsData.forEach((cell, idx) => {
+      const col = idx % 7;
+      const row = Math.floor(idx / 7);
+      const cx = margin + col * colW;
+      const cy = gridTop + row * rowH;
+      const key = dateKey(cell.y, cell.m, cell.d);
+      const dow = new Date(cell.y, cell.m, cell.d).getDay();
+      const holidayName = !cell.outside ? idHolidayName(key) : null;
+      const dayOff = !cell.outside && isDayOff(key);
+      const isToday = !cell.outside && key === todayKey;
+
+      let bg = SURFACE;
+      if (cell.outside) bg = [255, 255, 255];
+      else if (dow === 0 || holidayName || dayOff) bg = DANGER_LIGHT;
+      else if (dow === 6) bg = SUCCESS_LIGHT;
+
+      pdf.setFillColor(...bg);
+      pdf.setDrawColor(...BORDER);
+      pdf.setLineWidth(0.6);
+      pdf.rect(cx, cy, colW, rowH, cell.outside ? 'S' : 'FD');
+      if (isToday) {
+        pdf.setDrawColor(...TEAL);
+        pdf.setLineWidth(1.4);
+        pdf.rect(cx + 0.7, cy + 0.7, colW - 1.4, rowH - 1.4, 'S');
       }
-    }
 
-    for (let d = 1; d <= daysInMonth; d++) {
-      const key = dateKey(year, month, d);
+      if (cell.outside) {
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8);
+        pdf.setTextColor(...SLATE);
+        pdf.text(String(cell.d), cx + colW / 2, cy + rowH / 2, { align: 'center' });
+        return;
+      }
+
+      pdf.setFont('helvetica', isToday ? 'bold' : 'normal'); pdf.setFontSize(9.5);
+      pdf.setTextColor(...((holidayName || dow === 0 || dayOff) ? DANGER : INK));
+      pdf.text(String(cell.d), cx + 6, cy + 13);
+
       const items = remindersForDate(key);
-      const dow = new Date(year, month, d).getDay();
-      const holidayName = idHolidayName(key);
-      const dayOff = isDayOff(key);
-      const dateLabel = `${String(d).padStart(2, '0')} ${CAL_DOW_BY_JSDOW[dow]}`;
-
-      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9);
-      const itemLines = items.length
-        ? items.map(it => pdf.splitTextToSize(`•  ${it.title || '(Tanpa judul)'}${it.done ? '  (selesai)' : ''}`, contentW - 12))
-        : [['(Tidak ada jadwal)']];
-      const totalItemLines = itemLines.reduce((sum, l) => sum + l.length, 0);
-      const blockH = 16 + totalItemLines * 12 + 8;
-      ensureSpace(blockH);
-
-      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10.5);
-      pdf.setTextColor(...INK);
-      pdf.text(dateLabel, margin, y);
-      let tagX = margin + pdf.getTextWidth(dateLabel) + 8;
-      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8);
-      pdf.setTextColor(...DANGER);
-      if (holidayName) {
-        const tag = `(${holidayName})`;
-        pdf.text(tag, tagX, y);
-        tagX += pdf.getTextWidth(tag) + 6;
-      } else if (dow === 0) {
-        pdf.text('(Minggu)', tagX, y);
-        tagX += pdf.getTextWidth('(Minggu)') + 6;
+      const lineH = 9.5;
+      const padX = 5;
+      const maxY = cy + rowH - 4;
+      let ty = cy + 26;
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.3);
+      let shown = 0;
+      for (const item of items) {
+        if (ty + lineH > maxY) break;
+        const label = pdfEllipsize(pdf, (item.title || '(Tanpa judul)'), colW - padX * 2);
+        pdf.setTextColor(...(item.done ? SLATE : INK));
+        pdf.text(`• ${label}`, cx + padX, ty);
+        ty += lineH;
+        shown++;
       }
-      if (dayOff) pdf.text('(Libur/Cuti/Sakit)', tagX, y);
-      y += 14;
-
-      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9);
-      pdf.setTextColor(...SLATE);
-      itemLines.forEach(lines => {
-        lines.forEach((line) => { pdf.text(line, margin + 10, y); y += 12; });
-      });
-      y += 6;
-    }
+      if (shown < items.length && ty <= maxY) {
+        pdf.setFont('helvetica', 'italic'); pdf.setFontSize(6.8);
+        pdf.setTextColor(...SLATE);
+        pdf.text(`+${items.length - shown} lainnya`, cx + padX, ty);
+      }
+    });
 
     pdf.save(`Agenda-${CAL_MONTH_NAMES[month]}-${year}.pdf`);
   } catch (err) {
