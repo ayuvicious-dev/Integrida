@@ -498,7 +498,20 @@
 //      bukan cuma sekali. Sekarang callback di-debounce 150ms, jadi
 //      snapshot awal dari seluruh perusahaan digabung dulu lalu
 //      Dashboard cuma di-render SEKALI saat pemuatan awal.
-const CACHE_NAME = 'integrida-cache-v76';
+// v77: index.html diperbarui — perbaikan bug tampilan Dashboard (&
+//      halaman lain) terpotong di sisi kanan pada HP saat "Ukuran
+//      Font" (menu Setting) di-set selain "Normal" (Kecil/Besar/Sangat
+//      Besar). Penyebab: CSS `zoom` yang dipakai fitur ini (di-scope ke
+//      `.main` & `.modal`) membesarkan/mengecilkan hasil render SETELAH
+//      lebarnya dihitung — jadi `.main` lebar-layar-penuh yang di-zoom
+//      112%/125% hasil render-nya jadi 12-25% LEBIH LEBAR dari layar,
+//      membuat sisi kanan konten (nilai KPI, grafik, dst.) terpotong di
+//      luar layar. Sekarang ditambahkan `--app-zoom-factor` (versi
+//      angka tanpa satuan dari --app-zoom) dan lebar `.main`/`.modal`
+//      dikompensasi via calc(.../var(--app-zoom-factor)) SEBELUM
+//      di-zoom, supaya hasil akhir setelah di-zoom pas kembali ke lebar
+//      seharusnya, di ukuran zoom berapa pun.
+const CACHE_NAME = 'integrida-cache-v77';
 const APP_SHELL = [
   './',
   './index.html',

@@ -28,9 +28,14 @@
 // pada aturan CSS ".main{zoom:...}" / ".modal{zoom:...}").
 (function () {
   try {
-    var FONT_SIZE_ZOOM = { kecil: '90%', normal: '100%', besar: '112%', 'sangat-besar': '125%' };
+    var FONT_SIZE_ZOOM = { kecil: 90, normal: 100, besar: 112, 'sangat-besar': 125 };
     var saved = localStorage.getItem('integrida-font-size');
-    document.documentElement.style.setProperty('--app-zoom', FONT_SIZE_ZOOM[saved] || FONT_SIZE_ZOOM.normal);
+    var pct = FONT_SIZE_ZOOM[saved] || FONT_SIZE_ZOOM.normal;
+    document.documentElement.style.setProperty('--app-zoom', pct + '%');
+    // --app-zoom-factor: versi ANGKA TANPA SATUAN dari nilai yang sama
+    // (mis. 1.12 untuk 112%) — dipakai calc() pada lebar .main/.modal utk
+    // mengompensasi CSS zoom (lihat komentar pada aturan .main di bawah).
+    document.documentElement.style.setProperty('--app-zoom-factor', pct / 100);
   } catch (e) {}
 })();
 </script>
@@ -49,6 +54,10 @@
      fallback. Dipakai HANYA pada .main & .modal — lihat penjelasan di
      dekat deklarasi kedua aturan tsb. */
   --app-zoom:100%;
+  /* Versi angka tanpa satuan dari --app-zoom (mis. 1.12), dipakai calc()
+     utk mengompensasi lebar .main/.modal supaya tetap pas di layar
+     berapa pun nilai zoom-nya (lihat aturan .main). */
+  --app-zoom-factor:1;
   /* Logo Integrida (monogram "C" + grafik batang) sbg CSS mask, supaya
      warnanya bisa ikut menyesuaikan tema light/dark lewat background-color
      di elemen yang memakainya (.logo-mark), bukan warna tetap dari file
@@ -255,8 +264,19 @@ input,select{font-family:inherit;}
    relatif ke viewport asli & tidak ikut ter-zoom. Kalau zoom dipasang
    di leluhur elemen fixed, sebagian browser mobile (terutama WebKit)
    salah menghitung posisinya — bikin bagian tsb tampak terpotong atau
-   seperti halaman auto-zoom-in saat dibuka. */
-.main{margin-left:0;flex:1;display:flex;flex-direction:column;min-height:100vh;zoom:var(--app-zoom,100%);}
+   seperti halaman auto-zoom-in saat dibuka.
+   PERBAIKAN LANJUTAN: CSS `zoom` MEMBESARKAN/MENGECILKAN ukuran render
+   elemen di layar SETELAH lebarnya dihitung — jadi kalau .main lebar
+   layar penuh (100%) lalu di-zoom 112%/125% (Ukuran Font Besar/Sangat
+   Besar), hasil render-nya jadi 12-25% LEBIH LEBAR dari layar,
+   menyebabkan separuh konten kanan (termasuk Dashboard: nilai KPI,
+   grafik, legend) terpotong di luar layar terutama di HP yang tidak
+   punya ruang ekstra untuk "menyembunyikan" kelebihan lebar itu.
+   Makanya lebar .main sengaja dikecilkan LEBIH DULU sebesar
+   1/app-zoom-factor (mis. 1/1.12) SEBELUM di-zoom, supaya hasil akhir
+   setelah di-zoom pas kembali 100% lebar layar, di ukuran zoom berapa
+   pun. */
+.main{margin-left:0;flex:1;width:calc(100% / var(--app-zoom-factor,1));min-width:0;display:flex;flex-direction:column;min-height:100vh;zoom:var(--app-zoom,100%);}
 .topbar{
   height:62px;flex-shrink:0;background:var(--card);border-bottom:1px solid var(--border);
   display:flex;align-items:center;justify-content:space-between;padding:0 26px;position:sticky;top:0;z-index:5;
@@ -633,7 +653,7 @@ tbody tr:hover{background:var(--surface-2);}
 .modal-backdrop{
   position:fixed;inset:0;background:rgba(15,20,30,0.55);display:flex;align-items:center;justify-content:center;z-index:50;
 }
-.modal{background:var(--card);color:var(--text);border-radius:12px;width:460px;max-width:92vw;padding:24px;max-height:88vh;overflow-y:auto;position:relative;zoom:var(--app-zoom,100%);}
+.modal{background:var(--card);color:var(--text);border-radius:12px;width:calc(460px / var(--app-zoom-factor,1));max-width:calc(92vw / var(--app-zoom-factor,1));padding:24px;max-height:88vh;overflow-y:auto;position:relative;zoom:var(--app-zoom,100%);}
 .modal-close{position:absolute;top:16px;right:16px;width:28px;height:28px;border-radius:50%;background:transparent;border:none;cursor:pointer;color:var(--slate);display:flex;align-items:center;justify-content:center;}
 .modal-close:hover{background:var(--surface-2);color:var(--text);}
 .modal-close svg{width:16px;height:16px;}
@@ -2867,6 +2887,7 @@ function getStoredFontSize() {
 function applyFontSize(key) {
   const opt = FONT_SIZE_OPTIONS.find(o => o.key === key) || FONT_SIZE_OPTIONS[1];
   document.documentElement.style.setProperty('--app-zoom', opt.zoom + '%');
+  document.documentElement.style.setProperty('--app-zoom-factor', opt.zoom / 100);
   try { localStorage.setItem(FONT_SIZE_STORAGE_KEY, opt.key); } catch (e) {}
 }
 
