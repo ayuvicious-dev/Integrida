@@ -399,14 +399,17 @@ tbody tr:hover{background:var(--surface-2);}
 .cal-cell.cal-selected{background:var(--teal);color:#fff;border-color:var(--teal);}
 .cal-cell.cal-selected:hover{background:var(--teal);}
 .cal-cell-date{text-align:center;flex-shrink:0;}
+.cal-cell-copy-btn{position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:transparent;color:var(--danger);border:none;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;z-index:2;}
+.cal-cell-copy-btn svg{width:11px;height:11px;}
+.cal-cell-copy-btn:hover{opacity:.7;}
+.cal-cell.cal-selected .cal-cell-copy-btn{color:#fff;}
 .cal-cell-reminders{display:flex;flex-direction:column;gap:2px;margin-top:3px;padding:0 4px;flex:1;min-height:0;overflow-y:auto;}
 .cal-cell-reminder{display:flex;align-items:baseline;gap:3px;font-size:10px;line-height:1.3;border-radius:4px;padding:1px 3px;cursor:pointer;}
 .cal-cell-reminder-done-check{flex-shrink:0;width:11px;height:11px;margin:0;cursor:pointer;accent-color:var(--teal);align-self:center;}
 .cal-cell.cal-selected .cal-cell-reminder-done-check{accent-color:#fff;}
 .cal-cell-reminder:hover{background:rgba(0,0,0,.08);}
 .cal-cell.cal-selected .cal-cell-reminder:hover{background:rgba(255,255,255,.2);}
-.cal-cell-reminder-num{flex-shrink:0;font-weight:700;color:var(--teal);}
-.cal-cell.cal-selected .cal-cell-reminder-num{color:#fff;}
+.cal-cell-reminder.dragging{opacity:.35;}
 .cal-cell-reminder-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;text-align:left;color:var(--text);}
 .cal-cell.cal-selected .cal-cell-reminder-title{color:#fff;}
 .cal-cell-reminder.cal-cell-reminder-done .cal-cell-reminder-title{text-decoration:line-through;color:var(--slate-light);}
@@ -1145,6 +1148,22 @@ const DB = {
 
   async setReminderDone(id, done) {
     await db.collection('reminders').doc(id).update({ done: !!done });
+  },
+
+  // Menyimpan urutan pengingat hasil drag & drop di SATU sel tanggal
+  // kalender — orderedIds adalah id pengingat pada tanggal (dateKeyStr)
+  // itu sesuai urutan barunya, disimpan sebagai indeks 0..n-1 per
+  // dokumen ke dalam map bersarang `orderOverrides.<dateKeyStr>` (lewat
+  // dot-path Firestore, satu batch write). Sengaja per-tanggal (bukan
+  // menimpa field `order` global dokumen) supaya pengingat berulang yang
+  // digeser di satu tanggal TIDAK ikut mengubah urutannya di tanggal
+  // kemunculan lain — lihat reminderOrderForDate() utk cara bacanya.
+  async reorderRemindersForDate(dateKeyStr, orderedIds) {
+    const batch = db.batch();
+    orderedIds.forEach((id, idx) => {
+      batch.update(db.collection('reminders').doc(id), { [`orderOverrides.${dateKeyStr}`]: idx });
+    });
+    await batch.commit();
   },
 
   async deleteReminder(id) {
@@ -6088,12 +6107,47 @@ function occursOnDate(reminder, dateKeyStr) {
   return false;
 }
 
+// Reminder ber-tag "Analisis" tidak punya reminder.date (sengaja
+// dikosongkan saat disimpan — lihat applyPendingState) karena tanggal
+// kemunculannya dihitung ULANG tiap bulan oleh analysisSlotsForMonth()
+// (round-robin ke ANALISIS_PRIORITY_DATES/ANALISIS_FALLBACK_DATES,
+// menghindari Minggu/libur/bentrok). occursOnDate() sendiri tidak tahu
+// apa-apa soal mekanisme ini, jadi dipetakan terpisah di sini supaya
+// pengingat Analisis ikut muncul di sel kalender tanggal yang
+// bersangkutan (sebelumnya cuma tampil di modal "Reminder Analisis").
+function analisisDatesForMonth(year, month) {
+  const { prioritySlots, standardSlots } = analysisSlotsForMonth(year, month);
+  const map = new Map(); // reminder id -> dateKey kemunculannya bulan ini
+  [...prioritySlots, ...standardSlots].forEach(slot => {
+    slot.items.forEach(item => map.set(item.id, slot.key));
+  });
+  return map;
+}
+
+// Urutan tampil per-tanggal: reminder.orderOverrides adalah map
+// { [dateKeyStr]: order } — dipakai supaya hasil drag & drop di satu sel
+// kalender HANYA berlaku untuk tanggal itu, tidak ikut mengubah urutan
+// pengingat yang sama di tanggal kemunculan lain (mis. pengingat
+// berulang). Kalau tanggal ini belum pernah punya override sendiri,
+// jatuh ke reminder.order (order lama/global, atau tak terurut =
+// Infinity, ditaruh paling akhir).
+function reminderOrderForDate(item, dateKeyStr) {
+  const overrides = item.orderOverrides;
+  if (overrides && Object.prototype.hasOwnProperty.call(overrides, dateKeyStr)) {
+    const v = overrides[dateKeyStr];
+    return (v === null || v === undefined || v === '') ? Infinity : Number(v);
+  }
+  return (item.order === null || item.order === undefined || item.order === '') ? Infinity : Number(item.order);
+}
+
 function remindersForDate(dateKeyStr) {
+  const [ky, km] = dateKeyStr.split('-').map(Number);
+  const analisisMap = analisisDatesForMonth(ky, km - 1);
   return state.reminders
-    .filter(r => occursOnDate(r, dateKeyStr))
+    .filter(r => r.analisis ? analisisMap.get(r.id) === dateKeyStr : occursOnDate(r, dateKeyStr))
     .sort((a, b) => {
-      const ao = (a.order === null || a.order === undefined || a.order === '') ? Infinity : Number(a.order);
-      const bo = (b.order === null || b.order === undefined || b.order === '') ? Infinity : Number(b.order);
+      const ao = reminderOrderForDate(a, dateKeyStr);
+      const bo = reminderOrderForDate(b, dateKeyStr);
       if (ao !== bo) return ao - bo;
       return (a.time || '').localeCompare(b.time || '');
     });
@@ -6264,9 +6318,79 @@ function renderCalendarGrid() {
       renderCalendarGrid();
     });
   });
+  // Drag & drop urutan pengingat di dalam sel kalender: menggantikan
+  // fitur nomor urutan manual ("Urutan") yang dulu diketik lewat modal —
+  // sekarang cukup tarik-geser ke atas/bawah antar pengingat pada
+  // TANGGAL YANG SAMA (dragover menolak pengingat yang ditarik dari sel
+  // tanggal lain). Hasilnya disimpan per-TANGGAL (reminder.orderOverrides,
+  // lihat reminderOrderForDate) — bukan menimpa urutan global reminder —
+  // supaya pengingat berulang yang digeser di satu tanggal TIDAK ikut
+  // berubah urutannya di tanggal kemunculan lain. Pola drag-nya sendiri
+  // meniru drag & drop kartu Perusahaan (fillCompanyGrid), hanya
+  // sumbunya vertikal (atas/bawah) bukan horizontal. reminderDidDrag
+  // menandai drag yang baru saja terjadi supaya 'click' sesudahnya (dari
+  // mouseup di elemen yang sama) tidak ikut membuka modal edit.
+  let reminderDragging = null;
+  let reminderDidDrag = false;
+  grid.querySelectorAll('.cal-cell-reminder').forEach(rowEl => {
+    rowEl.addEventListener('dragstart', (e) => {
+      reminderDragging = rowEl;
+      reminderDidDrag = false;
+      rowEl.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', rowEl.dataset.calReminder); } catch (err) { /* Safari lama */ }
+    });
+    rowEl.addEventListener('dragover', (e) => {
+      if (!reminderDragging || reminderDragging === rowEl) return;
+      const container = rowEl.closest('.cal-cell-reminders');
+      // Hanya boleh disisipkan di dalam sel tanggal yang sama dengan
+      // pengingat yang sedang ditarik — mencegah geser-antar-tanggal
+      // yang tidak diinginkan (fitur ini cuma untuk urutan dalam 1 hari).
+      if (!container || reminderDragging.closest('.cal-cell-reminders') !== container) return;
+      e.preventDefault();
+      reminderDidDrag = true;
+      const rect = rowEl.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      if (before) container.insertBefore(reminderDragging, rowEl);
+      else container.insertBefore(reminderDragging, rowEl.nextSibling);
+    });
+    rowEl.addEventListener('dragenter', (e) => e.preventDefault());
+    rowEl.addEventListener('drop', (e) => e.preventDefault());
+    rowEl.addEventListener('dragend', async () => {
+      rowEl.classList.remove('dragging');
+      const container = rowEl.closest('.cal-cell-reminders');
+      reminderDragging = null;
+      if (!container) return;
+      const cellEl = container.closest('[data-cal-date]');
+      const cellDateKey = cellEl ? cellEl.dataset.calDate : null;
+      if (!cellDateKey) return;
+      const orderedIds = [...container.querySelectorAll('.cal-cell-reminder[data-cal-reminder]')].map(el => el.dataset.calReminder);
+      // Perbarui state lokal dulu (biar responsif) sebelum menyimpan ke
+      // server, supaya render berikutnya dari listener realtime tidak
+      // sempat mengembalikan urutan lama sekejap.
+      orderedIds.forEach((id, idx) => {
+        const it = state.reminders.find(x => x.id === id);
+        if (it) { if (!it.orderOverrides) it.orderOverrides = {}; it.orderOverrides[cellDateKey] = idx; }
+      });
+      try {
+        await DB.reorderRemindersForDate(cellDateKey, orderedIds);
+      } catch (err) {
+        toast('Gagal menyimpan urutan pengingat: ' + err.message, 'error');
+      }
+    });
+  });
+
+  grid.querySelectorAll('[data-cal-copy-date]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      copyToClipboard(dailyReportText(btn.dataset.calCopyDate));
+    });
+  });
+
   grid.querySelectorAll('[data-cal-reminder]').forEach(row => {
     row.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (reminderDidDrag) { reminderDidDrag = false; return; }
       if (e.target.closest('[data-cal-reminder-done]')) return;
       const item = state.reminders.find(r => r.id === row.dataset.calReminder);
       if (item) openReminderModal(item, null, row.dataset.calOccurrenceDate);
@@ -6303,19 +6427,52 @@ function calCellHTML(y, m, d, outside, remindersByDate, todayKey) {
   if (key === todayKey) classes.push('cal-today');
   if (key === state.calendarSelectedDate) classes.push('cal-selected');
   const remindersHTML = (!outside && items.length > 0)
-    ? `<div class="cal-cell-reminders">${items.map((item, idx) => calCellReminderHTML(item, idx, key)).join('')}</div>`
+    ? `<div class="cal-cell-reminders">${items.map((item) => calCellReminderHTML(item, key)).join('')}</div>`
+    : '';
+  // Tombol "titik merah" di pojok kanan atas sel: menyalin ringkasan
+  // pengingat tanggal ini sebagai teks "Daily Report" siap-tempel (lihat
+  // dailyReportText()). Hanya muncul kalau tanggal itu punya pengingat.
+  const copyBtnHTML = (!outside && items.length > 0)
+    ? `<button class="cal-cell-copy-btn" data-cal-copy-date="${key}" title="Salin sebagai Daily Report">${icon('copy')}</button>`
     : '';
   return `<div class="${classes.join(' ')}" data-cal-date="${key}"${holidayName ? ` title="${escapeHTML(holidayName)}"` : ''}>
+    ${copyBtnHTML}
     ${outside ? '' : `<span class="cal-cell-date">${d}</span>`}
     ${remindersHTML}
   </div>`;
 }
 
-function calCellReminderHTML(item, idx, occurrenceDate) {
-  const num = (item.order !== null && item.order !== undefined && item.order !== '') ? item.order : (idx + 1);
-  return `<div class="cal-cell-reminder${item.done ? ' cal-cell-reminder-done' : ''}" data-cal-reminder="${item.id}" data-cal-occurrence-date="${occurrenceDate}" title="${escapeHTML(item.title)}">
-    <input type="checkbox" class="cal-cell-reminder-done-check" data-cal-reminder-done="${item.id}" ${item.done ? 'checked' : ''} title="Tandai selesai">
-    <span class="cal-cell-reminder-num">${escapeHTML(String(num))}.</span>
+// Menyusun teks "Daily Report" siap-tempel dari seluruh pengingat pada
+// satu tanggal (urutannya sama seperti tampilan di sel kalender, sudah
+// termasuk hasil drag & drop per-tanggal — lihat remindersForDate()).
+// Tiap pengingat dinomori dan JUDULNYA TIDAK IKUT DITULIS — baris
+// bernomor langsung berisi KETERANGAN pengingat itu (baris pertamanya
+// kalau keterangan berbaris-baris/bullet, mis. diketik dengan "- " per
+// poin di form pengingat; baris-baris berikutnya ditaruh apa adanya di
+// bawah baris bernomor, tanpa diberi nomor/awalan tambahan). Keterangan
+// memang opsional — kalau kosong, dipakai judul sebagai gantinya supaya
+// baris bernomor itu tidak kosong.
+function dailyReportText(dateKeyStr) {
+  const [y, m, d] = dateKeyStr.split('-');
+  const items = remindersForDate(dateKeyStr);
+  const lines = ['Daily Report', `${d}/${m}/${y}`, ''];
+  items.forEach((item, idx) => {
+    const desc = (item.description || '').trim();
+    if (!desc) { lines.push(`${idx + 1}. ${item.title}`); return; }
+    const descLines = desc.split('\n');
+    lines.push(`${idx + 1}. ${descLines[0]}`);
+    if (descLines.length > 1) lines.push(descLines.slice(1).join('\n'));
+  });
+  return lines.join('\n');
+}
+
+// Nomor urutan (dulu "1.", "2.", dst.) sudah dihapus dari tampilan —
+// urutan sekarang diatur langsung dengan drag & drop antar pengingat di
+// dalam sel kalender yang sama (lihat wiring drag di renderCalendarGrid),
+// bukan lewat angka yang diketik manual.
+function calCellReminderHTML(item, occurrenceDate) {
+  return `<div class="cal-cell-reminder${item.done ? ' cal-cell-reminder-done' : ''}" data-cal-reminder="${item.id}" data-cal-occurrence-date="${occurrenceDate}" draggable="true" title="${escapeHTML(item.title)}">
+    <input type="checkbox" class="cal-cell-reminder-done-check" data-cal-reminder-done="${item.id}" draggable="false" ${item.done ? 'checked' : ''} title="Tandai selesai">
     <span class="cal-cell-reminder-title">${escapeHTML(item.title)}</span>
   </div>`;
 }
@@ -6606,9 +6763,9 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     <h3 style="padding-right:34px;">
       <span>${isEdit ? 'Edit Pengingat' : 'Tambah Pengingat'}</span>
     </h3>
-    <div class="field" style="display:flex;flex-direction:row;gap:10px;align-items:flex-end;">
-      <div style="width:70px;flex-shrink:0;"><label style="font-size:12.5px;color:var(--slate);font-weight:500;display:block;margin-bottom:5px;" title="Urutan tampil pada rincian jadwal hari itu (opsional)">Urutan</label><input type="number" id="reminder-order-input" placeholder="-" value="${item && item.order !== null && item.order !== undefined ? item.order : ''}" style="width:100%;padding:9px 8px;border:1px solid var(--border);border-radius:7px;font-size:13.5px;background:var(--card);color:var(--text);text-align:center;"></div>
-      <div style="flex:1;min-width:0;"><label style="font-size:12.5px;color:var(--slate);font-weight:500;display:block;margin-bottom:5px;">Judul</label><input type="text" id="reminder-title-input" maxlength="22" placeholder="Contoh: Follow up dokumen pajak" value="${escapeHTML(item ? item.title : '')}" style="width:100%;"></div>
+    <div class="field">
+      <label style="font-size:12.5px;color:var(--slate);font-weight:500;display:block;margin-bottom:5px;">Judul</label>
+      <input type="text" id="reminder-title-input" maxlength="22" placeholder="Contoh: Follow up dokumen pajak" value="${escapeHTML(item ? item.title : '')}" style="width:100%;">
     </div>
     <div class="reminder-pending-row">
       <div style="display:flex;align-items:center;gap:16px;">
@@ -6810,8 +6967,12 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
 
   backdrop.querySelector('#save-reminder').addEventListener('click', async () => {
     const title = backdrop.querySelector('#reminder-title-input').value.trim();
-    const orderRaw = backdrop.querySelector('#reminder-order-input').value.trim();
-    const order = orderRaw === '' ? null : Number(orderRaw);
+    // Urutan tidak lagi diisi manual — sekarang diatur lewat drag & drop
+    // langsung di sel kalender (lihat wiring drag di renderCalendarGrid).
+    // Pengingat yang sudah ada mempertahankan order-nya; pengingat baru
+    // mulai tanpa order (null) sehingga otomatis muncul paling akhir di
+    // tanggalnya sampai digeser manual.
+    const order = item ? (item.order === undefined ? null : item.order) : null;
     const isPending = pendingCheckbox.checked;
     const isAnalisis = analisisCheckbox.checked;
     const hideSchedule = isPending || isAnalisis;

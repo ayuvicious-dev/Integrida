@@ -337,7 +337,44 @@
 //      relevan. occursOnDate(), repeatDisplayLabel(), & REPEAT_LABELS
 //      sudah disesuaikan; data pengingat lama dengan repeat "custom"
 //      otomatis mengikuti perilaku baru ini (tidak ada migrasi data).
-const CACHE_NAME = 'integrida-cache-v57';
+// v58: index.html diperbarui — perbaikan bug: pengingat ber-tag
+//      "Analisis" (jadwal otomatis, lihat fitur "Reminder Analisis")
+//      sebelumnya tidak pernah muncul di grid kalender utama karena
+//      remindersForDate()/occursOnDate() tidak tahu soal mekanisme
+//      penjadwalan Analisis (reminder.date-nya memang dikosongkan).
+//      Sekarang remindersForDate() juga mencocokkan tanggal hasil
+//      analysisSlotsForMonth() untuk reminder ber-tag Analisis, jadi
+//      ikut tampil di sel tanggal yang bersangkutan seperti pengingat
+//      biasa.
+// v59: index.html diperbarui — fitur nomor urutan manual ("Urutan")
+//      pada pengingat kalender dihapus, diganti drag & drop: tarik-geser
+//      pengingat ke atas/bawah di dalam sel tanggal yang sama untuk
+//      mengubah urutannya (pola sama seperti drag & drop kartu
+//      Perusahaan). Input "Urutan" pada modal Tambah/Edit Pengingat juga
+//      dihapus karena sudah digantikan drag ini. Ditambahkan
+//      DB.reorderReminders() (batch write field `order`).
+// v60: index.html diperbarui — perbaikan perilaku drag & drop urutan
+//      pengingat kalender (fitur v59): urutan hasil drag sekarang
+//      disimpan PER TANGGAL (reminder.orderOverrides.<dateKeyStr>),
+//      bukan menimpa field `order` global dokumen. Efeknya, menggeser
+//      urutan pengingat berulang di satu tanggal tidak lagi ikut
+//      mengubah urutannya di tanggal-tanggal kemunculan lain.
+//      DB.reorderReminders() diganti DB.reorderRemindersForDate().
+// v61: index.html diperbarui — tombol bulat merah kecil ditambahkan di
+//      pojok kanan atas tiap sel tanggal kalender yang punya pengingat.
+//      Diklik akan menyalin ringkasan pengingat tanggal itu ke clipboard
+//      sebagai teks "Daily Report" siap-tempel (judul bernomor, dan
+//      keterangan multi-baris/bullet ditaruh apa adanya di bawah judul —
+//      lihat dailyReportText()).
+// v62: index.html diperbarui — perbaikan format "Daily Report" (fitur
+//      v61): baris bernomor sekarang JUDUL PENGINGAT TIDAK IKUT
+//      DITULIS, langsung berisi keterangan (deskripsi) pengingat itu.
+//      Keterangan tetap opsional — kalau kosong, dipakai judul sebagai
+//      gantinya supaya baris bernomor tidak kosong.
+// v63: index.html diperbarui — tombol copy "Daily Report" (fitur v61)
+//      latar bulat merahnya dihapus, sekarang cuma ikon copy polos
+//      berwarna merah tanpa background/bayangan.
+const CACHE_NAME = 'integrida-cache-v63';
 const APP_SHELL = [
   './',
   './index.html',
