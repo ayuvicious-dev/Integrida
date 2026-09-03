@@ -1099,7 +1099,7 @@ const DB = {
       }, (err) => { if (onError) onError(err); else console.error('watchReminders error', err); });
   },
 
-  async addReminder(uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil, analisis, pending }) {
+  async addReminder(uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil, analisis, analisisDay, pending }) {
     await db.collection('reminders').add({
       title: title || '',
       description: description || '',
@@ -1114,6 +1114,7 @@ const DB = {
       priority: priority || 'standard',
       order: (order === '' || order === null || order === undefined) ? null : Number(order),
       analisis: !!analisis,
+      analisisDay: (analisis && analisisDay) ? Number(analisisDay) : null,
       pending: !!pending,
       done: false,
       ownerUid: uid,
@@ -1122,7 +1123,7 @@ const DB = {
     });
   },
 
-  async updateReminder(id, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil, analisis, pending }) {
+  async updateReminder(id, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil, analisis, analisisDay, pending }) {
     await db.collection('reminders').doc(id).update({
       title: title || '',
       description: description || '',
@@ -1137,6 +1138,7 @@ const DB = {
       priority: priority || 'standard',
       order: (order === '' || order === null || order === undefined) ? null : Number(order),
       analisis: !!analisis,
+      analisisDay: (analisis && analisisDay) ? Number(analisisDay) : null,
       pending: !!pending
     });
   },
@@ -6385,22 +6387,111 @@ function reminderPendingTableHTML(items) {
   `;
 }
 
-// ---------- Reminder Analisis (jadwal otomatis, hari kerja Sen–Sab) ----------
+// ---------- Reminder Analisis (jadwal otomatis berbasis tanggal tetap) ----------
 
-// Daftar tanggal hari kerja (Senin–Sabtu, tidak termasuk Minggu & hari
-// libur nasional/cuti bersama) pada satu bulan tertentu. Dipakai sebagai
-// "slot" untuk menyebar rata pengingat yang ditandai Analisis.
-function analysisWorkdaysForMonth(year, month) {
+// Tanggal implementasi Analisis Prioritas: item Analisis berprioritas
+// disebar ke tanggal-tanggal ini, sesuai urutan daftarnya. Kalau salah
+// satu tanggal ini jatuh di hari Minggu atau libur nasional/cuti
+// bersama, jadwalnya otomatis dipindah ke salah satu Tanggal Cadangan
+// di bawah (dipakai berurutan, hanya yang belum terpakai & bukan
+// Minggu/libur).
+const ANALISIS_PRIORITY_DATES = [4, 5, 6, 7, 8, 9, 10, 11, 13, 18, 19, 20, 21, 22, 23, 24, 25, 27];
+// Tanggal Cadangan: dipakai sebagai (a) pengganti Tanggal Prioritas yang
+// jatuh Minggu/libur, dan (b) slot Analisis Standar untuk tanggal yang
+// masih tersisa (belum kebagian Analisis apa pun) — sehingga satu hari
+// maksimal hanya punya satu Analisis (Prioritas ATAU Standar, tidak
+// pernah dua-duanya).
+const ANALISIS_FALLBACK_DATES = [12, 14, 15, 16, 17, 26, 28, 29, 30, 31];
+
+function analysisSortByOrder(a, b) {
+  const ao = (a.order === null || a.order === undefined || a.order === '') ? Infinity : Number(a.order);
+  const bo = (b.order === null || b.order === undefined || b.order === '') ? Infinity : Number(b.order);
+  if (ao !== bo) return ao - bo;
+  return (a.createdAtMs || 0) - (b.createdAtMs || 0);
+}
+
+// Menghitung jadwal Reminder Analisis (Prioritas & Standar) utk satu
+// bulan tertentu. Tiap pengingat Analisis punya tanggal tetap pilihan
+// sendiri (reminder.analisisDay, berulang tiap bulan) — Prioritas
+// memilih dari ANALISIS_PRIORITY_DATES, Standar dari
+// ANALISIS_FALLBACK_DATES (lihat dropdown "Tanggal Analisis" di form
+// pengingat). Kalau tanggal pilihannya jatuh Minggu/libur nasional,
+// ATAU sudah dipakai pengingat Analisis lain bulan ini, otomatis
+// digeser ke Tanggal Cadangan berikutnya yang masih kosong — jadi satu
+// hari tidak pernah punya 2 Analisis. Pengingat lama dari sebelum fitur
+// pilih-tanggal ini ada (belum punya analisisDay) tetap didukung:
+// disebar round-robin ke sisa tanggal yang belum terpakai.
+function analysisSlotsForMonth(year, month) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const days = [];
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dow = new Date(year, month, d).getDay(); // 0=Minggu...6=Sabtu
-    if (dow === 0) continue; // Minggu tidak dihitung
-    const key = dateKey(year, month, d);
-    if (idHolidayName(key)) continue; // libur nasional/cuti bersama tidak dihitung
-    days.push({ key, day: d, dow, items: [] });
+  const exists = (d) => d >= 1 && d <= daysInMonth;
+  const isBlocked = (d) => {
+    const dow = new Date(year, month, d).getDay(); // 0=Minggu
+    if (dow === 0) return true;
+    if (idHolidayName(dateKey(year, month, d))) return true;
+    return false;
+  };
+  const toSlot = (d) => ({ key: dateKey(year, month, d), day: d, dow: new Date(year, month, d).getDay(), items: [] });
+
+  const usedDates = new Set();
+  const slotsByDay = new Map();
+  const getSlot = (d) => {
+    if (!slotsByDay.has(d)) slotsByDay.set(d, toSlot(d));
+    return slotsByDay.get(d);
+  };
+  const nextFallback = () => {
+    for (const d of ANALISIS_FALLBACK_DATES) {
+      if (exists(d) && !isBlocked(d) && !usedDates.has(d)) return d;
+    }
+    return null; // tanggal cadangan sudah habis bulan ini
+  };
+
+  const priorityItems = state.reminders.filter(r => r.analisis && r.priority === 'priority').sort(analysisSortByOrder);
+  const standardItems = state.reminders.filter(r => r.analisis && r.priority !== 'priority').sort(analysisSortByOrder);
+
+  const prioritySlotList = [];
+  const standardSlotList = [];
+  const undatedPriority = [];
+  const undatedStandard = [];
+
+  const placeDated = (item, slotList, undatedBucket) => {
+    const wanted = Number(item.analisisDay) || null;
+    if (!wanted) { undatedBucket.push(item); return; }
+    const d = (exists(wanted) && !isBlocked(wanted) && !usedDates.has(wanted)) ? wanted : nextFallback();
+    if (d == null) return; // tidak ada slot tersisa bulan ini utk item ini
+    usedDates.add(d);
+    const slot = getSlot(d);
+    slot.items.push(item);
+    if (!slotList.includes(slot)) slotList.push(slot);
+  };
+  priorityItems.forEach(item => placeDated(item, prioritySlotList, undatedPriority));
+  standardItems.forEach(item => placeDated(item, standardSlotList, undatedStandard));
+
+  // Sisa tanggal (gabungan daftar Prioritas + Cadangan) yang masih
+  // tersedia & belum terpakai — dipakai utk pengingat lama tanpa
+  // analisisDay, round-robin, Prioritas kebagian duluan.
+  const leftover = Array.from(new Set([...ANALISIS_PRIORITY_DATES, ...ANALISIS_FALLBACK_DATES]))
+    .filter(d => exists(d) && !isBlocked(d) && !usedDates.has(d))
+    .sort((a, b) => a - b);
+  if (leftover.length > 0) {
+    const undatedAll = [
+      ...undatedPriority.map(it => ({ it, slotList: prioritySlotList })),
+      ...undatedStandard.map(it => ({ it, slotList: standardSlotList })),
+    ];
+    undatedAll.forEach((entry, i) => {
+      const d = leftover[i % leftover.length];
+      const slot = getSlot(d);
+      slot.items.push(entry.it);
+      if (!entry.slotList.includes(slot)) entry.slotList.push(slot);
+    });
   }
-  return days;
+
+  const sortSlots = (list) => list.slice().sort((a, b) => a.day - b.day);
+  return {
+    prioritySlots: sortSlots(prioritySlotList),
+    standardSlots: sortSlots(standardSlotList),
+    priorityCount: priorityItems.length,
+    standardCount: standardItems.length,
+  };
 }
 
 function openAnalisisScheduleModal() {
@@ -6423,48 +6514,17 @@ function openAnalisisScheduleModal() {
 function renderAnalisisScheduleBody(backdrop, year, month) {
   const body = backdrop.querySelector('#analisis-schedule-body');
   if (!body) return;
-  const workdaysBase = analysisWorkdaysForMonth(year, month);
-  // Prioritas selalu didahulukan (disortir duluan) supaya kebagian slot
-  // hari kerja paling awal; Standar baru mengisi slot sesudahnya.
-  const analisisItems = state.reminders.filter(r => r.analisis)
-    .sort((a, b) => {
-      const ap = a.priority === 'priority' ? 0 : 1;
-      const bp = b.priority === 'priority' ? 0 : 1;
-      if (ap !== bp) return ap - bp;
-      const ao = (a.order === null || a.order === undefined || a.order === '') ? Infinity : Number(a.order);
-      const bo = (b.order === null || b.order === undefined || b.order === '') ? Infinity : Number(b.order);
-      if (ao !== bo) return ao - bo;
-      return (a.createdAtMs || 0) - (b.createdAtMs || 0);
-    });
+  const { prioritySlots, standardSlots, priorityCount, standardCount } = analysisSlotsForMonth(year, month);
 
-  if (analisisItems.length === 0) {
+  if (priorityCount === 0 && standardCount === 0) {
     body.innerHTML = `<div class="upgrade-empty">Belum ada pengingat yang ditandai "Analisis".</div>`;
     return;
   }
-  if (workdaysBase.length === 0) {
-    body.innerHTML = `<div class="upgrade-empty">Tidak ada hari kerja (Senin–Sabtu, di luar libur nasional) tersedia di bulan ini.</div>`;
-    return;
-  }
 
-  // Sebar rata: item ke-i (sudah terurut Prioritas duluan) masuk ke slot
-  // hari kerja ke-(i % jumlah hari kerja) dari kolam hari kerja bersama —
-  // jadi Prioritas otomatis kebagian tanggal-tanggal paling awal bulan
-  // ini, baru diikuti Standar mengisi tanggal-tanggal sesudahnya (atau
-  // berulang/round-robin kalau item lebih banyak dari hari kerja yang
-  // tersedia). Tabelnya sendiri dipisah per klasifikasi di bawah.
-  const priorityWorkdays = workdaysBase.map(w => ({ ...w, items: [] }));
-  const standardWorkdays = workdaysBase.map(w => ({ ...w, items: [] }));
-  analisisItems.forEach((item, i) => {
-    const idx = i % workdaysBase.length;
-    (item.priority === 'priority' ? priorityWorkdays : standardWorkdays)[idx].items.push(item);
-  });
-
-  const priorityCount = analisisItems.filter(item => item.priority === 'priority').length;
-  const standardCount = analisisItems.length - priorityCount;
   const usingFallback = !state.onlineHolidays;
-  const noteHTML = `<div style="font-size:11.5px;color:var(--slate);margin-bottom:6px;">${analisisItems.length} pengingat disebar ke ${workdaysBase.length} hari kerja (Senin–Sabtu); Minggu &amp; hari libur nasional tidak dihitung. Prioritas kebagian tanggal paling awal, Standar mengisi sesudahnya.${usingFallback ? ' Data hari libur online gagal dimuat, memakai daftar cadangan bawaan aplikasi.' : ''}</div>`;
-  const prioritySectionHTML = `<div class="analisis-tier-heading">Prioritas</div>${priorityCount > 0 ? analisisScheduleTableHTML(year, month, priorityWorkdays) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada pengingat Analisis berprioritas.</div>`}`;
-  const standardSectionHTML = `<div class="analisis-tier-heading">Standar</div>${standardCount > 0 ? analisisScheduleTableHTML(year, month, standardWorkdays) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada pengingat Analisis standar.</div>`}`;
+  const noteHTML = `<div style="font-size:11.5px;color:var(--slate);margin-bottom:6px;">Tiap pengingat Analisis berulang tiap bulan di tanggal pilihannya sendiri (Prioritas: ${ANALISIS_PRIORITY_DATES.join(', ')}; Standar: ${ANALISIS_FALLBACK_DATES.join(', ')}). Kalau tanggal itu jatuh Minggu/libur nasional atau bentrok pengingat lain, otomatis dipindah ke tanggal cadangan berikutnya yang masih kosong — satu hari maksimal satu Analisis.${usingFallback ? ' Data hari libur online gagal dimuat, memakai daftar cadangan bawaan aplikasi.' : ''}</div>`;
+  const prioritySectionHTML = `<div class="analisis-tier-heading">Prioritas</div>${priorityCount > 0 ? (prioritySlots.length > 0 ? analisisScheduleTableHTML(year, month, prioritySlots) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada slot tanggal Prioritas tersedia bulan ini.</div>`) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada pengingat Analisis berprioritas.</div>`}`;
+  const standardSectionHTML = `<div class="analisis-tier-heading">Standar</div>${standardCount > 0 ? (standardSlots.length > 0 ? analisisScheduleTableHTML(year, month, standardSlots) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada slot tanggal Standar tersisa bulan ini.</div>`) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada pengingat Analisis standar.</div>`}`;
   body.innerHTML = noteHTML + prioritySectionHTML + standardSectionHTML;
 
   body.querySelectorAll('[data-reminder-check]').forEach(cb => {
@@ -6553,12 +6613,16 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     <div class="reminder-pending-row">
       <div style="display:flex;align-items:center;gap:16px;">
         <label class="reminder-pending-check"><input type="checkbox" id="reminder-pending-input" ${(item && isReminderPending(item)) ? 'checked' : ''}><span>Pending</span></label>
-        <label class="reminder-pending-check" title="Tandai untuk masuk ke fitur 'Reminder Analisis' (dijadwalkan otomatis ke hari kerja Sen\u2013Sab bulan berjalan)"><input type="checkbox" id="reminder-analisis-input" ${item && item.analisis ? 'checked' : ''}><span>Analisis</span></label>
+        <label class="reminder-pending-check" title="Tandai untuk masuk ke fitur 'Reminder Analisis': pilih tanggal tetap yang berulang tiap bulan, otomatis digeser ke tanggal cadangan kalau jatuh Minggu/libur nasional"><input type="checkbox" id="reminder-analisis-input" ${item && item.analisis ? 'checked' : ''}><span>Analisis</span></label>
       </div>
       <div class="reminder-priority-group" id="reminder-priority-group">
         <label><input type="radio" name="reminder-priority" value="priority" ${item && item.priority === 'priority' ? 'checked' : ''}><span>Prioritas</span></label>
         <label><input type="radio" name="reminder-priority" value="standard" ${!item || item.priority !== 'priority' ? 'checked' : ''}><span>Standar</span></label>
       </div>
+    </div>
+    <div class="field" id="reminder-analisis-day-row" style="display:none;">
+      <label title="Tanggal ini berulang tiap bulan. Kalau jatuh Minggu/libur nasional (atau bentrok pengingat Analisis lain), otomatis digeser ke tanggal cadangan berikutnya.">Tanggal Analisis (berulang tiap bulan)</label>
+      <select id="reminder-analisis-day-input"></select>
     </div>
     <div style="display:flex;gap:12px;" id="reminder-datetime-row">
       <div class="field" style="flex:1;">
@@ -6674,6 +6738,21 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
   const shiftSaturdayInput = backdrop.querySelector('#reminder-shiftsaturday-input');
   const shiftSundayInput = backdrop.querySelector('#reminder-shiftsunday-input');
   const priorityGroup = backdrop.querySelector('#reminder-priority-group');
+  const analisisDayRow = backdrop.querySelector('#reminder-analisis-day-row');
+  const analisisDaySelect = backdrop.querySelector('#reminder-analisis-day-input');
+  // Opsi tanggal menyesuaikan tier yang dipilih: Prioritas dari
+  // ANALISIS_PRIORITY_DATES, Standar dari ANALISIS_FALLBACK_DATES.
+  // Kalau item yang diedit sudah punya analisisDay yang masih cocok
+  // dengan tier saat ini, itu yang dipilih; kalau tidak, default ke
+  // opsi pertama di daftar.
+  const populateAnalisisDayOptions = () => {
+    const tierInput = backdrop.querySelector('input[name="reminder-priority"]:checked');
+    const tier = tierInput ? tierInput.value : 'standard';
+    const list = tier === 'priority' ? ANALISIS_PRIORITY_DATES : ANALISIS_FALLBACK_DATES;
+    const keepValue = (item && item.analisisDay && list.includes(Number(item.analisisDay))) ? Number(item.analisisDay) : null;
+    analisisDaySelect.innerHTML = list.map(d => `<option value="${d}">Tanggal ${d}</option>`).join('');
+    if (keepValue !== null) analisisDaySelect.value = String(keepValue);
+  };
   const dateRangeCheckbox = backdrop.querySelector('#reminder-daterange-input');
   const dateRangeLabel = backdrop.querySelector('#reminder-daterange-label');
   const enddateRow = backdrop.querySelector('#reminder-enddate-row');
@@ -6718,10 +6797,13 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     repeatRow.style.display = hideSchedule ? 'none' : '';
     if (hideSchedule) { dateInput.value = ''; timeInput.value = ''; repeatSelect.value = 'none'; dateRangeCheckbox.checked = false; enddateInput.value = ''; }
     priorityGroup.classList.toggle('show', hideSchedule);
+    analisisDayRow.style.display = isAnalisis ? '' : 'none';
+    if (isAnalisis) populateAnalisisDayOptions();
     applyRepeatState();
   };
   pendingCheckbox.addEventListener('change', applyPendingState);
   analisisCheckbox.addEventListener('change', applyPendingState);
+  backdrop.querySelectorAll('input[name="reminder-priority"]').forEach(r => r.addEventListener('change', () => { if (analisisCheckbox.checked) populateAnalisisDayOptions(); }));
   repeatSelect.addEventListener('change', applyRepeatState);
   dateRangeCheckbox.addEventListener('change', applyRepeatState);
   applyPendingState();
@@ -6747,9 +6829,11 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     const shiftSunday = (repeat === 'monthly' && !isRange) ? shiftSundayInput.checked : false;
     const priority = hideSchedule ? (backdrop.querySelector('input[name="reminder-priority"]:checked').value) : 'standard';
     const analisis = isAnalisis;
+    const analisisDay = isAnalisis ? Number(analisisDaySelect.value) : null;
     const description = backdrop.querySelector('#reminder-desc-input').value.trim();
     if (!title) { toast('Judul wajib diisi', 'error'); return; }
     if (title.length > 22) { toast('Judul maksimal 22 karakter', 'error'); return; }
+    if (isAnalisis && !analisisDay) { toast('Pilih Tanggal Analisis', 'error'); return; }
     if (isCustomRepeat && customDays.length === 0) { toast('Pilih minimal satu hari untuk repeat "Bulanan, Hari Tertentu"', 'error'); return; }
     if (isCustomRepeat && !date) { toast('Isi Tanggal untuk repeat "Bulanan, Hari Tertentu" (menentukan tanggal yang diulang tiap bulan)', 'error'); return; }
     if (isWeeklyCustom && customDays.length === 0) { toast('Pilih minimal satu hari untuk repeat "Mingguan, Hari Tertentu"', 'error'); return; }
@@ -6761,10 +6845,10 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     }
     try {
       if (isEdit) {
-        await DB.updateReminder(item.id, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil: item.repeatUntil || '', analisis, pending: isPending });
+        await DB.updateReminder(item.id, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil: item.repeatUntil || '', analisis, analisisDay, pending: isPending });
         toast('Pengingat diperbarui', 'success');
       } else {
-        await DB.addReminder(state.user.uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, analisis, pending: isPending });
+        await DB.addReminder(state.user.uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, analisis, analisisDay, pending: isPending });
         toast('Pengingat ditambahkan', 'success');
       }
       backdrop.remove();
