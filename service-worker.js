@@ -471,7 +471,34 @@
 //      keras kepala, tidak ikut ter-refresh walau Service Worker/cache
 //      HTML sudah update) dipaksa dianggap sebagai URL baru dan diambil
 //      ulang dari server, tanpa perlu pengguna menghapus data situs.
-const CACHE_NAME = 'integrida-cache-v73';
+// v74: index.html diperbarui — judul tab browser (<title>) diperpendek
+//      jadi cuma "Integrida" (sebelumnya "Integrida — Konsolidasi
+//      Laporan Keuangan").
+// v75: index.html diperbarui — perbaikan bug status "selesai" pengingat
+//      berulang: sebelumnya field `done` adalah status TUNGGAL per
+//      dokumen reminder, sehingga mencentang "selesai" pada satu tanggal
+//      kemunculan (sel kalender / jadwal Reminder Analisis) ikut
+//      menandai SEMUA kemunculan reminder yang sama di tanggal lain
+//      sebagai selesai juga. Sekarang status selesai untuk pengingat
+//      yang punya tanggal kemunculan (sel kalender & jadwal Reminder
+//      Analisis) disimpan PER TANGGAL di map reminder.doneDates.<tgl>
+//      (pola sama seperti orderOverrides) — mencentang di satu tanggal
+//      TIDAK lagi mengubah status pengingat lain/kemunculan lain. Field
+//      `done` lama tetap dipakai apa adanya khusus untuk Pending
+//      Reminder (tanpa tanggal) & Reminder Analisis yang bulan ini gagal
+//      kebagian tanggal sama sekali, karena keduanya tidak punya satu
+//      tanggal kemunculan pasti.
+// v76: index.html diperbarui — perbaikan performa Dashboard (terutama
+//      terasa lambat di HP): DB.watchAllStatements (dipakai Dashboard &
+//      Perbandingan) sebelumnya memanggil callback SETIAP KALI satu
+//      perusahaan (dari listener realtime masing-masing) selesai
+//      memuat data — saat pertama dibuka, ini memicu Dashboard
+//      di-render ulang TOTAL (termasuk destroy & buat ulang 4 chart
+//      Chart.js) berkali-kali berturut-turut sesuai jumlah perusahaan,
+//      bukan cuma sekali. Sekarang callback di-debounce 150ms, jadi
+//      snapshot awal dari seluruh perusahaan digabung dulu lalu
+//      Dashboard cuma di-render SEKALI saat pemuatan awal.
+const CACHE_NAME = 'integrida-cache-v76';
 const APP_SHELL = [
   './',
   './index.html',

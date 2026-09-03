@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Integrida — Konsolidasi Laporan Keuangan</title>
+<title>Integrida</title>
 <meta name="description" content="Aplikasi konsolidasi laporan keuangan multi-perusahaan: impor Excel, perbandingan antar periode, dan analisis rasio likuiditas, solvabilitas, profitabilitas.">
 <meta name="theme-color" content="#16213A">
 <script>
@@ -1123,24 +1123,40 @@ const DB = {
   },
 
   // Menggabungkan watcher beberapa perusahaan sekaligus jadi satu
-  // callback tunggal (dipakai di Dashboard & Perbandingan).
+  // callback tunggal (dipakai di Dashboard & Perbandingan). Di-DEBOUNCE
+  // (150ms) supaya saat pemuatan awal — tiap perusahaan punya listener
+  // Firestore SENDIRI-SENDIRI dan snapshot pertamanya datang satu-satu,
+  // bukan sekaligus — callback (onData) TIDAK dipanggil berkali-kali
+  // berturut-turut (yang sebelumnya memicu Dashboard render ulang total
+  // + destroy/buat-ulang 4 chart Chart.js tiap kali satu perusahaan
+  // selesai dimuat, terasa berat/lambat terutama di HP). Update
+  // berikutnya (realtime, setelah pemuatan awal selesai) tetap terasa
+  // instan karena delay-nya sangat singkat.
   watchAllStatements(companyIds, onData, onError) {
     const cache = {};
     const metaMap = {};
+    let debounceTimer = null;
     const emit = () => {
-      const merged = companyIds.flatMap(id => cache[id] || []);
-      const aggMeta = {
-        pendingWrites: Object.values(metaMap).some(m => m.pendingWrites),
-        fromCache: Object.values(metaMap).some(m => m.fromCache)
-      };
-      onData(merged, aggMeta);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        const merged = companyIds.flatMap(id => cache[id] || []);
+        const aggMeta = {
+          pendingWrites: Object.values(metaMap).some(m => m.pendingWrites),
+          fromCache: Object.values(metaMap).some(m => m.fromCache)
+        };
+        onData(merged, aggMeta);
+      }, 150);
     };
     const unsubs = companyIds.map(id => this.watchStatements(id, (statements, meta) => {
       cache[id] = statements;
       metaMap[id] = meta;
       emit();
     }, onError));
-    return () => unsubs.forEach(u => { if (typeof u === 'function') u(); });
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      unsubs.forEach(u => { if (typeof u === 'function') u(); });
+    };
   },
 
   // ---- Setting → Upgrade Aplikasi (checklist poin rencana/progres upgrade) ----
@@ -1241,6 +1257,14 @@ const DB = {
 
   async setReminderDone(id, done) {
     await db.collection('reminders').doc(id).update({ done: !!done });
+  },
+
+  // Status "selesai" pengingat berulang PER TANGGAL kemunculan — disimpan
+  // di map bersarang `doneDates.<dateKeyStr>` (dot-path Firestore), pola
+  // sama seperti orderOverrides. Supaya mencentang "selesai" pada satu
+  // tanggal TIDAK ikut menandai kemunculan yang sama di tanggal lain.
+  async setReminderDoneForDate(id, dateKeyStr, done) {
+    await db.collection('reminders').doc(id).update({ [`doneDates.${dateKeyStr}`]: !!done });
   },
 
   // Menyimpan urutan pengingat hasil drag & drop di SATU sel tanggal
@@ -6315,6 +6339,19 @@ function analisisDatesForMonth(year, month) {
 // berulang). Kalau tanggal ini belum pernah punya override sendiri,
 // jatuh ke reminder.order (order lama/global, atau tak terurut =
 // Infinity, ditaruh paling akhir).
+// Status "selesai" pengingat berulang dibaca PER TANGGAL kemunculan dari
+// map reminder.doneDates = { [dateKeyStr]: true } — lihat
+// DB.setReminderDoneForDate(). Dipakai di sel kalender, jadwal Reminder
+// Analisis, & PDF agenda, supaya mencentang selesai di satu tanggal tidak
+// ikut menandai kemunculan yang sama di tanggal lain. Field `done` lama
+// (boolean tunggal per dokumen) tetap dipakai HANYA untuk Pending
+// Reminder (isReminderPending) & pengingat Analisis yang bulan ini gagal
+// kebagian tanggal (unscheduled) — keduanya tidak punya satu tanggal
+// kemunculan pasti untuk dijadikan kunci.
+function isReminderDoneOnDate(item, dateKeyStr) {
+  return !!(item.doneDates && item.doneDates[dateKeyStr]);
+}
+
 function reminderOrderForDate(item, dateKeyStr) {
   const overrides = item.orderOverrides;
   if (overrides && Object.prototype.hasOwnProperty.call(overrides, dateKeyStr)) {
@@ -6580,7 +6617,7 @@ async function exportCalendarAgendaPDF() {
       for (const item of items) {
         if (ty + lineH > maxY) break;
         const label = pdfEllipsize(pdf, (item.title || '(Tanpa judul)'), colW - padX * 2);
-        pdf.setTextColor(...(item.done ? SLATE : INK));
+        pdf.setTextColor(...(isReminderDoneOnDate(item, key) ? SLATE : INK));
         pdf.text(`• ${label}`, cx + padX, ty);
         ty += lineH;
         shown++;
@@ -6686,7 +6723,12 @@ function renderCalendarGrid() {
   const badge = document.getElementById('cal-pending-badge');
   if (badge) { badge.style.display = pendingCount > 0 ? 'inline-flex' : 'none'; }
 
-  const analisisCount = state.reminders.filter(r => r.analisis && !r.done).length;
+  const analisisDateMapForBadge = analisisDatesForMonth(year, month);
+  const analisisCount = state.reminders.filter(r => {
+    if (!r.analisis) return false;
+    const occDate = analisisDateMapForBadge.get(r.id);
+    return occDate ? !isReminderDoneOnDate(r, occDate) : true; // belum kebagian tanggal bulan ini juga dihitung belum selesai
+  }).length;
   const analisisBadge = document.getElementById('cal-analisis-badge');
   if (analisisBadge) { analisisBadge.style.display = analisisCount > 0 ? 'inline-flex' : 'none'; }
 
@@ -6815,8 +6857,9 @@ function renderCalendarGrid() {
     checkbox.addEventListener('click', (e) => e.stopPropagation());
     checkbox.addEventListener('change', async (e) => {
       const id = checkbox.dataset.calReminderDone;
+      const occurrenceDate = checkbox.closest('[data-cal-reminder]')?.dataset.calOccurrenceDate;
       try {
-        await DB.setReminderDone(id, e.target.checked);
+        await DB.setReminderDoneForDate(id, occurrenceDate, e.target.checked);
       } catch (err) {
         toast('Gagal memperbarui status: ' + err.message, 'error');
         e.target.checked = !e.target.checked;
@@ -6917,8 +6960,9 @@ function dailyReportText(dateKeyStr) {
 // dalam sel kalender yang sama (lihat wiring drag di renderCalendarGrid),
 // bukan lewat angka yang diketik manual.
 function calCellReminderHTML(item, occurrenceDate) {
-  return `<div class="cal-cell-reminder${item.done ? ' cal-cell-reminder-done' : ''}" data-cal-reminder="${item.id}" data-cal-occurrence-date="${occurrenceDate}" draggable="true" title="${escapeHTML(item.title)}">
-    <input type="checkbox" class="cal-cell-reminder-done-check" data-cal-reminder-done="${item.id}" draggable="false" ${item.done ? 'checked' : ''} title="Tandai selesai">
+  const isDone = isReminderDoneOnDate(item, occurrenceDate);
+  return `<div class="cal-cell-reminder${isDone ? ' cal-cell-reminder-done' : ''}" data-cal-reminder="${item.id}" data-cal-occurrence-date="${occurrenceDate}" draggable="true" title="${escapeHTML(item.title)}">
+    <input type="checkbox" class="cal-cell-reminder-done-check" data-cal-reminder-done="${item.id}" draggable="false" ${isDone ? 'checked' : ''} title="Tandai selesai">
     <span class="cal-cell-reminder-title">${escapeHTML(item.title)}</span>
   </div>`;
 }
@@ -7176,7 +7220,12 @@ function renderAnalisisScheduleBody(backdrop, year, month) {
   body.querySelectorAll('[data-reminder-check]').forEach(cb => {
     cb.addEventListener('change', async () => {
       try {
-        await DB.setReminderDone(cb.dataset.reminderCheck, cb.checked);
+        const occurrenceDate = cb.dataset.reminderCheckDate;
+        if (occurrenceDate) {
+          await DB.setReminderDoneForDate(cb.dataset.reminderCheck, occurrenceDate, cb.checked);
+        } else {
+          await DB.setReminderDone(cb.dataset.reminderCheck, cb.checked);
+        }
       } catch (err) {
         toast('Gagal memperbarui status: ' + err.message, 'error');
       }
@@ -7209,7 +7258,7 @@ function analisisScheduleTableHTML(year, month, workdays) {
     if (!w.items.length) return;
     const dayName = CAL_DOW_BY_JSDOW[w.dow];
     rowsHTML.push(`<tr class="reminder-group-row"><td colspan="3">${dayName}, ${w.day} ${CAL_MONTH_NAMES[month]} ${year}</td></tr>`);
-    w.items.forEach(item => rowsHTML.push(reminderRowHTML(item)));
+    w.items.forEach(item => rowsHTML.push(reminderRowHTML(item, w.key)));
   });
   return `
     <div class="table-wrap">
@@ -7240,15 +7289,24 @@ function analisisUnscheduledHTML(items) {
   `;
 }
 
-function reminderRowHTML(item) {
+// occurrenceDate: tanggal kemunculan spesifik baris ini (dipakai jadwal
+// Reminder Analisis, tiap item punya tanggal pasti bulan berjalan) —
+// kalau diisi, status "selesai" dibaca/disimpan PER TANGGAL itu
+// (isReminderDoneOnDate/setReminderDoneForDate). Kalau kosong (dipakai
+// Pending Reminder & item Analisis yang gagal terjadwal bulan ini),
+// tetap pakai field `done` global lama karena tidak ada satu tanggal
+// kemunculan pasti untuk dijadikan kunci.
+function reminderRowHTML(item, occurrenceDate) {
   const repeat = item.repeat || 'none';
   const hasEndDate = !!item.endDate && item.endDate >= item.date;
   const showRepeatBadge = repeat !== 'none' || hasEndDate;
+  const isDone = occurrenceDate ? isReminderDoneOnDate(item, occurrenceDate) : !!item.done;
+  const dateAttr = occurrenceDate ? ` data-reminder-check-date="${occurrenceDate}"` : '';
   return `
-    <tr class="reminder-row${item.done ? ' reminder-row-done' : ''}">
-      <td class="reminder-col-check"><input type="checkbox" data-reminder-check="${item.id}" ${item.done ? 'checked' : ''} title="Tandai selesai"></td>
+    <tr class="reminder-row${isDone ? ' reminder-row-done' : ''}">
+      <td class="reminder-col-check"><input type="checkbox" data-reminder-check="${item.id}"${dateAttr} ${isDone ? 'checked' : ''} title="Tandai selesai"></td>
       <td class="reminder-col-body">
-        <div class="reminder-item-title" style="${item.done ? 'text-decoration:line-through;color:var(--slate-light);' : ''}">${item.time ? `<span class="reminder-item-time">${escapeHTML(item.time)}</span> ` : ''}${escapeHTML(item.title)}${showRepeatBadge ? ` <span class="reminder-item-repeat">↻ ${repeatDisplayLabel(item)}</span>` : ''}</div>
+        <div class="reminder-item-title" style="${isDone ? 'text-decoration:line-through;color:var(--slate-light);' : ''}">${item.time ? `<span class="reminder-item-time">${escapeHTML(item.time)}</span> ` : ''}${escapeHTML(item.title)}${showRepeatBadge ? ` <span class="reminder-item-repeat">↻ ${repeatDisplayLabel(item)}</span>` : ''}</div>
         ${item.description ? `<div class="reminder-item-desc">${escapeHTML(item.description)}</div>` : ''}
       </td>
       <td class="reminder-col-actions">
