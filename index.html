@@ -18,6 +18,21 @@
     document.documentElement.setAttribute('data-theme', theme);
   } catch (e) {}
 })();
+// Anti-FOUC: terapkan ukuran font tersimpan SEBELUM halaman dirender,
+// supaya tidak ada "lompatan" ukuran sesaat setelah load (lihat fungsi
+// applyFontSize() di bagian JS untuk penjelasan lengkap). Nilainya
+// dipasang sbg CSS custom property --app-zoom, BUKAN langsung ke
+// document.documentElement.style.zoom — supaya elemen position:fixed
+// (sidebar, bottom-nav, FAB, modal, toast) tidak ikut ter-zoom & jadi
+// salah posisi/terpotong di sebagian browser mobile (lihat komentar
+// pada aturan CSS ".main{zoom:...}" / ".modal{zoom:...}").
+(function () {
+  try {
+    var FONT_SIZE_ZOOM = { kecil: '90%', normal: '100%', besar: '112%', 'sangat-besar': '125%' };
+    var saved = localStorage.getItem('integrida-font-size');
+    document.documentElement.style.setProperty('--app-zoom', FONT_SIZE_ZOOM[saved] || FONT_SIZE_ZOOM.normal);
+  } catch (e) {}
+})();
 </script>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
@@ -28,6 +43,18 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" crossorigin="anonymous">
 <style>
 :root{
+  /* Ukuran zoom aplikasi (fitur "Ukuran Font" di menu Setting), default
+     100% = normal. Nilai aktualnya di-set lewat JS (applyFontSize() /
+     script anti-FOUC di <head>) sbg inline style pada <html>, ini cuma
+     fallback. Dipakai HANYA pada .main & .modal — lihat penjelasan di
+     dekat deklarasi kedua aturan tsb. */
+  --app-zoom:100%;
+  /* Logo Integrida (monogram "C" + grafik batang) sbg CSS mask, supaya
+     warnanya bisa ikut menyesuaikan tema light/dark lewat background-color
+     di elemen yang memakainya (.logo-mark), bukan warna tetap dari file
+     gambar. Latar putih pada gambar asli sudah dihapus (jadi transparan)
+     saat mask ini dibuat. */
+  --logo-mask-image:url(data:image/png;base64,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);
   /* Warna aksen brand (tetap sama di light & dark mode, dipakai untuk
      tombol utama, badge sinkron, toast, dsb — bukan warna teks/latar
      konten yang perlu berganti antar tema). */
@@ -172,9 +199,20 @@ input,select{font-family:inherit;}
   padding:22px 20px 18px 20px;
   border-bottom:1px solid var(--sidebar-border);
 }
+/* Logo Integrida sbg CSS mask (lihat --logo-mask-image di :root) —
+   warnanya otomatis mengikuti var(--...) yang dipasang di tiap konteks
+   pemakaian (sidebar/login/loading), supaya kontras di light & dark
+   mode tanpa perlu 2 file gambar terpisah. */
+.logo-mark{
+  -webkit-mask-image:var(--logo-mask-image);mask-image:var(--logo-mask-image);
+  -webkit-mask-size:contain;mask-size:contain;
+  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
+  -webkit-mask-position:center;mask-position:center;
+  display:inline-block;
+}
 .sidebar-brand .mark{
-  width:32px;height:32px;border-radius:8px;flex-shrink:0;
-  object-fit:contain;background:var(--card);
+  width:32px;height:32px;flex-shrink:0;
+  background-color:var(--sidebar-text-strong);
 }
 .sidebar-brand .name{font-family:var(--font-display);font-weight:600;font-size:18px;color:var(--sidebar-text-strong);letter-spacing:.2px;}
 .sidebar-brand .tag{font-size:10.5px;color:var(--sidebar-text-muted);letter-spacing:.6px;text-transform:uppercase;}
@@ -209,7 +247,16 @@ input,select{font-family:inherit;}
 .logout-btn:hover{background:var(--sidebar-hover-bg);}
 
 .sidebar{display:none;}
-.main{margin-left:0;flex:1;display:flex;flex-direction:column;min-height:100vh;}
+/* Fitur "Ukuran Font" (menu Setting) diterapkan di sini, di-scope HANYA
+   ke .main (topbar + konten tiap halaman: Dashboard, tabel, kartu KPI,
+   dst.) & .modal (isi dialog, lihat aturan .modal di bawah) — SENGAJA
+   tidak di seluruh <html>, supaya elemen position:fixed (sidebar,
+   bottom-nav mobile, tombol FAB, overlay modal, toast) tetap dihitung
+   relatif ke viewport asli & tidak ikut ter-zoom. Kalau zoom dipasang
+   di leluhur elemen fixed, sebagian browser mobile (terutama WebKit)
+   salah menghitung posisinya — bikin bagian tsb tampak terpotong atau
+   seperti halaman auto-zoom-in saat dibuka. */
+.main{margin-left:0;flex:1;display:flex;flex-direction:column;min-height:100vh;zoom:var(--app-zoom,100%);}
 .topbar{
   height:62px;flex-shrink:0;background:var(--card);border-bottom:1px solid var(--border);
   display:flex;align-items:center;justify-content:space-between;padding:0 26px;position:sticky;top:0;z-index:5;
@@ -586,7 +633,7 @@ tbody tr:hover{background:var(--surface-2);}
 .modal-backdrop{
   position:fixed;inset:0;background:rgba(15,20,30,0.55);display:flex;align-items:center;justify-content:center;z-index:50;
 }
-.modal{background:var(--card);color:var(--text);border-radius:12px;width:460px;max-width:92vw;padding:24px;max-height:88vh;overflow-y:auto;position:relative;}
+.modal{background:var(--card);color:var(--text);border-radius:12px;width:460px;max-width:92vw;padding:24px;max-height:88vh;overflow-y:auto;position:relative;zoom:var(--app-zoom,100%);}
 .modal-close{position:absolute;top:16px;right:16px;width:28px;height:28px;border-radius:50%;background:transparent;border:none;cursor:pointer;color:var(--slate);display:flex;align-items:center;justify-content:center;}
 .modal-close:hover{background:var(--surface-2);color:var(--text);}
 .modal-close svg{width:16px;height:16px;}
@@ -640,8 +687,12 @@ tbody tr:hover{background:var(--surface-2);}
   background-image:repeating-linear-gradient(to bottom, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 30px);}
 .auth-card{width:380px;max-width:92vw;background:#fff;border-radius:14px;padding:32px 28px;}
 .auth-brand{display:flex;align-items:center;gap:10px;margin-bottom:22px;}
-.auth-brand .mark{width:36px;height:36px;border-radius:9px;object-fit:contain;flex-shrink:0;}
-.auth-brand .name{font-family:var(--font-display);font-weight:700;font-size:20px;}
+/* Kartu login (.auth-card) selalu berlatar putih di kedua tema (lihat
+   komentar pada .auth-card), jadi warna logo di sini SENGAJA dikunci ke
+   navy tetap (bukan var(--text) yang ikut berganti terang/gelap) supaya
+   kontrasnya tetap terjaga di kedua tema. */
+.auth-brand .mark{width:36px;height:36px;flex-shrink:0;background-color:#16213A;}
+.auth-brand .name{font-family:var(--font-display);font-weight:700;font-size:20px;color:#16213A;}
 .auth-tabs{display:flex;gap:6px;margin-bottom:18px;background:#f2f3f4;padding:4px;border-radius:9px;}
 .auth-tab{flex:1;text-align:center;padding:8px;border-radius:7px;font-size:13px;cursor:pointer;color:var(--slate);}
 .auth-tab.active{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.08);}
@@ -689,6 +740,8 @@ tbody tr:hover{background:var(--surface-2);}
 .ledger-group:not([open]) summary::before{transform:rotate(-90deg);}
 
 .loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--slate);font-family:var(--font-display);}
+.loading-screen-inner{display:flex;flex-direction:column;align-items:center;gap:14px;}
+.loading-screen .mark{width:52px;height:52px;background-color:var(--text);}
 
 /* ---------- Sync badge ---------- */
 .sync-badge{
@@ -775,7 +828,12 @@ tbody tr:hover{background:var(--surface-2);}
 <body>
 
 <div id="root">
-  <div class="loading-screen">Memuat Integrida…</div>
+  <div class="loading-screen">
+    <div class="loading-screen-inner">
+      <div class="mark logo-mark"></div>
+      <div>Memuat Integrida…</div>
+    </div>
+  </div>
 </div>
 
 <!-- Firebase (compat SDK, tanpa perlu bundler) -->
@@ -2648,7 +2706,7 @@ function renderAuthScreen(mode = 'login', errorMsg = '') {
     <div class="auth-wrap">
       <div class="auth-card">
         <div class="auth-brand">
-          <img class="mark" src="icons/icon-192.png" alt="Integrida">
+          <div class="mark logo-mark"></div>
           <div class="name">Integrida</div>
         </div>
         <div class="auth-tabs">
@@ -2747,6 +2805,47 @@ function paintThemeToggleBtn() {
   btn.title = isDark ? 'Ganti ke Mode Terang' : 'Ganti ke Mode Gelap';
 }
 
+// ---------- Ukuran Font ----------
+// Preferensi disimpan di localStorage & diterapkan lewat CSS `zoom`.
+// Dipilih memakai `zoom` (bukan sekadar menaikkan font-size root) krn
+// hampir seluruh ukuran di aplikasi ini memakai satuan px, bukan rem —
+// kalau hanya font-size root yang diubah, elemen lain (padding, lebar
+// kartu, tabel, dst.) tidak akan ikut menyesuaikan. `zoom` menskalakan
+// seluruh tata letak sekaligus (mirip zoom bawaan browser).
+//
+// PENTING: nilainya dipasang sbg CSS custom property --app-zoom pada
+// <html> (bukan document.documentElement.style.zoom secara langsung),
+// lalu dipakai lewat aturan CSS scoped ke `.main` (topbar + area
+// konten tiap halaman: Dashboard, tabel, kartu KPI, dst.) & `.modal`
+// (isi dialog) saja — BUKAN pada seluruh <html>. Elemen position:fixed
+// seperti sidebar, bottom-nav (mobile), tombol FAB, overlay modal, dan
+// toast SENGAJA tidak ikut di-zoom, karena zoom pada leluhur elemen
+// fixed bisa membuat browser (terutama Safari/WebKit di HP) salah
+// menghitung posisinya relatif ke viewport asli — menyebabkan bagian
+// tsb tampak "terpotong" atau seperti auto-zoom-in saat halaman
+// dibuka. Penerapan awal (sebelum JS ini sempat jalan) sudah dilakukan
+// lebih dulu oleh script anti-FOUC kecil di <head>.
+const FONT_SIZE_STORAGE_KEY = 'integrida-font-size';
+const FONT_SIZE_OPTIONS = [
+  { key: 'kecil', label: 'Kecil', zoom: 90 },
+  { key: 'normal', label: 'Normal', zoom: 100 },
+  { key: 'besar', label: 'Besar', zoom: 112 },
+  { key: 'sangat-besar', label: 'Sangat Besar', zoom: 125 },
+];
+
+function getStoredFontSize() {
+  try {
+    const saved = localStorage.getItem(FONT_SIZE_STORAGE_KEY);
+    return FONT_SIZE_OPTIONS.some(o => o.key === saved) ? saved : 'normal';
+  } catch (e) { return 'normal'; }
+}
+
+function applyFontSize(key) {
+  const opt = FONT_SIZE_OPTIONS.find(o => o.key === key) || FONT_SIZE_OPTIONS[1];
+  document.documentElement.style.setProperty('--app-zoom', opt.zoom + '%');
+  try { localStorage.setItem(FONT_SIZE_STORAGE_KEY, opt.key); } catch (e) {}
+}
+
 // ---------- Shell ----------
 function renderShell() {
   const root = document.getElementById('root');
@@ -2754,6 +2853,7 @@ function renderShell() {
     <div id="app-shell">
       <nav class="sidebar" id="sidebar">
         <div class="sidebar-brand">
+          <div class="mark logo-mark"></div>
           <div>
             <div class="name">Integrida</div>
             <div class="tag">Konsolidasi Keuangan</div>
@@ -2767,7 +2867,6 @@ function renderShell() {
           <div style="display:flex;align-items:center;gap:12px;min-width:0;">
             <div style="min-width:0;">
               <h1 id="topbar-title">Dashboard</h1>
-              <div class="sub" id="topbar-sub">Ringkasan seluruh perusahaan</div>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;">
@@ -2807,15 +2906,14 @@ function setView(viewId) {
   state.view = viewId;
   document.querySelectorAll('.nav-item, .bottom-nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === viewId));
   const titles = {
-    dashboard: ['Dashboard', 'Ringkasan seluruh perusahaan'],
-    companies: ['Perusahaan', 'Kelola daftar entitas yang dikonsolidasikan'],
-    import: ['Impor Data', 'Unggah neraca & laba rugi dari file Excel'],
-    calendar: ['Kalender', 'Pengingat & catatan tugas'],
-    report: ['Report', 'Perbandingan kinerja & analisis rasio antar perusahaan/periode'],
-    settings: ['Setting', 'Akun dan konfigurasi']
+    dashboard: 'Dashboard',
+    companies: 'Perusahaan',
+    import: 'Impor Data',
+    calendar: 'Kalender',
+    report: 'Report',
+    settings: 'Setting'
   };
-  document.getElementById('topbar-title').textContent = titles[viewId][0];
-  document.getElementById('topbar-sub').textContent = titles[viewId][1];
+  document.getElementById('topbar-title').textContent = titles[viewId];
   renderCurrentView();
 }
 
@@ -3835,7 +3933,6 @@ function openCompanyDetail(companyId) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const company = state.companies.find(c => c.id === companyId);
   document.getElementById('topbar-title').textContent = company ? company.name : 'Detail Perusahaan';
-  document.getElementById('topbar-sub').textContent = 'Rincian laporan & riwayat impor';
   renderCompanyDetail();
 }
 
@@ -5801,6 +5898,13 @@ function renderSettings() {
       </div>
 
       <div class="card" style="width:100%;margin-top:16px;">
+        <div class="section-title">Ukuran Font</div>
+        <div class="segmented" id="font-size-pills" style="margin-top:10px;">
+          ${FONT_SIZE_OPTIONS.map(o => `<div class="seg-item ${getStoredFontSize() === o.key ? 'active' : ''}" data-font-size="${o.key}">${o.label}</div>`).join('')}
+        </div>
+      </div>
+
+      <div class="card" style="width:100%;margin-top:16px;">
         <div class="section-title">Akun</div>
         <div class="user-chip" style="color:var(--text);font-size:13.5px;margin-top:6px;">
           <div class="dot">${(state.user.email || '?')[0].toUpperCase()}</div>
@@ -5819,6 +5923,12 @@ function renderSettings() {
   `;
   document.getElementById('logout-btn-2').addEventListener('click', () => auth.signOut());
   document.getElementById('add-upgrade-btn').addEventListener('click', () => openUpgradeItemModal());
+  document.querySelectorAll('#font-size-pills .seg-item').forEach(seg => {
+    seg.addEventListener('click', () => {
+      applyFontSize(seg.dataset.fontSize);
+      document.querySelectorAll('#font-size-pills .seg-item').forEach(s => s.classList.toggle('active', s === seg));
+    });
+  });
 
   state.unsubData = DB.watchUpgradeItems(state.user.uid, (items) => {
     state.upgradeItems = items;

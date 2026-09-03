@@ -414,7 +414,49 @@
 //      merah muda di bawah tabel jadwal tiap tier (Prioritas/Standar),
 //      lengkap dgn catatan penyebab & tombol edit/hapus/selesai seperti
 //      baris jadwal biasa.
-const CACHE_NAME = 'integrida-cache-v67';
+// v68: index.html diperbarui — fitur baru "Ukuran Font" pada menu Setting:
+//      segmented control (Kecil/Normal/Besar/Sangat Besar) yang
+//      menyimpan preferensi ke localStorage (kunci integrida-font-size)
+//      dan menerapkannya lewat CSS `zoom` pada elemen <html> — dipilih
+//      krn hampir seluruh ukuran di aplikasi ini pakai satuan px (bukan
+//      rem), sehingga `zoom` diperlukan supaya seluruh tata letak ikut
+//      menskala, bukan cuma font-size root. Diterapkan sedini mungkin
+//      lewat script anti-FOUC kecil di <head> supaya tidak ada
+//      "lompatan" ukuran sesaat setelah halaman dimuat.
+// v69: index.html diperbarui — perbaikan fitur "Ukuran Font" (v68) di HP:
+//      sebelumnya nilai zoom dipasang langsung ke seluruh <html>, yang
+//      menyebabkan elemen position:fixed (sidebar, bottom-nav mobile,
+//      tombol FAB, overlay modal, toast) ikut ter-zoom dan di sebagian
+//      browser mobile (terutama WebKit/Safari) salah dihitung
+//      posisinya relatif ke viewport asli — tampak seperti halaman
+//      auto-zoom-in & sebagian fitur/tombol terpotong saat dibuka.
+//      Sekarang nilai zoom dipasang sbg CSS custom property --app-zoom
+//      pada <html>, tapi HANYA dipakai (lewat var()) pada aturan
+//      `.main` (topbar + konten tiap halaman, termasuk Dashboard) &
+//      `.modal` (isi dialog) — elemen fixed di atas tidak lagi ikut
+//      ter-zoom sehingga posisinya tetap stabil di semua ukuran layar.
+// v70: index.html diperbarui — menghapus teks keterangan/subjudul di
+//      bawah judul topbar tiap halaman (mis. "Ringkasan seluruh
+//      perusahaan", "Kelola daftar entitas yang dikonsolidasikan",
+//      dst.) supaya topbar lebih ringkas, terutama di HP; juga
+//      menghapus paragraf keterangan di kartu "Ukuran Font" pada menu
+//      Setting.
+// v71: index.html diperbarui — logo Integrida diganti dengan logo baru
+//      (monogram "C" + grafik batang, warna navy) di 3 tempat: halaman
+//      login, bagian atas sidebar, dan layar "Memuat Integrida…" saat
+//      pertama dibuka. Logo diproses jadi CSS mask (background putih
+//      pada gambar asli dihapus/transparan) & disimpan sbg CSS custom
+//      property --logo-mask-image di :root, dipakai lewat class baru
+//      .logo-mark — supaya warnanya bisa diatur per konteks dgn
+//      background-color CSS biasa, bukan warna tetap dari file gambar:
+//      di sidebar & layar loading warnanya ikut var(--sidebar-text-strong)
+//      / var(--text) yang otomatis berganti navy (light mode) atau
+//      putih/terang (dark mode); di halaman login dikunci ke navy tetap
+//      krn kartu login (.auth-card) memang selalu berlatar putih di
+//      kedua tema. Sekalian memperbaiki warna teks nama brand pada
+//      kartu login yang sebelumnya ikut var(--text) (bisa nyaris tak
+//      terlihat di dark mode di atas kartu putih) — dikunci navy juga.
+const CACHE_NAME = 'integrida-cache-v71';
 const APP_SHELL = [
   './',
   './index.html',
