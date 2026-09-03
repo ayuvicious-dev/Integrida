@@ -396,7 +396,25 @@
 //      kecil (<480px) yang memperkecil padding kartu, ukuran angka KPI,
 //      dan padding sel tabel supaya tetap proporsional & tidak
 //      berantakan.
-const CACHE_NAME = 'integrida-cache-v65';
+// v66: index.html diperbarui — mencegah browser mobile (terutama Safari
+//      iOS) otomatis zoom in saat sebuah input/select/textarea disentuh:
+//      meta viewport ditambah maximum-scale=1.0, user-scalable=no, dan
+//      seluruh font-size input form (.field input/select/textarea,
+//      input Kepemilikan/Ownership, kolom cari di menu Perbandingan)
+//      dinaikkan dari 13-13.5px jadi 16px — di bawah 16px itulah yang
+//      memicu auto-zoom bawaan browser saat field difokus/diketik.
+// v67: index.html diperbarui — fitur "Reminder Analisis" (modal jadwal di
+//      menu Kalender) sekarang menandai pengingat yang GAGAL kebagian
+//      tanggal sama sekali bulan berjalan (bukan hilang diam-diam seperti
+//      sebelumnya) — biasanya krn tanggal pilihan & seluruh tanggal
+//      cadangan bulan itu sudah kejatah hari libur/Libur-Cuti-Sakit, atau
+//      keburu dipakai pengingat Analisis lain. analysisSlotsForMonth()
+//      sekarang juga mengembalikan unscheduledPriority/unscheduledStandard;
+//      ditampilkan sebagai blok "⚠ Tidak terjadwal bulan ini (N)" berlatar
+//      merah muda di bawah tabel jadwal tiap tier (Prioritas/Standar),
+//      lengkap dgn catatan penyebab & tombol edit/hapus/selesai seperti
+//      baris jadwal biasa.
+const CACHE_NAME = 'integrida-cache-v67';
 const APP_SHELL = [
   './',
   './index.html',

@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Integrida — Konsolidasi Laporan Keuangan</title>
 <meta name="description" content="Aplikasi konsolidasi laporan keuangan multi-perusahaan: impor Excel, perbandingan antar periode, dan analisis rasio likuiditas, solvabilitas, profitabilitas.">
 <meta name="theme-color" content="#16213A">
@@ -303,7 +303,7 @@ tbody tr:hover{background:var(--surface-2);}
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
 .field label{font-size:12.5px;color:var(--slate);font-weight:500;}
 .field input,.field select,.field textarea{
-  padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:13.5px;background:var(--card);color:var(--text);
+  padding:9px 11px;border:1px solid var(--border);border-radius:7px;font-size:16px;background:var(--card);color:var(--text);
 }
 .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:var(--teal);}
 .field input:disabled{opacity:.5;cursor:not-allowed;background:var(--surface-2);}
@@ -336,12 +336,15 @@ tbody tr:hover{background:var(--surface-2);}
 .reminder-table td.reminder-col-actions{width:74px;text-align:right;white-space:nowrap;}
 .reminder-table tr.reminder-group-row td{background:var(--surface-2);font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--slate);font-weight:700;padding:6px 12px;border-bottom:1px solid var(--border);}
 .reminder-table tr.reminder-group-row.is-priority td{color:var(--danger);}
+.reminder-table tr.analisis-unscheduled-row td{background:var(--danger-light);color:var(--danger);}
+.analisis-unscheduled-wrap{margin-top:10px;}
+.analisis-unscheduled-note{font-size:11.5px;color:var(--slate);line-height:1.5;margin:6px 2px 4px;}
 .reminder-table tr.reminder-row-done td{color:var(--slate-light);}
 .reminder-table .reminder-item-actions{justify-content:flex-end;}
 .ownership-row{display:grid;grid-template-columns:1fr 110px 34px;gap:8px;align-items:center;margin-bottom:8px;}
-.ownership-row input[type="text"],.ownership-row select{padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:var(--card);color:var(--text);width:100%;}
+.ownership-row input[type="text"],.ownership-row select{padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:16px;background:var(--card);color:var(--text);width:100%;}
 .ownership-row .pct-wrap{position:relative;}
-.ownership-row .pct-wrap input{padding:8px 22px 8px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;width:100%;text-align:right;}
+.ownership-row .pct-wrap input{padding:8px 22px 8px 10px;border:1px solid var(--border);border-radius:7px;font-size:16px;width:100%;text-align:right;}
 .ownership-row .pct-wrap span{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--slate);pointer-events:none;}
 
 .upgrade-progress-wrap{margin:2px 0 18px 0;}
@@ -548,7 +551,7 @@ tbody tr:hover{background:var(--surface-2);}
 .compare-search-wrap{position:relative;max-width:320px;margin-bottom:14px;}
 .compare-search-wrap .compare-search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--slate-light);pointer-events:none;}
 .compare-search-wrap .compare-search-icon svg{width:100%;height:100%;}
-.compare-search-input{width:100%;padding:8px 12px 8px 34px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface-2);color:var(--text);}
+.compare-search-input{width:100%;padding:8px 12px 8px 34px;border:1px solid var(--border);border-radius:8px;font-size:16px;background:var(--surface-2);color:var(--text);}
 .compare-search-input:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:var(--teal);}
 .chip-row{display:flex;flex-wrap:wrap;gap:8px;}
 .chip{
@@ -6944,19 +6947,26 @@ function analysisSlotsForMonth(year, month) {
   const standardSlotList = [];
   const undatedPriority = [];
   const undatedStandard = [];
+  // Pengingat Analisis yang GAGAL dapat tanggal sama sekali bulan ini —
+  // krn tanggal pilihannya & seluruh tanggal cadangan sudah habis
+  // (jatuh Minggu/libur nasional/Libur-Cuti-Sakit, atau sudah dipakai
+  // pengingat Analisis lain). Ditandai terpisah di modal supaya
+  // kelihatan jelas, bukan cuma hilang diam-diam dari jadwal.
+  const unscheduledPriority = [];
+  const unscheduledStandard = [];
 
-  const placeDated = (item, slotList, undatedBucket) => {
+  const placeDated = (item, slotList, undatedBucket, unscheduledBucket) => {
     const wanted = Number(item.analisisDay) || null;
     if (!wanted) { undatedBucket.push(item); return; }
     const d = (exists(wanted) && !isBlocked(wanted) && !usedDates.has(wanted)) ? wanted : nextFallback();
-    if (d == null) return; // tidak ada slot tersisa bulan ini utk item ini
+    if (d == null) { unscheduledBucket.push(item); return; } // tidak ada slot tersisa bulan ini utk item ini
     usedDates.add(d);
     const slot = getSlot(d);
     slot.items.push(item);
     if (!slotList.includes(slot)) slotList.push(slot);
   };
-  priorityItems.forEach(item => placeDated(item, prioritySlotList, undatedPriority));
-  standardItems.forEach(item => placeDated(item, standardSlotList, undatedStandard));
+  priorityItems.forEach(item => placeDated(item, prioritySlotList, undatedPriority, unscheduledPriority));
+  standardItems.forEach(item => placeDated(item, standardSlotList, undatedStandard, unscheduledStandard));
 
   // Sisa tanggal (gabungan daftar Prioritas + Cadangan) yang masih
   // tersedia & belum terpakai — dipakai utk pengingat lama tanpa
@@ -6975,6 +6985,11 @@ function analysisSlotsForMonth(year, month) {
       slot.items.push(entry.it);
       if (!entry.slotList.includes(slot)) entry.slotList.push(slot);
     });
+  } else {
+    // Tidak ada tanggal cadangan tersisa sama sekali bulan ini — pengingat
+    // lama tanpa tanggal pilihan (analisisDay) ikut tidak kebagian jadwal.
+    unscheduledPriority.push(...undatedPriority);
+    unscheduledStandard.push(...undatedStandard);
   }
 
   const sortSlots = (list) => list.slice().sort((a, b) => a.day - b.day);
@@ -6983,6 +6998,8 @@ function analysisSlotsForMonth(year, month) {
     standardSlots: sortSlots(standardSlotList),
     priorityCount: priorityItems.length,
     standardCount: standardItems.length,
+    unscheduledPriority,
+    unscheduledStandard,
   };
 }
 
@@ -7029,12 +7046,12 @@ function openAnalisisScheduleModal() {
 function renderAnalisisScheduleBody(backdrop, year, month) {
   const body = backdrop.querySelector('#analisis-schedule-body');
   if (!body) return;
-  const { prioritySlots, standardSlots, priorityCount, standardCount } = analysisSlotsForMonth(year, month);
+  const { prioritySlots, standardSlots, priorityCount, standardCount, unscheduledPriority, unscheduledStandard } = analysisSlotsForMonth(year, month);
 
   const usingFallback = !state.onlineHolidays;
   const infoPopover = backdrop.querySelector('#analisis-schedule-info-popover');
   if (infoPopover) {
-    infoPopover.textContent = `Tiap pengingat Analisis berulang tiap bulan di tanggal pilihannya sendiri (Prioritas: ${ANALISIS_PRIORITY_DATES.join(', ')}; Standar: ${ANALISIS_FALLBACK_DATES.join(', ')}). Kalau tanggal itu jatuh Minggu/libur nasional, ditandai Libur/Cuti/Sakit, atau bentrok pengingat lain, otomatis dipindah ke tanggal cadangan berikutnya yang masih kosong — satu hari maksimal satu Analisis.${usingFallback ? ' Data hari libur online gagal dimuat, memakai daftar cadangan bawaan aplikasi.' : ''}`;
+    infoPopover.textContent = `Tiap pengingat Analisis berulang tiap bulan di tanggal pilihannya sendiri (Prioritas: ${ANALISIS_PRIORITY_DATES.join(', ')}; Standar: ${ANALISIS_FALLBACK_DATES.join(', ')}). Kalau tanggal itu jatuh Minggu/libur nasional, ditandai Libur/Cuti/Sakit, atau bentrok pengingat lain, otomatis dipindah ke tanggal cadangan berikutnya yang masih kosong — satu hari maksimal satu Analisis. Kalau seluruh tanggal cadangan bulan ini juga sudah habis/terpakai, pengingat itu ditandai "Tidak terjadwal bulan ini" alih-alih hilang diam-diam.${usingFallback ? ' Data hari libur online gagal dimuat, memakai daftar cadangan bawaan aplikasi.' : ''}`;
   }
 
   if (priorityCount === 0 && standardCount === 0) {
@@ -7042,8 +7059,8 @@ function renderAnalisisScheduleBody(backdrop, year, month) {
     return;
   }
 
-  const prioritySectionHTML = `<div class="analisis-tier-heading">Prioritas</div>${priorityCount > 0 ? (prioritySlots.length > 0 ? analisisScheduleTableHTML(year, month, prioritySlots) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada slot tanggal Prioritas tersedia bulan ini.</div>`) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada pengingat Analisis berprioritas.</div>`}`;
-  const standardSectionHTML = `<div class="analisis-tier-heading">Standar</div>${standardCount > 0 ? (standardSlots.length > 0 ? analisisScheduleTableHTML(year, month, standardSlots) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada slot tanggal Standar tersisa bulan ini.</div>`) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada pengingat Analisis standar.</div>`}`;
+  const prioritySectionHTML = `<div class="analisis-tier-heading">Prioritas</div>${priorityCount > 0 ? (prioritySlots.length > 0 ? analisisScheduleTableHTML(year, month, prioritySlots) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada slot tanggal Prioritas tersedia bulan ini.</div>`) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada pengingat Analisis berprioritas.</div>`}${analisisUnscheduledHTML(unscheduledPriority)}`;
+  const standardSectionHTML = `<div class="analisis-tier-heading">Standar</div>${standardCount > 0 ? (standardSlots.length > 0 ? analisisScheduleTableHTML(year, month, standardSlots) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada slot tanggal Standar tersisa bulan ini.</div>`) : `<div class="upgrade-empty" style="padding:8px 0;">Tidak ada pengingat Analisis standar.</div>`}${analisisUnscheduledHTML(unscheduledStandard)}`;
   body.innerHTML = prioritySectionHTML + standardSectionHTML;
 
   body.querySelectorAll('[data-reminder-check]').forEach(cb => {
@@ -7090,6 +7107,26 @@ function analisisScheduleTableHTML(year, month, workdays) {
         <tbody>${rowsHTML.join('')}</tbody>
       </table>
     </div>
+  `;
+}
+
+// Blok peringatan utk pengingat Analisis yang tidak kebagian tanggal sama
+// sekali bulan ini (lihat unscheduledPriority/unscheduledStandard di
+// analysisSlotsForMonth) — biasanya krn tanggal pilihan & seluruh tanggal
+// cadangan sudah kejatah hari libur/Libur-Cuti-Sakit, atau sudah dipakai
+// pengingat Analisis lain duluan. Ditampilkan terpisah & mencolok (bukan
+// hilang diam-diam) supaya kelihatan perlu ditinjau manual.
+function analisisUnscheduledHTML(items) {
+  if (!items || items.length === 0) return '';
+  const rowsHTML = [`<tr class="reminder-group-row analisis-unscheduled-row"><td colspan="3">⚠ Tidak terjadwal bulan ini (${items.length})</td></tr>`]
+    .concat(items.map(item => reminderRowHTML(item)));
+  return `
+    <div class="table-wrap analisis-unscheduled-wrap">
+      <table class="reminder-table">
+        <tbody>${rowsHTML.join('')}</tbody>
+      </table>
+    </div>
+    <div class="analisis-unscheduled-note">Tanggal pilihan &amp; seluruh tanggal cadangan bulan ini sudah kejatah hari libur/Libur-Cuti-Sakit atau dipakai pengingat Analisis lain. Pindahkan tanggal pilihannya, tandai ulang Libur/Cuti/Sakit, atau biarkan — otomatis dicoba lagi bulan depan.</div>
   `;
 }
 
