@@ -456,7 +456,16 @@
 //      kedua tema. Sekalian memperbaiki warna teks nama brand pada
 //      kartu login yang sebelumnya ikut var(--text) (bisa nyaris tak
 //      terlihat di dark mode di atas kartu putih) — dikunci navy juga.
-const CACHE_NAME = 'integrida-cache-v71';
+// v72: ikon PWA (icons/icon-192.png & icons/icon-512.png) diganti dengan
+//      logo baru (monogram "C" + grafik batang, putih) di atas latar
+//      navy solid (#16213A, senada background_color/theme_color di
+//      manifest.json) — latar solid (bukan transparan) sengaja dipakai
+//      krn kedua ikon ini juga dipakai sbg ikon "maskable" (Android bisa
+//      memotongnya jadi lingkaran/bentuk lain), dengan logo diberi
+//      padding aman (safe zone) supaya tidak terpotong. Versi cache
+//      dinaikkan supaya ikon lama yang sudah ter-cache di HP yang sudah
+//      "Add to Home Screen" ikut tergantikan.
+const CACHE_NAME = 'integrida-cache-v72';
 const APP_SHELL = [
   './',
   './index.html',
