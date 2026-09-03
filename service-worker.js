@@ -465,7 +465,13 @@
 //      padding aman (safe zone) supaya tidak terpotong. Versi cache
 //      dinaikkan supaya ikon lama yang sudah ter-cache di HP yang sudah
 //      "Add to Home Screen" ikut tergantikan.
-const CACHE_NAME = 'integrida-cache-v72';
+// v73: index.html & manifest.json diperbarui — URL file ikon (icon-192.png,
+//      icon-512.png) ditambahi query string "?v=2" khusus supaya favicon
+//      tab browser (yang di-cache Chrome secara terpisah & sangat
+//      keras kepala, tidak ikut ter-refresh walau Service Worker/cache
+//      HTML sudah update) dipaksa dianggap sebagai URL baru dan diambil
+//      ulang dari server, tanpa perlu pengguna menghapus data situs.
+const CACHE_NAME = 'integrida-cache-v73';
 const APP_SHELL = [
   './',
   './index.html',
