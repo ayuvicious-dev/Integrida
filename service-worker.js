@@ -498,6 +498,25 @@
 //      bukan cuma sekali. Sekarang callback di-debounce 150ms, jadi
 //      snapshot awal dari seluruh perusahaan digabung dulu lalu
 //      Dashboard cuma di-render SEKALI saat pemuatan awal.
+// v81: index.html diperbarui — perbaikan error "Gagal menyimpan: The
+//     client has already been terminated." yang kadang muncul di HP
+//     (koneksi Firestore mati krn aplikasi lama di-background): terdeteksi
+//     otomatis di seluruh aplikasi, pengguna dikasih pesan yang jelas &
+//     halaman dimuat ulang otomatis supaya bisa lanjut memakai aplikasi.
+// v80: index.html diperbarui — perbaikan "Memuat..." yang kadang macet
+//     di HP: listener data halaman aktif dipasang ulang otomatis saat
+//     aplikasi kembali dibuka setelah lama di-background (visibilitychange),
+//     tombol "Muat ulang data" tak lagi menumpuk listener lama, menu
+//     Setting > Upgrade Aplikasi tak lagi tampil "Memuat..." ulang tiap
+//     kembali ke menu itu (pakai cache sesi), dan ditambahkan watchdog
+//     8 detik dgn tombol "Coba lagi" kalau listener tetap tidak membalas.
+// v79: index.html diperbarui — teks "Memuat Integrida…" pada layar
+//     loading awal dihapus, hanya menyisakan logo.
+// v78: index.html diperbarui — Keterangan (opsional) pengingat berulang
+//     kini bisa diisi berbeda per tanggal kemunculan (descriptionOverrides),
+//     tidak lagi selalu memakai satu keterangan yang sama utk semua
+//     kemunculan; mengedit keterangan di satu tanggal tidak lagi
+//     memengaruhi keterangan di tanggal lain.
 // v77: index.html diperbarui — perbaikan bug tampilan Dashboard (&
 //      halaman lain) terpotong di sisi kanan pada HP saat "Ukuran
 //      Font" (menu Setting) di-set selain "Normal" (Kecil/Besar/Sangat
@@ -511,7 +530,7 @@
 //      dikompensasi via calc(.../var(--app-zoom-factor)) SEBELUM
 //      di-zoom, supaya hasil akhir setelah di-zoom pas kembali ke lebar
 //      seharusnya, di ukuran zoom berapa pun.
-const CACHE_NAME = 'integrida-cache-v77';
+const CACHE_NAME = 'integrida-cache-v81';
 const APP_SHELL = [
   './',
   './index.html',

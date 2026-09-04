@@ -861,7 +861,6 @@ tbody tr:hover{background:var(--surface-2);}
   <div class="loading-screen">
     <div class="loading-screen-inner">
       <div class="mark logo-mark"></div>
-      <div>Memuat Integrida…</div>
     </div>
   </div>
 </div>
@@ -1295,6 +1294,17 @@ const DB = {
   // tanggal TIDAK ikut menandai kemunculan yang sama di tanggal lain.
   async setReminderDoneForDate(id, dateKeyStr, done) {
     await db.collection('reminders').doc(id).update({ [`doneDates.${dateKeyStr}`]: !!done });
+  },
+
+  // Keterangan (opsional) pengingat berulang PER TANGGAL kemunculan —
+  // pola sama seperti doneDates/orderOverrides: disimpan di map bersarang
+  // `descriptionOverrides.<dateKeyStr>`, supaya mengubah keterangan pada
+  // satu tanggal TIDAK ikut mengubah keterangan "template" (field
+  // `description` dasar dokumen) maupun keterangan kemunculan lain dari
+  // pengingat berulang yang sama. Lihat reminderDescriptionForDate() utk
+  // cara bacanya.
+  async setReminderDescriptionForDate(id, dateKeyStr, description) {
+    await db.collection('reminders').doc(id).update({ [`descriptionOverrides.${dateKeyStr}`]: description || '' });
   },
 
   // Menyimpan urutan pengingat hasil drag & drop di SATU sel tanggal
@@ -2553,6 +2563,8 @@ const state = {
   companyDetailId: null,      // perusahaan yang sedang dilihat rinciannya
   companyDetailPeriodId: null, // periode (statementId) yang sedang dipilih di halaman rincian
   upgradeItems: [],           // daftar poin checklist Upgrade Aplikasi (menu Setting)
+  upgradeItemsLoaded: false,  // true setelah listener watchUpgradeItems berhasil membalas min. 1x sesi ini (dipakai utk skip layar "Memuat..." saat kembali ke menu Setting, & sbg penanda watchdog di bawah)
+  loadingWatchdog: null,      // id setTimeout watchdog "Memuat..." yang macet (lihat startLoadingWatchdog)
   upgradeShowDone: false,     // true = tampilkan juga poin yang sudah dicentang (biasanya auto-hide)
   upgradeExpanded: {},        // itemId -> true jika keterangan panjang sedang ditampilkan penuh
   reminders: [],              // daftar pengingat/catatan tugas bebas (menu Kalender)
@@ -2627,6 +2639,32 @@ function teardownActiveDataListener() {
   if (state.unsubData) { state.unsubData(); state.unsubData = null; }
   if (state.unsubDayOff) { state.unsubDayOff(); state.unsubDayOff = null; }
   Sync.clear('statements');
+}
+
+// Watchdog utk layar "Memuat..." yang macet (mis. listener Firestore
+// belum juga membalas krn koneksi HP baru pulih/lambat setelah aplikasi
+// sempat di-background). Kalau setelah `timeoutMs` elemen dgn id
+// `containerId` masih berisi placeholder loading yang sama (belum
+// diganti render lain), tampilkan pesan + tombol "Coba lagi" yang
+// memanggil `onRetry`. Timer LAMA (kalau ada) selalu dibatalkan dulu
+// supaya tidak menumpuk saat halaman yang sama dibuka berulang kali.
+function startLoadingWatchdog(containerId, timeoutMs, onRetry) {
+  if (state.loadingWatchdog) { clearTimeout(state.loadingWatchdog); state.loadingWatchdog = null; }
+  state.loadingWatchdog = setTimeout(() => {
+    state.loadingWatchdog = null;
+    const el = document.getElementById(containerId);
+    if (!el) return; // pengguna sudah pindah halaman
+    const stillLoading = el.querySelector('.upgrade-empty') && /^Memuat/.test(el.textContent.trim());
+    if (!stillLoading) return; // sudah keburu terisi data/error sendiri
+    el.innerHTML = `<div class="upgrade-empty">Memuat terlalu lama, kemungkinan koneksi sedang lambat.
+      <button class="btn ghost" id="loading-watchdog-retry" style="display:block;margin:10px auto 0;font-size:12.5px;padding:6px 14px;">Coba lagi</button></div>`;
+    const retryBtn = document.getElementById('loading-watchdog-retry');
+    if (retryBtn) retryBtn.addEventListener('click', onRetry);
+  }, timeoutMs);
+}
+
+function clearLoadingWatchdog() {
+  if (state.loadingWatchdog) { clearTimeout(state.loadingWatchdog); state.loadingWatchdog = null; }
 }
 
 const PERIOD_LABELS = {
@@ -2738,7 +2776,35 @@ function enhanceDateInputs(root) {
   });
 }
 
+// Firestore terkadang menghentikan koneksi client-nya sendiri di HP —
+// biasanya karena penyimpanan offline (IndexedDB) yang dipakai utk cache
+// persistence sempat dibekukan/terganggu browser saat aplikasi lama di
+// background, lalu rusak begitu dibuka lagi. Efeknya SEMUA operasi
+// Firestore berikutnya (simpan, dsb.) akan terus gagal dengan pesan
+// "The client has already been terminated." sampai halaman dimuat ulang
+// (supaya dapat koneksi/client Firestore yang baru & sehat) — reload
+// listener biasa (lihat visibilitychange di bawah) tidak cukup utk kasus
+// ini krn client-nya sendiri yang mati, bukan cuma listener-nya. Dideteksi
+// terpusat di sini (dipanggil dari semua catch block via toast()) supaya
+// pengguna tidak bingung terus melihat "Gagal menyimpan" — langsung
+// dikasih tahu & dimuat ulang otomatis.
+function isFirestoreTerminatedError(message) {
+  return typeof message === 'string' && /client has already been terminated/i.test(message);
+}
+function reloadAfterFirestoreTerminated() {
+  const wrap = document.getElementById('toast-wrap');
+  const el = document.createElement('div');
+  el.className = 'toast error';
+  el.textContent = 'Koneksi aplikasi perlu disegarkan, memuat ulang halaman…';
+  wrap.appendChild(el);
+  setTimeout(() => window.location.reload(), 1200);
+}
+window.addEventListener('unhandledrejection', (e) => {
+  if (isFirestoreTerminatedError(e && e.reason && e.reason.message)) reloadAfterFirestoreTerminated();
+});
+
 function toast(message, type = 'default') {
+  if (isFirestoreTerminatedError(message)) { reloadAfterFirestoreTerminated(); return; }
   const wrap = document.getElementById('toast-wrap');
   const el = document.createElement('div');
   el.className = 'toast' + (type !== 'default' ? ' ' + type : '');
@@ -2989,8 +3055,13 @@ async function reloadCompanies() {
   // Daftar perusahaan biasanya sudah otomatis ter-update lewat listener
   // realtime (watchCompanies). Fungsi ini dipakai sebagai jalan pintas
   // agar tampilan langsung merespon setelah menambah/menghapus perusahaan,
-  // dan sebagai aksi tombol "Muat ulang data".
+  // dan sebagai aksi tombol "Muat ulang data". Listener data view yang
+  // sedang aktif dihentikan dulu (teardownActiveDataListener) sebelum
+  // render ulang, supaya tidak menumpuk listener lama yang belum
+  // di-unsubscribe (lihat setView) — penumpukan listener inilah salah
+  // satu penyebab tampilan kadang terasa macet/lambat "Memuat..." di HP.
   state.companies = await DB.getCompanies(state.user.uid);
+  teardownActiveDataListener();
   renderCurrentView();
 }
 
@@ -5948,7 +6019,7 @@ function renderSettings() {
           <button class="btn primary" id="add-upgrade-btn" style="font-size:12.5px;padding:7px 12px;">+ Tambah Poin</button>
         </div>
         <div id="upgrade-body">
-          <div class="upgrade-empty">Memuat…</div>
+          ${state.upgradeItemsLoaded ? '' : '<div class="upgrade-empty">Memuat…</div>'}
         </div>
       </div>
 
@@ -5985,10 +6056,20 @@ function renderSettings() {
     });
   });
 
+  // Kalau sudah pernah berhasil dimuat sesi ini, tampilkan langsung dari
+  // cache (state.upgradeItems) supaya tidak ada jeda "Memuat..." tiap kali
+  // kembali ke menu Setting — listener di bawah tetap dipasang ulang utk
+  // menerima perubahan terbaru secara realtime.
+  if (state.upgradeItemsLoaded) renderUpgradeBody();
+  else startLoadingWatchdog('upgrade-body', 8000, () => { teardownActiveDataListener(); renderSettings(); });
+
   state.unsubData = DB.watchUpgradeItems(state.user.uid, (items) => {
+    clearLoadingWatchdog();
+    state.upgradeItemsLoaded = true;
     state.upgradeItems = items;
     renderUpgradeBody();
   }, (err) => {
+    clearLoadingWatchdog();
     const body = document.getElementById('upgrade-body');
     if (body) body.innerHTML = `<div class="upgrade-empty">Gagal memuat: ${escapeHTML(err.message)}</div>`;
   });
@@ -6381,6 +6462,20 @@ function analisisDatesForMonth(year, month) {
 // kemunculan pasti untuk dijadikan kunci.
 function isReminderDoneOnDate(item, dateKeyStr) {
   return !!(item.doneDates && item.doneDates[dateKeyStr]);
+}
+
+// Keterangan (opsional) efektif utk satu tanggal kemunculan: kalau
+// tanggal itu sudah punya override sendiri (descriptionOverrides, lihat
+// DB.setReminderDescriptionForDate), override itu yang dipakai — kalau
+// belum, jatuh balik ke `description` dasar dokumen (dipakai sbg
+// "template" bersama utk semua kemunculan yang belum diisi khusus).
+// Tanpa dateKeyStr (mis. Pending Reminder yang tak punya tanggal pasti),
+// langsung pakai `description` dasar.
+function reminderDescriptionForDate(item, dateKeyStr) {
+  if (dateKeyStr && item.descriptionOverrides && Object.prototype.hasOwnProperty.call(item.descriptionOverrides, dateKeyStr)) {
+    return item.descriptionOverrides[dateKeyStr];
+  }
+  return item.description || '';
 }
 
 function reminderOrderForDate(item, dateKeyStr) {
@@ -6977,7 +7072,7 @@ function dailyReportText(dateKeyStr) {
   const items = remindersForDate(dateKeyStr);
   const lines = ['Daily Report', `${d}/${m}/${y}`, ''];
   items.forEach((item, idx) => {
-    const desc = (item.description || '').trim();
+    const desc = (reminderDescriptionForDate(item, dateKeyStr) || '').trim();
     if (!desc) { lines.push(`${idx + 1}. ${item.title}`); return; }
     const descLines = desc.split('\n');
     lines.push(`${idx + 1}. ${descLines[0]}`);
@@ -7338,7 +7433,7 @@ function reminderRowHTML(item, occurrenceDate) {
       <td class="reminder-col-check"><input type="checkbox" data-reminder-check="${item.id}"${dateAttr} ${isDone ? 'checked' : ''} title="Tandai selesai"></td>
       <td class="reminder-col-body">
         <div class="reminder-item-title" style="${isDone ? 'text-decoration:line-through;color:var(--slate-light);' : ''}">${item.time ? `<span class="reminder-item-time">${escapeHTML(item.time)}</span> ` : ''}${escapeHTML(item.title)}${showRepeatBadge ? ` <span class="reminder-item-repeat">↻ ${repeatDisplayLabel(item)}</span>` : ''}</div>
-        ${item.description ? `<div class="reminder-item-desc">${escapeHTML(item.description)}</div>` : ''}
+        ${(() => { const desc = reminderDescriptionForDate(item, occurrenceDate); return desc ? `<div class="reminder-item-desc">${escapeHTML(desc)}</div>` : ''; })()}
       </td>
       <td class="reminder-col-actions">
         <div class="reminder-item-actions">
@@ -7356,6 +7451,18 @@ function reminderRowHTML(item, occurrenceDate) {
 // modal dibuka dari sel kalender (dipakai fitur "Hentikan Pengulangan").
 function openReminderModal(item, defaultDate, occurrenceDate) {
   const isEdit = !!item;
+  // Kalau modal dibuka dari satu kemunculan spesifik pengingat BERULANG
+  // (occurrenceDate terisi & repeat bukan "none"), Keterangan yang
+  // ditampilkan/diedit adalah keterangan KHUSUS tanggal itu (override),
+  // bukan `description` dasar dokumen — supaya mengisi/mengubah
+  // keterangan di satu tanggal tidak ikut mengubah keterangan di
+  // kemunculan lain tanggal yang sama judulnya. Kalau tanggal ini belum
+  // punya keterangan khusus, textarea mulai dari `description` dasar
+  // (dipakai sbg template awal) tapi menyimpannya nanti tetap sbg
+  // override tanggal ini saja — dasar tidak ikut tertimpa.
+  const itemHasEndDate = isEdit && !!item.endDate && item.date && item.endDate >= item.date;
+  const isRecurringOccurrence = isEdit && !!occurrenceDate && ((item.repeat && item.repeat !== 'none') || itemHasEndDate);
+  const initialDescription = isRecurringOccurrence ? reminderDescriptionForDate(item, occurrenceDate) : (item ? item.description : '');
   const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:460px;">
     <button class="modal-close" id="close-modal" title="Tutup">${icon('close')}</button>
     <h3 style="padding-right:34px;">
@@ -7425,7 +7532,7 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
         }).join('')}
       </div>
     </div>
-    <div class="field"><label>Keterangan (opsional)</label><textarea id="reminder-desc-input" rows="4" placeholder="Detail tambahan...">${escapeHTML(item ? item.description : '')}</textarea></div>
+    <div class="field"><label>Keterangan (opsional)${isRecurringOccurrence ? ` <span style="font-weight:400;color:var(--slate);">— khusus tgl ${formatDateID(occurrenceDate)}, tidak memengaruhi tanggal lain</span>` : ''}</label><textarea id="reminder-desc-input" rows="4" placeholder="Detail tambahan...">${escapeHTML(initialDescription)}</textarea></div>
     <div class="modal-actions" style="justify-content:${isEdit ? 'space-between' : 'flex-end'};">
       ${isEdit ? `<div style="display:flex;gap:8px;">
         <button class="btn ghost danger-action" id="delete-reminder" title="Hapus" style="color:var(--danger);border-color:var(--danger);width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:17px;height:17px;">${ICONS.trash}</svg></button>
@@ -7604,7 +7711,18 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     }
     try {
       if (isEdit) {
-        await DB.updateReminder(item.id, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil: item.repeatUntil || '', analisis, analisisDay, pending: isPending });
+        // Kalau ini kemunculan spesifik pengingat berulang, Keterangan
+        // yang diketik di atas disimpan sbg override KHUSUS occurrenceDate
+        // itu (descriptionOverrides), bukan menimpa `description` dasar
+        // dokumen — supaya kemunculan lain (tanggal lain) tetap memakai
+        // keterangan dasar/template atau override-nya sendiri masing-
+        // masing. Field lain (judul, tanggal, ulangi, dst.) tetap berlaku
+        // global spt sebelumnya.
+        const baseDescription = isRecurringOccurrence ? (item.description || '') : description;
+        await DB.updateReminder(item.id, { title, description: baseDescription, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil: item.repeatUntil || '', analisis, analisisDay, pending: isPending });
+        if (isRecurringOccurrence) {
+          await DB.setReminderDescriptionForDate(item.id, occurrenceDate, description);
+        }
         toast('Pengingat diperbarui', 'success');
       } else {
         await DB.addReminder(state.user.uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, analisis, analisisDay, pending: isPending });
@@ -7807,6 +7925,28 @@ auth.onAuthStateChanged(async (user) => {
     state.user = null;
     renderAuthScreen('login');
   }
+});
+
+// Di HP, browser/PWA menjeda koneksi Firestore saat aplikasi di-background
+// (mis. layar dikunci atau pindah ke aplikasi lain), dan kadang tidak
+// langsung tersambung ulang begitu dibuka lagi — listener realtime yang
+// sedang aktif bisa "diam" tanpa data/error, sehingga layar terlihat
+// "Memuat..." terus meskipun sebenarnya sudah online (inilah salah satu
+// penyebab keluhan macet Memuat saat membuka ulang aplikasi). Untuk
+// menghindarinya, begitu tab terlihat kembali setelah tersembunyi cukup
+// lama, listener data halaman yang sedang aktif dipasang ulang dari awal.
+let appHiddenAt = null;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { appHiddenAt = Date.now(); return; }
+  if (document.visibilityState !== 'visible' || !state.user || !appHiddenAt) return;
+  const hiddenMs = Date.now() - appHiddenAt;
+  appHiddenAt = null;
+  // Jangan ganggu kalau ada modal terbuka (mis. sedang mengisi form) atau
+  // kalau tersembunyi cuma sebentar (switch app sekilas, koneksi normalnya
+  // masih tersambung baik) — hanya pasang ulang utk jeda yang cukup lama.
+  if (hiddenMs < 15000 || document.querySelector('.modal-backdrop')) return;
+  teardownActiveDataListener();
+  renderCurrentView();
 });
 
 </script>
