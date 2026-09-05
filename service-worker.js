@@ -542,7 +542,7 @@
 //      dikompensasi via calc(.../var(--app-zoom-factor)) SEBELUM
 //      di-zoom, supaya hasil akhir setelah di-zoom pas kembali ke lebar
 //      seharusnya, di ukuran zoom berapa pun.
-const CACHE_NAME = 'integrida-cache-v82';
+const CACHE_NAME = 'integrida-cache-v83';
 const APP_SHELL = [
   './',
   './index.html',

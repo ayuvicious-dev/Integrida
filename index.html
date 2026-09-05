@@ -8009,8 +8009,26 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     // kemunculan pasti utk dipindah).
     moveCheckWrap.style.display = (showMoveFeature && !isPending) ? 'flex' : 'none';
     if (isPending) moveCheckbox.checked = false;
-    moveDateRow.style.display = (showMoveFeature && !isPending && moveCheckbox.checked) ? '' : 'none';
+    const isMoving = showMoveFeature && !isPending && moveCheckbox.checked;
+    moveDateRow.style.display = isMoving ? '' : 'none';
     applyRepeatState();
+    // Fitur "Pindah": selama aktif, sembunyikan seluruh info jadwal dasar
+    // (Tanggal/Jam, "s.d. tgl lain"+rentang tanggal, Ulangi, geser Sabtu/
+    // Minggu, hari tertentu) supaya HANYA field "Pindah ke Tanggal" yang
+    // tampil/aktif. Nilai field-field ini TIDAK direset (tetap tersimpan
+    // di elemen & tetap ikut disimpan apa adanya saat Simpan — lihat
+    // #save-reminder), hanya disembunyikan dari tampilan — mencegah
+    // pengguna tidak sengaja mengubah tanggal/rentang dasar bersamaan
+    // dengan memindahkan satu kemunculan ini, yang tadinya bisa membuat
+    // pengingat kelihatan muncul dobel (di tanggal lama & tanggal baru
+    // sekaligus, seolah jadi rentang tanggal antara keduanya).
+    if (isMoving && !hideSchedule) {
+      datetimeRow.style.display = 'none';
+      repeatRow.style.display = 'none';
+      enddateRow.style.display = 'none';
+      shiftWeekendRow.style.display = 'none';
+      customDaysRow.style.display = 'none';
+    }
   };
   promptCopyBtn.addEventListener('click', () => {
     if (!promptTextValue) { toast('Belum ada teks Prompt', 'error'); return; }
@@ -8028,8 +8046,8 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
   pendingCheckbox.addEventListener('change', applyPendingState);
   analisisCheckbox.addEventListener('change', applyPendingState);
   moveCheckbox.addEventListener('change', () => {
-    moveDateRow.style.display = (showMoveFeature && !pendingCheckbox.checked && moveCheckbox.checked) ? '' : 'none';
     if (moveCheckbox.checked && !moveDateInput.value) moveDateInput.value = currentMoveOverride || occurrenceDate || '';
+    applyPendingState();
   });
   backdrop.querySelectorAll('input[name="reminder-priority"]').forEach(r => r.addEventListener('change', () => { if (analisisCheckbox.checked) populateAnalisisDayOptions(); }));
   repeatSelect.addEventListener('change', applyRepeatState);
