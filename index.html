@@ -6490,6 +6490,48 @@ function reminderDescriptionForDate(item, dateKeyStr) {
   return item.description || '';
 }
 
+// Konvensi khusus Keterangan pengingat ANALISIS: kalimat sebelum tanda
+// ";" (termasuk satu kata dalam tanda kutip, mis. "Agustus") adalah
+// TEMPLATE yang tetap dipakai tiap bulan (persist ke kemunculan bulan
+// berikutnya apa adanya), dan kata dalam tanda kutip itu OTOMATIS
+// diganti mengikuti nama bulan SEBELUM bulan kemunculan yang
+// bersangkutan setiap kali ditampilkan/diedit/disalin — jadi tidak perlu
+// diketik ulang manual tiap bulan. Bagian SETELAH tanda ";" adalah
+// catatan khusus kemunculan (tanggal) itu saja, disimpan terpisah lewat
+// `descriptionOverrides` yang sudah ada, dan TIDAK memengaruhi kemunculan
+// bulan lain dari pengingat yang sama.
+function substituteMonthPlaceholder(template, dateKeyStr) {
+  if (!template || !dateKeyStr) return template || '';
+  const match = template.match(/"[^"]*"/);
+  if (!match) return template;
+  const [y, m] = dateKeyStr.split('-').map(Number);
+  let prevMonthIdx = m - 2; // m: bulan kemunculan (1-based) -> index 0-based bulan sebelumnya
+  let prevYear = y;
+  if (prevMonthIdx < 0) { prevMonthIdx += 12; prevYear -= 1; }
+  const monthName = CAL_MONTH_NAMES[prevMonthIdx];
+  return template.slice(0, match.index) + `"${monthName}"` + template.slice(match.index + match[0].length);
+}
+
+// Keterangan efektif utk satu kemunculan pengingat Analisis: template
+// dasar (item.description, dgn kata dalam kutip sudah disesuaikan bulan)
+// digabung dengan catatan khusus tanggal itu (kalau ada). Tanpa
+// dateKeyStr, kembalikan template dasar apa adanya (tak bisa dihitung
+// bulan sebelumnya tanpa tanggal acuan).
+function analisisEffectiveDescription(item, dateKeyStr) {
+  const template = substituteMonthPlaceholder(item.description || '', dateKeyStr);
+  if (!dateKeyStr) return template;
+  const note = (item.descriptionOverrides && Object.prototype.hasOwnProperty.call(item.descriptionOverrides, dateKeyStr))
+    ? (item.descriptionOverrides[dateKeyStr] || '')
+    : '';
+  return template + note;
+}
+
+// Dispatcher: pengingat Analisis pakai konvensi template+catatan di atas,
+// pengingat lain tetap pakai reminderDescriptionForDate() seperti biasa.
+function effectiveDescriptionForDate(item, dateKeyStr) {
+  return item.analisis ? analisisEffectiveDescription(item, dateKeyStr) : reminderDescriptionForDate(item, dateKeyStr);
+}
+
 function reminderOrderForDate(item, dateKeyStr) {
   const overrides = item.orderOverrides;
   if (overrides && Object.prototype.hasOwnProperty.call(overrides, dateKeyStr)) {
@@ -7092,7 +7134,12 @@ function dailyReportText(dateKeyStr) {
   const items = remindersForDate(dateKeyStr);
   const lines = ['Daily Report', `${d}/${m}/${y}`, ''];
   items.forEach((item, idx) => {
-    const desc = (reminderDescriptionForDate(item, dateKeyStr) || '').trim();
+    // Tanda kutip (") pada kata seperti "Agustus" (lihat konvensi
+    // Analisis di effectiveDescriptionForDate) sengaja dihapus dari hasil
+    // salin Daily Report ini — cukup tampil sbg penanda internal di form
+    // Keterangan, tidak ikut ke teks yang ditempel ke luar aplikasi.
+    const rawDesc = (effectiveDescriptionForDate(item, dateKeyStr) || '').trim().replace(/"/g, '');
+    const desc = rawDesc;
     if (!desc) { lines.push(`${idx + 1}. ${item.title}`); return; }
     const descLines = desc.split('\n');
     lines.push(`${idx + 1}. ${descLines[0]}`);
@@ -7464,7 +7511,7 @@ function reminderRowHTML(item, occurrenceDate) {
       <td class="reminder-col-check"><input type="checkbox" data-reminder-check="${item.id}"${dateAttr} ${isDone ? 'checked' : ''} title="Tandai selesai"></td>
       <td class="reminder-col-body">
         <div class="reminder-item-title" style="${isDone ? 'text-decoration:line-through;color:var(--slate-light);' : ''}">${item.time ? `<span class="reminder-item-time">${escapeHTML(item.time)}</span> ` : ''}${escapeHTML(item.title)}${showRepeatBadge ? ` <span class="reminder-item-repeat">↻ ${repeatDisplayLabel(item)}</span>` : ''}</div>
-        ${(() => { const desc = reminderDescriptionForDate(item, occurrenceDate); return desc ? `<div class="reminder-item-desc">${escapeHTML(desc)}</div>` : ''; })()}
+        ${(() => { const desc = effectiveDescriptionForDate(item, occurrenceDate); return desc ? `<div class="reminder-item-desc">${escapeHTML(desc)}</div>` : ''; })()}
       </td>
       <td class="reminder-col-actions">
         <div class="reminder-item-actions">
@@ -7493,7 +7540,17 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
   // override tanggal ini saja — dasar tidak ikut tertimpa.
   const itemHasEndDate = isEdit && !!item.endDate && item.date && item.endDate >= item.date;
   const isRecurringOccurrence = isEdit && !!occurrenceDate && ((item.repeat && item.repeat !== 'none') || itemHasEndDate);
-  const initialDescription = isRecurringOccurrence ? reminderDescriptionForDate(item, occurrenceDate) : (item ? item.description : '');
+  // Pengingat ANALISIS punya konvensi Keterangan sendiri (lihat
+  // analisisEffectiveDescription): kalimat sebelum ";" adalah template
+  // bersama semua bulan (kata dalam kutip otomatis ikut bulan sebelum
+  // bulan kemunculan ini), bagian setelah ";" adalah catatan khusus
+  // kemunculan/tanggal ini saja.
+  const isAnalisisOccurrence = isEdit && !!item.analisis && !!occurrenceDate;
+  const initialDescription = isRecurringOccurrence
+    ? reminderDescriptionForDate(item, occurrenceDate)
+    : isAnalisisOccurrence
+    ? analisisEffectiveDescription(item, occurrenceDate)
+    : (item ? item.description : '');
   const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:460px;">
     <button class="modal-close" id="close-modal" title="Tutup">${icon('close')}</button>
     <h3 style="padding-right:34px;">
@@ -7571,7 +7628,9 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
         }).join('')}
       </div>
     </div>
-    <div class="field"><label>Keterangan (opsional)${isRecurringOccurrence ? ` <span style="font-weight:400;color:var(--slate);">— khusus tgl ${formatDateID(occurrenceDate)}, tidak memengaruhi tanggal lain</span>` : ''}</label><textarea id="reminder-desc-input" rows="4" placeholder="Detail tambahan...">${escapeHTML(initialDescription)}</textarea></div>
+    <div class="field"><label>Keterangan (opsional)${isRecurringOccurrence
+      ? ` <span style="font-weight:400;color:var(--slate);">— khusus tgl ${formatDateID(occurrenceDate)}, tidak memengaruhi tanggal lain</span>`
+      : ''}</label><textarea id="reminder-desc-input" rows="4" placeholder="Detail tambahan...">${escapeHTML(initialDescription)}</textarea></div>
     <div class="modal-actions" style="justify-content:${isEdit ? 'space-between' : 'flex-end'};">
       ${isEdit ? `<div style="display:flex;gap:8px;">
         <button class="btn ghost danger-action" id="delete-reminder" title="Hapus" style="color:var(--danger);border-color:var(--danger);width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:17px;height:17px;">${ICONS.trash}</svg></button>
@@ -7776,10 +7835,38 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
         // keterangan dasar/template atau override-nya sendiri masing-
         // masing. Field lain (judul, tanggal, ulangi, dst.) tetap berlaku
         // global spt sebelumnya.
-        const baseDescription = isRecurringOccurrence ? (item.description || '') : description;
+        // Pengingat ANALISIS: kalau Keterangan mengandung ";", bagian
+        // sebelum & termasuk ";" itu disimpan sbg `description` dasar
+        // (template bulanan bersama), bagian setelahnya disimpan sbg
+        // override khusus occurrenceDate ini saja (descriptionOverrides) —
+        // jadi tidak memengaruhi kemunculan bulan lain. Kalau tidak ada
+        // ";" sama sekali, seluruh teks diperlakukan sbg template dasar
+        // (perilaku lama, tanpa catatan per-tanggal).
+        let baseDescription = description;
+        let analisisOccurrenceNote = null;
+        if (isRecurringOccurrence) {
+          baseDescription = item.description || '';
+        } else if (isAnalisisOccurrence) {
+          const semiIdx = description.indexOf(';');
+          if (semiIdx !== -1) {
+            baseDescription = description.slice(0, semiIdx + 1).trim();
+            // Trim akhir saja (bukan .trim() penuh) — supaya Enter yang
+            // sengaja diketik user tepat setelah ";" (pemisah antara
+            // template & catatan, lihat contoh "...BAI;\n- catatan...")
+            // TETAP tersimpan apa adanya, tidak ikut terhapus. Kalau
+            // dihapus, catatan akan menyatu langsung ke akhir template
+            // tanpa baris baru saat digabung lagi di analisisEffectiveDescription.
+            analisisOccurrenceNote = description.slice(semiIdx + 1).replace(/\s+$/, '');
+          } else {
+            baseDescription = description;
+            analisisOccurrenceNote = '';
+          }
+        }
         await DB.updateReminder(item.id, { title, description: baseDescription, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil: item.repeatUntil || '', analisis, analisisDay, pending: isPending, prompt, promptText });
         if (isRecurringOccurrence) {
           await DB.setReminderDescriptionForDate(item.id, occurrenceDate, description);
+        } else if (isAnalisisOccurrence) {
+          await DB.setReminderDescriptionForDate(item.id, occurrenceDate, analisisOccurrenceNote);
         }
         toast('Pengingat diperbarui', 'success');
       } else {
