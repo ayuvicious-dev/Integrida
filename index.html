@@ -404,6 +404,11 @@ tbody tr:hover{background:var(--surface-2);}
 .reminder-pending-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;user-select:none;}
 .reminder-pending-check input[type="checkbox"]{width:17px;height:17px;cursor:pointer;accent-color:var(--teal);flex-shrink:0;}
 .reminder-pending-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;}
+.reminder-prompt-icon-btn{width:22px;height:22px;padding:0;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--slate);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.reminder-prompt-icon-btn svg{width:12px;height:12px;}
+.reminder-prompt-icon-btn:hover{background:var(--surface-2);color:var(--text);}
+.reminder-prompt-icon-btn:disabled{opacity:.4;cursor:not-allowed;}
+.reminder-prompt-icon-btn:disabled:hover{background:transparent;color:var(--slate);}
 .reminder-priority-group{display:none;align-items:center;gap:14px;}
 .reminder-priority-group.show{display:flex;}
 .reminder-priority-group label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--slate);cursor:pointer;user-select:none;}
@@ -1317,6 +1322,41 @@ const DB = {
   // cara bacanya.
   async setReminderDescriptionForDate(id, dateKeyStr, description) {
     await db.collection('reminders').doc(id).update({ [`descriptionOverrides.${dateKeyStr}`]: description || '' });
+  },
+
+  // Tanggal pengganti pengingat ANALISIS utk SATU BULAN saja (fitur
+  // "Pindah") — disimpan di map bersarang
+  // `analisisDateOverrides.<yearMonthKey>` (yearMonthKey = "YYYY-MM"),
+  // berisi tanggal penuh (targetDateKeyStr, "YYYY-MM-DD") pengganti utk
+  // bulan itu. Bulan lain (dan analisisDay dasar dokumen) TIDAK ikut
+  // berubah — lihat analysisSlotsForMonth() utk cara bacanya. Kirim
+  // targetDateKeyStr null/'' utk membatalkan pemindahan bulan itu
+  // (kembali ke jadwal otomatis).
+  async setReminderAnalisisMoveForMonth(id, yearMonthKey, targetDateKeyStr) {
+    const path = `analisisDateOverrides.${yearMonthKey}`;
+    if (targetDateKeyStr) {
+      await db.collection('reminders').doc(id).update({ [path]: targetDateKeyStr });
+    } else {
+      await db.collection('reminders').doc(id).update({ [path]: firebase.firestore.FieldValue.delete() });
+    }
+  },
+
+  // Tanggal pengganti SATU kemunculan pengingat NON-Analisis (biasa,
+  // berulang atau tidak) — dipakai fitur "Pindah" yang sama, tapi
+  // disimpan per tanggal ASAL kemunculan (originDateKeyStr), bukan per
+  // bulan seperti Analisis, karena kemunculan pengingat biasa memang
+  // sudah terikat ke satu tanggal pasti (hasil occursOnDate /
+  // monthlyDatesForMonth) — memindahkannya otomatis sudah pasti hanya
+  // memengaruhi kemunculan itu saja, tidak pernah kemunculan lain
+  // (tanggal lain) dari pengingat berulang yang sama. Lihat
+  // moveOriginForDisplayDate() & remindersForDate() utk cara bacanya.
+  async setReminderDateMove(id, originDateKeyStr, targetDateKeyStr) {
+    const path = `dateMoveOverrides.${originDateKeyStr}`;
+    if (targetDateKeyStr) {
+      await db.collection('reminders').doc(id).update({ [path]: targetDateKeyStr });
+    } else {
+      await db.collection('reminders').doc(id).update({ [path]: firebase.firestore.FieldValue.delete() });
+    }
   },
 
   // Menyimpan urutan pengingat hasil drag & drop di SATU sel tanggal
@@ -6589,16 +6629,48 @@ function monthlyDatesForMonth(year, month) {
   return map;
 }
 
+// Untuk pengingat NON-Analisis: cari tanggal ASAL (origin) sebenarnya
+// dari satu kemunculan yang sedang ditampilkan di displayDateKeyStr.
+// Kalau tanggal ini sendiri adalah HASIL pemindahan sebelumnya
+// (ditemukan sbg salah satu NILAI di dateMoveOverrides), origin
+// sebenarnya adalah KUNCI dari entri itu — supaya pemindahan kedua
+// kalinya (dan seterusnya) MENIMPA entri yang sama, bukan menumpuk
+// rantai pemindahan baru yang bisa membuat pengingat muncul dobel di
+// beberapa tanggal sekaligus. Kalau bukan hasil pemindahan (kemunculan
+// alami), origin = displayDateKeyStr itu sendiri.
+function moveOriginForDisplayDate(item, displayDateKeyStr) {
+  const overrides = item.dateMoveOverrides;
+  if (overrides) {
+    for (const originKey in overrides) {
+      if (overrides[originKey] === displayDateKeyStr) return originKey;
+    }
+  }
+  return displayDateKeyStr;
+}
+
 function remindersForDate(dateKeyStr) {
   const [ky, km] = dateKeyStr.split('-').map(Number);
   const analisisMap = analisisDatesForMonth(ky, km - 1);
   const monthlyMap = monthlyDatesForMonth(ky, km - 1);
-  return state.reminders
-    .filter(r => {
-      if (r.analisis) return analisisMap.get(r.id) === dateKeyStr;
-      if (monthlyMap.has(r.id)) return monthlyMap.get(r.id) === dateKeyStr;
-      return occursOnDate(r, dateKeyStr);
-    })
+  // Fitur "Pindah" utk pengingat non-Analisis: kemunculan yang tanggal
+  // alaminya (occursOnDate/monthlyMap) sudah dipindah manual ke tanggal
+  // lain (dateMoveOverrides punya entri dgn KUNCI = dateKeyStr ini)
+  // disembunyikan dari tanggal asalnya, lalu dimunculkan lagi di
+  // tanggal tujuannya (entri dgn NILAI = dateKeyStr ini) — lihat
+  // setReminderDateMove & moveOriginForDisplayDate.
+  const natural = state.reminders.filter(r => {
+    if (r.analisis) return analisisMap.get(r.id) === dateKeyStr;
+    const occursHere = monthlyMap.has(r.id) ? monthlyMap.get(r.id) === dateKeyStr : occursOnDate(r, dateKeyStr);
+    if (!occursHere) return false;
+    if (r.dateMoveOverrides && Object.prototype.hasOwnProperty.call(r.dateMoveOverrides, dateKeyStr)) return false;
+    return true;
+  });
+  const movedIn = state.reminders.filter(r => {
+    if (r.analisis || !r.dateMoveOverrides) return false;
+    if (natural.some(n => n.id === r.id)) return false;
+    return Object.values(r.dateMoveOverrides).includes(dateKeyStr);
+  });
+  return [...natural, ...movedIn]
     .sort((a, b) => {
       const ao = reminderOrderForDate(a, dateKeyStr);
       const bo = reminderOrderForDate(b, dateKeyStr);
@@ -7313,6 +7385,34 @@ function analysisSlotsForMonth(year, month) {
   const unscheduledPriority = [];
   const unscheduledStandard = [];
 
+  // Fitur "Pindah": pengingat yang punya analisisDateOverrides utk bulan
+  // (year, month) ini ditempatkan LANGSUNG di tanggal pilihan manual
+  // tersebut, apa adanya — termasuk kalau jatuh Minggu/libur nasional,
+  // karena ini pilihan eksplisit pengguna, bukan hasil hitung otomatis.
+  // Bulan lain (dan analisisDay dasar) sama sekali tidak terpengaruh.
+  // Item yang sudah dipindah lewat jalur ini TIDAK ikut lagi ke alur
+  // penempatan otomatis (placeDated/round-robin) di bawah, supaya
+  // tanggal hasil Pindah tidak "direbut" pengingat lain.
+  const yearMonthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const moveOverrideDayFor = (item) => {
+    const raw = item.analisisDateOverrides && item.analisisDateOverrides[yearMonthKey];
+    if (!raw) return null;
+    const [oy, om, od] = raw.split('-').map(Number);
+    if (oy !== year || om !== month + 1 || !exists(od)) return null;
+    return od;
+  };
+  const placeMoved = (item, slotList) => {
+    const d = moveOverrideDayFor(item);
+    if (d == null) return false;
+    usedDates.add(d);
+    const slot = getSlot(d);
+    slot.items.push(item);
+    if (!slotList.includes(slot)) slotList.push(slot);
+    return true;
+  };
+  const remainingPriority = priorityItems.filter(item => !placeMoved(item, prioritySlotList));
+  const remainingStandard = standardItems.filter(item => !placeMoved(item, standardSlotList));
+
   const placeDated = (item, slotList, undatedBucket, unscheduledBucket) => {
     const wanted = Number(item.analisisDay) || null;
     if (!wanted) { undatedBucket.push(item); return; }
@@ -7323,8 +7423,8 @@ function analysisSlotsForMonth(year, month) {
     slot.items.push(item);
     if (!slotList.includes(slot)) slotList.push(slot);
   };
-  priorityItems.forEach(item => placeDated(item, prioritySlotList, undatedPriority, unscheduledPriority));
-  standardItems.forEach(item => placeDated(item, standardSlotList, undatedStandard, unscheduledStandard));
+  remainingPriority.forEach(item => placeDated(item, prioritySlotList, undatedPriority, unscheduledPriority));
+  remainingStandard.forEach(item => placeDated(item, standardSlotList, undatedStandard, unscheduledStandard));
 
   // Sisa tanggal (gabungan daftar Prioritas + Cadangan) yang masih
   // tersedia & belum terpakai — dipakai utk pengingat lama tanpa
@@ -7546,6 +7646,28 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
   // bulan kemunculan ini), bagian setelah ";" adalah catatan khusus
   // kemunculan/tanggal ini saja.
   const isAnalisisOccurrence = isEdit && !!item.analisis && !!occurrenceDate;
+  // Fitur "Pindah": memindahkan SATU kemunculan pengingat ini (apa pun
+  // jenisnya — Analisis, berulang, atau biasa) ke tanggal lain, HANYA
+  // utk kemunculan/bulan yang sedang dibuka lewat sel kalender ini —
+  // kemunculan/bulan lain dari pengingat yang sama sama sekali tidak
+  // terpengaruh. Pengingat Analisis memakai analisisDateOverrides
+  // (per bulan, krn tanggalnya dihitung ulang tiap bulan — lihat
+  // analysisSlotsForMonth), pengingat lain memakai dateMoveOverrides
+  // (per tanggal asal kemunculan — lihat moveOriginForDisplayDate &
+  // remindersForDate). showMoveFeature: fitur ini hanya relevan kalau
+  // sedang MENGEDIT satu kemunculan yang benar-benar tampil di sel
+  // kalender (occurrenceDate terisi) — pengingat baru yang belum
+  // terjadwal tidak punya kemunculan apa pun untuk dipindah.
+  const showMoveFeature = isEdit && !!occurrenceDate;
+  const moveOrigin = (showMoveFeature && !isAnalisisOccurrence) ? moveOriginForDisplayDate(item, occurrenceDate) : null;
+  const moveYearMonthKey = occurrenceDate ? occurrenceDate.slice(0, 7) : null;
+  const currentMoveOverride = isAnalisisOccurrence
+    ? ((item.analisisDateOverrides && moveYearMonthKey) ? (item.analisisDateOverrides[moveYearMonthKey] || null) : null)
+    : ((moveOrigin && item.dateMoveOverrides) ? (item.dateMoveOverrides[moveOrigin] || null) : null);
+  // moveMin/moveMax membatasi date picker supaya tanggal tujuan tetap di
+  // bulan kemunculan yang sama (pemindahan lintas bulan tidak didukung).
+  const moveMin = moveYearMonthKey ? `${moveYearMonthKey}-01` : '';
+  const moveMax = moveYearMonthKey ? `${moveYearMonthKey}-${String(new Date(Number(moveYearMonthKey.slice(0,4)), Number(moveYearMonthKey.slice(5,7)), 0).getDate()).padStart(2,'0')}` : '';
   const initialDescription = isRecurringOccurrence
     ? reminderDescriptionForDate(item, occurrenceDate)
     : isAnalisisOccurrence
@@ -7564,7 +7686,12 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
       <div style="display:flex;align-items:center;gap:16px;">
         <label class="reminder-pending-check"><input type="checkbox" id="reminder-pending-input" ${(item && isReminderPending(item)) ? 'checked' : ''}><span>Pending</span></label>
         <label class="reminder-pending-check" title="Tandai untuk masuk ke fitur 'Reminder Analisis': pilih tanggal tetap yang berulang tiap bulan, otomatis digeser ke tanggal cadangan kalau jatuh Minggu/libur nasional"><input type="checkbox" id="reminder-analisis-input" ${item && item.analisis ? 'checked' : ''}><span>Analisis</span></label>
-        <label class="reminder-pending-check" id="reminder-prompt-check-wrap" style="display:none;" title="Tambahkan teks prompt khusus untuk pengingat Analisis ini. Teks ini terpisah dari Keterangan dan tidak ikut disalin lewat fitur 'Salin sebagai Daily Report' di sel tanggal."><input type="checkbox" id="reminder-prompt-input" ${item && item.analisis && item.prompt ? 'checked' : ''}><span>Prompt</span></label>
+        <label class="reminder-pending-check" id="reminder-move-check-wrap" style="display:none;" title="Pindahkan kemunculan pengingat ini ke tanggal lain HANYA utk kemunculan/bulan ini — kemunculan lain (tanggal/bulan lain) tetap seperti biasa."><input type="checkbox" id="reminder-move-input" ${currentMoveOverride ? 'checked' : ''}><span>Pindah</span></label>
+        <div class="reminder-prompt-wrap" id="reminder-prompt-check-wrap" style="display:none;align-items:center;gap:6px;">
+          <label class="reminder-pending-check" style="margin:0;" title="Tambahkan teks prompt khusus untuk pengingat Analisis ini. Teks ini terpisah dari Keterangan dan tidak ikut disalin lewat fitur 'Salin sebagai Daily Report' di sel tanggal."><input type="checkbox" id="reminder-prompt-input" ${item && item.analisis && item.prompt ? 'checked' : ''}><span>Prompt</span></label>
+          <button type="button" class="reminder-prompt-icon-btn" id="reminder-prompt-copy-btn" title="Salin teks Prompt">${icon('copy')}</button>
+          <button type="button" class="reminder-prompt-icon-btn" id="reminder-prompt-edit-btn" title="Edit teks Prompt">${icon('edit')}</button>
+        </div>
       </div>
       <div class="reminder-priority-group" id="reminder-priority-group">
         <label><input type="radio" name="reminder-priority" value="priority" ${item && item.priority === 'priority' ? 'checked' : ''}><span>Prioritas</span></label>
@@ -7575,12 +7702,9 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
       <label title="Tanggal ini berulang tiap bulan. Kalau jatuh Minggu/libur nasional (atau bentrok pengingat Analisis lain), otomatis digeser ke tanggal cadangan berikutnya.">Tanggal Analisis (berulang tiap bulan)</label>
       <select id="reminder-analisis-day-input"></select>
     </div>
-    <div class="field" id="reminder-prompt-row" style="display:none;">
-      <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <span>Prompt</span>
-        <button type="button" class="btn ghost" id="reminder-prompt-copy-btn" title="Salin teks Prompt" style="width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:13px;height:13px;">${ICONS.copy}</svg></button>
-      </label>
-      <textarea id="reminder-prompt-text-input" rows="4" placeholder="Ketik teks prompt...">${escapeHTML(item && item.promptText ? item.promptText : '')}</textarea>
+    <div class="field" id="reminder-move-date-row" style="display:none;">
+      <label title="Tanggal pengganti khusus bulan ini saja — bulan lain tetap memakai Tanggal Analisis di atas seperti biasa.">Pindah ke Tanggal (khusus bulan ini)</label>
+      <input type="date" id="reminder-move-date-input" min="${moveMin}" max="${moveMax}" value="${currentMoveOverride || occurrenceDate || ''}">
     </div>
     <div style="display:flex;gap:12px;" id="reminder-datetime-row">
       <div class="field" style="flex:1;">
@@ -7690,9 +7814,13 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
   const analisisCheckbox = backdrop.querySelector('#reminder-analisis-input');
   const promptCheckWrap = backdrop.querySelector('#reminder-prompt-check-wrap');
   const promptCheckbox = backdrop.querySelector('#reminder-prompt-input');
-  const promptRow = backdrop.querySelector('#reminder-prompt-row');
-  const promptTextInput = backdrop.querySelector('#reminder-prompt-text-input');
   const promptCopyBtn = backdrop.querySelector('#reminder-prompt-copy-btn');
+  const promptEditBtn = backdrop.querySelector('#reminder-prompt-edit-btn');
+  // Teks Prompt tidak lagi punya textarea yang selalu tampil di form ini
+  // (supaya tampilan lebih ringkas) — nilainya disimpan di variabel closure
+  // ini dan diedit lewat popup kecil (openPromptTextPopup) yang dibuka dari
+  // tombol pensil di sebelah checkbox "Prompt".
+  let promptTextValue = (item && item.promptText) ? item.promptText : '';
   const dateInput = backdrop.querySelector('#reminder-date-input');
   const timeInput = backdrop.querySelector('#reminder-time-input');
   const repeatSelect = backdrop.querySelector('#reminder-repeat-input');
@@ -7706,6 +7834,10 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
   const priorityGroup = backdrop.querySelector('#reminder-priority-group');
   const analisisDayRow = backdrop.querySelector('#reminder-analisis-day-row');
   const analisisDaySelect = backdrop.querySelector('#reminder-analisis-day-input');
+  const moveCheckWrap = backdrop.querySelector('#reminder-move-check-wrap');
+  const moveCheckbox = backdrop.querySelector('#reminder-move-input');
+  const moveDateRow = backdrop.querySelector('#reminder-move-date-row');
+  const moveDateInput = backdrop.querySelector('#reminder-move-date-input');
   // Opsi tanggal menyesuaikan tier yang dipilih: Prioritas dari
   // ANALISIS_PRIORITY_DATES, Standar dari ANALISIS_FALLBACK_DATES.
   // Kalau item yang diedit sudah punya analisisDay yang masih cocok
@@ -7770,16 +7902,35 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     // muncul kolom centang Prompt"). Kalau Analisis dimatikan, checkbox &
     // teks Prompt ikut direset supaya tidak tersimpan nyasar.
     promptCheckWrap.style.display = isAnalisis ? 'flex' : 'none';
-    if (!isAnalisis) { promptCheckbox.checked = false; promptTextInput.value = ''; }
-    promptRow.style.display = (isAnalisis && promptCheckbox.checked) ? '' : 'none';
+    if (!isAnalisis) { promptCheckbox.checked = false; promptTextValue = ''; }
+    // "Pindah" relevan utk SEMUA jenis pengingat, asalkan ini kemunculan
+    // spesifik yang sudah ada di kalender (showMoveFeature, tetap dari
+    // saat modal dibuka) dan bukan Pending (Pending tidak punya tanggal
+    // kemunculan pasti utk dipindah).
+    moveCheckWrap.style.display = (showMoveFeature && !isPending) ? 'flex' : 'none';
+    if (isPending) moveCheckbox.checked = false;
+    moveDateRow.style.display = (showMoveFeature && !isPending && moveCheckbox.checked) ? '' : 'none';
     applyRepeatState();
   };
-  promptCheckbox.addEventListener('change', () => {
-    promptRow.style.display = (analisisCheckbox.checked && promptCheckbox.checked) ? '' : 'none';
+  promptCopyBtn.addEventListener('click', () => {
+    if (!promptTextValue) { toast('Belum ada teks Prompt', 'error'); return; }
+    copyToClipboard(promptTextValue);
   });
-  promptCopyBtn.addEventListener('click', () => copyToClipboard(promptTextInput.value));
+  promptEditBtn.addEventListener('click', () => {
+    openPromptTextPopup(promptTextValue, (newText) => {
+      promptTextValue = newText;
+      // Mengetik teks Prompt otomatis mengaktifkan checkbox "Prompt" (dan
+      // sebaliknya, mengosongkannya mematikan checkbox) supaya pengguna
+      // tidak perlu mencentang manual secara terpisah.
+      promptCheckbox.checked = !!newText.trim();
+    });
+  });
   pendingCheckbox.addEventListener('change', applyPendingState);
   analisisCheckbox.addEventListener('change', applyPendingState);
+  moveCheckbox.addEventListener('change', () => {
+    moveDateRow.style.display = (showMoveFeature && !pendingCheckbox.checked && moveCheckbox.checked) ? '' : 'none';
+    if (moveCheckbox.checked && !moveDateInput.value) moveDateInput.value = currentMoveOverride || occurrenceDate || '';
+  });
   backdrop.querySelectorAll('input[name="reminder-priority"]').forEach(r => r.addEventListener('change', () => { if (analisisCheckbox.checked) populateAnalisisDayOptions(); }));
   repeatSelect.addEventListener('change', applyRepeatState);
   dateRangeCheckbox.addEventListener('change', applyRepeatState);
@@ -7812,7 +7963,7 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     const analisis = isAnalisis;
     const analisisDay = isAnalisis ? Number(analisisDaySelect.value) : null;
     const prompt = isAnalisis && promptCheckbox.checked;
-    const promptText = prompt ? promptTextInput.value.trim() : '';
+    const promptText = prompt ? promptTextValue.trim() : '';
     const description = backdrop.querySelector('#reminder-desc-input').value.trim();
     if (!title) { toast('Judul wajib diisi', 'error'); return; }
     if (title.length > 22) { toast('Judul maksimal 22 karakter', 'error'); return; }
@@ -7825,6 +7976,15 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
       if (!date) { toast('Isi tanggal awal untuk rentang tanggal', 'error'); return; }
       if (!endDate) { toast('Isi tanggal akhir ("s.d. Tanggal") untuk rentang tanggal', 'error'); return; }
       if (endDate < date) { toast('Tanggal akhir tidak boleh sebelum tanggal awal', 'error'); return; }
+    }
+    // "Pindah": kalau dicentang, wajib pilih tanggal pengganti dan
+    // tanggal itu harus tetap di bulan/tahun kemunculan yang sama
+    // (pemindahan lintas bulan tidak didukung — buka kemunculan bulan
+    // tujuan itu sendiri kalau memang ingin pindah ke bulan lain).
+    const wantsMove = showMoveFeature && !isPending && moveCheckbox.checked;
+    if (wantsMove) {
+      if (!moveDateInput.value) { toast('Pilih tanggal pengganti untuk "Pindah"', 'error'); return; }
+      if (moveDateInput.value.slice(0, 7) !== moveYearMonthKey) { toast('Tanggal "Pindah" harus tetap di bulan yang sama', 'error'); return; }
     }
     try {
       if (isEdit) {
@@ -7868,6 +8028,20 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
         } else if (isAnalisisOccurrence) {
           await DB.setReminderDescriptionForDate(item.id, occurrenceDate, analisisOccurrenceNote);
         }
+        if (isAnalisisOccurrence) {
+          // Simpan/batalkan pemindahan bulan ini saja (lihat validasi
+          // wantsMove di atas) — tidak memengaruhi analisisDay dasar
+          // ataupun kemunculan bulan lain dari pengingat yang sama.
+          await DB.setReminderAnalisisMoveForMonth(item.id, moveYearMonthKey, wantsMove ? moveDateInput.value : null);
+        } else if (showMoveFeature) {
+          // Pengingat non-Analisis: simpan/batalkan pemindahan tanggal
+          // asal kemunculan ini saja (moveOrigin, sudah menangani kasus
+          // "pindah lagi" dari kemunculan yang sebelumnya sudah pernah
+          // dipindah — lihat moveOriginForDisplayDate) — tidak memengaruhi
+          // kemunculan lain (tanggal lain) dari pengingat berulang yang
+          // sama.
+          await DB.setReminderDateMove(item.id, moveOrigin, wantsMove ? moveDateInput.value : null);
+        }
         toast('Pengingat diperbarui', 'success');
       } else {
         await DB.addReminder(state.user.uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, analisis, analisisDay, pending: isPending, prompt, promptText });
@@ -7877,6 +8051,35 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     } catch (err) {
       toast('Gagal menyimpan: ' + err.message, 'error');
     }
+  });
+}
+
+// Popup kecil untuk mengedit teks Prompt pengingat Analisis, dibuka dari
+// tombol pensil di sebelah checkbox "Prompt" pada form Tambah/Edit
+// Pengingat (lihat openReminderModal). Menggantikan textarea yang dulu
+// selalu tampil di form supaya tampilan form lebih ringkas.
+function openPromptTextPopup(initialText, onSave) {
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:420px;">
+    <button class="modal-close" id="close-modal" title="Tutup">${icon('close')}</button>
+    <h3 style="padding-right:34px;">Edit Prompt</h3>
+    <div class="field">
+      <textarea id="prompt-text-popup-input" rows="6" placeholder="Ketik teks prompt...">${escapeHTML(initialText || '')}</textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="cancel-modal">Batal</button>
+      <button class="btn primary" id="save-prompt-text">Simpan</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  const closeIt = () => backdrop.remove();
+  backdrop.querySelector('#close-modal').addEventListener('click', closeIt);
+  backdrop.querySelector('#cancel-modal').addEventListener('click', closeIt);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeIt(); });
+  const textarea = backdrop.querySelector('#prompt-text-popup-input');
+  textarea.focus();
+  backdrop.querySelector('#save-prompt-text').addEventListener('click', () => {
+    onSave(textarea.value);
+    closeIt();
   });
 }
 
