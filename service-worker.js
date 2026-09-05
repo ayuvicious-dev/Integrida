@@ -498,6 +498,18 @@
 //      bukan cuma sekali. Sekarang callback di-debounce 150ms, jadi
 //      snapshot awal dari seluruh perusahaan digabung dulu lalu
 //      Dashboard cuma di-render SEKALI saat pemuatan awal.
+// v82: index.html diperbarui — fitur baru "Hapus tanggal ini saja" pada
+//     modal Edit Pengingat (ikon kalender-silang di sebelah tombol
+//     Hapus): menghapus SATU kemunculan pengingat berulang/Analisis
+//     (khusus tanggal/bulan yang sedang dibuka), tanpa menghapus
+//     kemunculan tanggal lain (masa lalu maupun ke depan) ataupun
+//     dokumen pengingatnya. Beda dgn tombol "Hapus" (hapus seluruhnya)
+//     dan "Hentikan Pengulangan" (hentikan mulai tanggal berikutnya,
+//     tanggal ini sendiri tetap muncul). Bisa dibatalkan (tombol
+//     berubah jadi "munculkan lagi") kalau sudah pernah dihapus.
+//     Disimpan di field baru skipDates (non-Analisis, per tanggal asal)
+//     & analisisSkipMonths (Analisis, per bulan) — pastikan Firestore
+//     Rules koleksi `reminders` tidak membatasi nama field tertentu.
 // v81: index.html diperbarui — perbaikan error "Gagal menyimpan: The
 //     client has already been terminated." yang kadang muncul di HP
 //     (koneksi Firestore mati krn aplikasi lama di-background): terdeteksi
@@ -530,7 +542,7 @@
 //      dikompensasi via calc(.../var(--app-zoom-factor)) SEBELUM
 //      di-zoom, supaya hasil akhir setelah di-zoom pas kembali ke lebar
 //      seharusnya, di ukuran zoom berapa pun.
-const CACHE_NAME = 'integrida-cache-v81';
+const CACHE_NAME = 'integrida-cache-v82';
 const APP_SHELL = [
   './',
   './index.html',

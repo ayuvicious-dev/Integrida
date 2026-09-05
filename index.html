@@ -1359,6 +1359,39 @@ const DB = {
     }
   },
 
+  // Fitur "Hapus tanggal ini saja": menyembunyikan SATU kemunculan
+  // pengingat berulang (non-Analisis) tanpa menghapus dokumen pengingat
+  // itu sendiri — kemunculan tanggal lain (masa lalu maupun masa depan)
+  // tetap ada seperti biasa. Disimpan di map bersarang
+  // `skipDates.<originDateKeyStr>` (originDateKeyStr = tanggal ASAL
+  // kemunculan, hasil moveOriginForDisplayDate — sama pola dgn
+  // dateMoveOverrides, supaya kalau kemunculan ini sebelumnya sudah
+  // pernah dipindah lewat "Pindah", yang dihapus tetap kemunculan yang
+  // benar, bukan bikin entri baru nyasar). Lihat remindersForDate() utk
+  // cara bacanya. skip=false menghapus tanda (memunculkan lagi).
+  async setReminderSkipDate(id, originDateKeyStr, skip) {
+    const path = `skipDates.${originDateKeyStr}`;
+    if (skip) {
+      await db.collection('reminders').doc(id).update({ [path]: true });
+    } else {
+      await db.collection('reminders').doc(id).update({ [path]: firebase.firestore.FieldValue.delete() });
+    }
+  },
+
+  // Versi "Hapus tanggal ini saja" utk pengingat ANALISIS — per BULAN
+  // (yearMonthKey), sama seperti analisisDateOverrides, krn tanggal
+  // kemunculan Analisis dihitung ulang tiap bulan (bukan per tanggal
+  // tunggal). Bulan lain tidak terpengaruh. Lihat analysisSlotsForMonth()
+  // utk cara bacanya.
+  async setReminderAnalisisSkipMonth(id, yearMonthKey, skip) {
+    const path = `analisisSkipMonths.${yearMonthKey}`;
+    if (skip) {
+      await db.collection('reminders').doc(id).update({ [path]: true });
+    } else {
+      await db.collection('reminders').doc(id).update({ [path]: firebase.firestore.FieldValue.delete() });
+    }
+  },
+
   // Menyimpan urutan pengingat hasil drag & drop di SATU sel tanggal
   // kalender — orderedIds adalah id pengingat pada tanggal (dateKeyStr)
   // itu sesuai urutan barunya, disimpan sebagai indeks 0..n-1 per
@@ -2753,7 +2786,8 @@ const ICONS = {
   close: '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>',
   stopRepeat: '<path d="M4 4v5h5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.6 9A8 8 0 1 1 6.3 16.2" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M3.5 20.5l17-17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
   info: '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.7" r="1.15" fill="currentColor"/>',
-  download: '<path d="M12 4v11M12 15l-4-4M12 15l4-4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+  download: '<path d="M12 4v11M12 15l-4-4M12 15l4-4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+  calendarX: '<rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M16 3v4M8 3v4M3 10h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M9.2 14.2l5.6 5.6M14.8 14.2l-5.6 5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>'
 };
 
 function icon(name) {
@@ -6662,13 +6696,24 @@ function remindersForDate(dateKeyStr) {
     if (r.analisis) return analisisMap.get(r.id) === dateKeyStr;
     const occursHere = monthlyMap.has(r.id) ? monthlyMap.get(r.id) === dateKeyStr : occursOnDate(r, dateKeyStr);
     if (!occursHere) return false;
+    // Fitur "Hapus tanggal ini saja": kemunculan yang tanggal ASALnya
+    // (dateKeyStr ini sendiri, sebelum dipindah) ditandai skipDates sama
+    // sekali tidak ditampilkan — tanggal lain (masa lalu/masa depan)
+    // dari pengingat berulang yang sama tetap muncul seperti biasa.
+    if (r.skipDates && Object.prototype.hasOwnProperty.call(r.skipDates, dateKeyStr)) return false;
     if (r.dateMoveOverrides && Object.prototype.hasOwnProperty.call(r.dateMoveOverrides, dateKeyStr)) return false;
     return true;
   });
   const movedIn = state.reminders.filter(r => {
     if (r.analisis || !r.dateMoveOverrides) return false;
     if (natural.some(n => n.id === r.id)) return false;
-    return Object.values(r.dateMoveOverrides).includes(dateKeyStr);
+    const originKey = Object.keys(r.dateMoveOverrides).find(k => r.dateMoveOverrides[k] === dateKeyStr);
+    if (!originKey) return false;
+    // Kalau kemunculan asalnya (sebelum dipindah) sudah ditandai dihapus
+    // khusus tanggal itu, jangan ikut muncul lagi di tanggal tujuan
+    // pindahannya.
+    if (r.skipDates && Object.prototype.hasOwnProperty.call(r.skipDates, originKey)) return false;
+    return true;
   });
   return [...natural, ...movedIn]
     .sort((a, b) => {
@@ -7370,8 +7415,15 @@ function analysisSlotsForMonth(year, month) {
     return null; // tanggal cadangan sudah habis bulan ini
   };
 
-  const priorityItems = state.reminders.filter(r => r.analisis && r.priority === 'priority').sort(analysisSortByOrder);
-  const standardItems = state.reminders.filter(r => r.analisis && r.priority !== 'priority').sort(analysisSortByOrder);
+  // Fitur "Hapus tanggal ini saja" utk Analisis: item yang bulan (year,
+  // month) ini ditandai analisisSkipMonths sama sekali tidak ikut
+  // dijadwalkan bulan ini (tidak muncul di kalender, daftar Reminder
+  // Analisis, maupun daftar "gagal terjadwal") — bulan lain tidak
+  // terpengaruh.
+  const yearMonthKeyForSkip = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const isSkippedThisMonth = (r) => !!(r.analisisSkipMonths && r.analisisSkipMonths[yearMonthKeyForSkip]);
+  const priorityItems = state.reminders.filter(r => r.analisis && r.priority === 'priority' && !isSkippedThisMonth(r)).sort(analysisSortByOrder);
+  const standardItems = state.reminders.filter(r => r.analisis && r.priority !== 'priority' && !isSkippedThisMonth(r)).sort(analysisSortByOrder);
 
   const prioritySlotList = [];
   const standardSlotList = [];
@@ -7668,6 +7720,19 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
   // bulan kemunculan yang sama (pemindahan lintas bulan tidak didukung).
   const moveMin = moveYearMonthKey ? `${moveYearMonthKey}-01` : '';
   const moveMax = moveYearMonthKey ? `${moveYearMonthKey}-${String(new Date(Number(moveYearMonthKey.slice(0,4)), Number(moveYearMonthKey.slice(5,7)), 0).getDate()).padStart(2,'0')}` : '';
+  // Fitur "Hapus tanggal ini saja": tombol terpisah (bukan checkbox spt
+  // Pindah) krn ini aksi langsung (hapus & tutup modal), sama seperti
+  // tombol "Hapus" biasa — hanya saja yang hilang cuma kemunculan
+  // tanggal/bulan ini, kemunculan lain (masa lalu/masa depan) dari
+  // pengingat berulang yang sama tetap ada. Cuma relevan kalau memang
+  // ADA kemunculan lain yang perlu dipertahankan (berulang, Analisis,
+  // atau rentang tanggal) — utk pengingat sekali-jadi biasa, "Hapus
+  // tanggal ini saja" = sama saja dgn "Hapus" biasa, jadi tombolnya
+  // disembunyikan supaya tidak membingungkan.
+  const showSkipOccurrenceButton = isEdit && !!occurrenceDate && (isRecurringOccurrence || isAnalisisOccurrence);
+  const currentSkipOccurrence = isAnalisisOccurrence
+    ? !!(item.analisisSkipMonths && moveYearMonthKey && item.analisisSkipMonths[moveYearMonthKey])
+    : !!(moveOrigin && item.skipDates && item.skipDates[moveOrigin]);
   const initialDescription = isRecurringOccurrence
     ? reminderDescriptionForDate(item, occurrenceDate)
     : isAnalisisOccurrence
@@ -7757,7 +7822,8 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
       : ''}</label><textarea id="reminder-desc-input" rows="4" placeholder="Detail tambahan...">${escapeHTML(initialDescription)}</textarea></div>
     <div class="modal-actions" style="justify-content:${isEdit ? 'space-between' : 'flex-end'};">
       ${isEdit ? `<div style="display:flex;gap:8px;">
-        <button class="btn ghost danger-action" id="delete-reminder" title="Hapus" style="color:var(--danger);border-color:var(--danger);width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:17px;height:17px;">${ICONS.trash}</svg></button>
+        <button class="btn ghost danger-action" id="delete-reminder" title="Hapus (seluruh pengingat, semua tanggal)" style="color:var(--danger);border-color:var(--danger);width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:17px;height:17px;">${ICONS.trash}</svg></button>
+        ${showSkipOccurrenceButton ? `<button class="btn ghost danger-action" id="delete-occurrence-reminder" title="${currentSkipOccurrence ? 'Batalkan hapus khusus tanggal ini (munculkan lagi)' : 'Hapus khusus tanggal ini saja — tanggal lain tidak terhapus'}" style="color:${currentSkipOccurrence ? 'var(--slate)' : 'var(--danger)'};border-color:${currentSkipOccurrence ? 'var(--border)' : 'var(--danger)'};width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:17px;height:17px;">${ICONS.calendarX}</svg></button>` : ''}
         ${(item.repeat && item.repeat !== 'none') ? `<button class="btn ghost" id="stop-repeat-reminder" title="Hentikan Pengulangan mulai tanggal berikutnya" style="color:var(--slate);border-color:var(--border);width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:17px;height:17px;">${ICONS.stopRepeat}</svg></button>` : ''}
       </div>` : ''}
       <button class="btn primary" id="save-reminder" title="Simpan" style="width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:18px;height:18px;">${ICONS.check}</svg></button>
@@ -7780,6 +7846,40 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
         toast('Gagal menghapus: ' + err.message, 'error');
       }
     });
+    const deleteOccurrenceBtn = backdrop.querySelector('#delete-occurrence-reminder');
+    if (deleteOccurrenceBtn) {
+      deleteOccurrenceBtn.addEventListener('click', async () => {
+        const label = isAnalisisOccurrence ? `bulan ${moveYearMonthKey}` : `tanggal ${formatDateID(occurrenceDate)}`;
+        if (currentSkipOccurrence) {
+          // Batalkan: munculkan lagi kemunculan ini (tidak perlu konfirmasi
+          // krn ini aksi "undo", bukan destruktif).
+          try {
+            if (isAnalisisOccurrence) {
+              await DB.setReminderAnalisisSkipMonth(item.id, moveYearMonthKey, false);
+            } else {
+              await DB.setReminderSkipDate(item.id, moveOrigin, false);
+            }
+            toast('Kemunculan dimunculkan lagi', 'success');
+            backdrop.remove();
+          } catch (err) {
+            toast('Gagal membatalkan: ' + err.message, 'error');
+          }
+          return;
+        }
+        if (!confirm(`Hapus pengingat "${item.title}" khusus ${label} saja? Kemunculan tanggal lain (masa lalu maupun ke depan) TIDAK ikut terhapus.`)) return;
+        try {
+          if (isAnalisisOccurrence) {
+            await DB.setReminderAnalisisSkipMonth(item.id, moveYearMonthKey, true);
+          } else {
+            await DB.setReminderSkipDate(item.id, moveOrigin, true);
+          }
+          toast('Kemunculan tanggal ini dihapus', 'success');
+          backdrop.remove();
+        } catch (err) {
+          toast('Gagal menghapus: ' + err.message, 'error');
+        }
+      });
+    }
     const stopRepeatBtn = backdrop.querySelector('#stop-repeat-reminder');
     if (stopRepeatBtn) {
       stopRepeatBtn.addEventListener('click', async () => {
