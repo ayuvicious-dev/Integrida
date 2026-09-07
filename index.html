@@ -6632,14 +6632,38 @@ function reminderOrderForDate(item, dateKeyStr) {
 // bulan kalau mentok akhir bulan. Rentang tanggal (endDate) sengaja
 // TIDAK digeser karena sudah berupa beberapa hari sekaligus, bukan 1
 // tanggal tunggal — tetap tampil apa adanya di rentang aslinya.
+// Bulan (yearMonthKey, mis. "2026-09") dipakai utk mengecek apakah sebuah
+// reminder Bulanan/Bulanan-Hari-Tertentu sudah punya skipDates atau
+// dateMoveOverrides KHUSUS bulan ini (originnya diawali yearMonthKey).
+// Dipakai monthlyDatesForMonth() supaya kemunculan yang SUDAH dihapus/
+// dipindah manual tidak ikut serta dalam alokasi tabrakan otomatis —
+// kalau tetap ikut, begitu reminder Bulanan LAIN berubah (ditambah/
+// dihapus/tanggalnya bergeser) alokasi ulang bisa "menghidupkan lagi"
+// kemunculan yang sudah dihapus/dipindah persis di tanggal yang sama
+// (krn skipDates/dateMoveOverrides tersimpan di tanggal ASAL yang lama,
+// sedangkan slot alami hasil alokasi ulang bisa mendarat di tanggal lain
+// — termasuk kebetulan persis di tanggal tujuan pemindahan/penghapusan
+// itu sendiri — sehingga tampak "tidak terhapus" walau skipDates sudah
+// benar tersimpan).
+function reminderHasOwnMonthOverride(r, yearMonthKey) {
+  const hasKeyThisMonth = (obj) => obj && Object.keys(obj).some(k => k.startsWith(yearMonthKey));
+  return hasKeyThisMonth(r.skipDates) || hasKeyThisMonth(r.dateMoveOverrides);
+}
+
 function monthlyDatesForMonth(year, month) {
   const map = new Map(); // reminder id -> dateKeyStr kemunculannya bulan ini
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const yearMonthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
   const monthlyItems = state.reminders.filter(r => {
     if (r.analisis) return false;
     const repeat = r.repeat || 'none';
     if (repeat !== 'monthly' && repeat !== 'custom') return false;
     if (r.endDate && r.endDate >= r.date) return false; // rentang tanggal: tidak digeser
+    // Sudah ada skip/pindah manual bulan ini -> jangan ikut alokasi
+    // otomatis (lihat penjelasan reminderHasOwnMonthOverride di atas).
+    // Kemunculannya tetap ditangani lewat jalur skipDates/dateMoveOverrides
+    // biasa di remindersForDate().
+    if (reminderHasOwnMonthOverride(r, yearMonthKey)) return false;
     return true;
   });
   if (monthlyItems.length === 0) return map;
