@@ -1249,7 +1249,7 @@ const DB = {
       }, (err) => { if (onError) onError(err); else console.error('watchReminders error', err); });
   },
 
-  async addReminder(uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil, analisis, analisisDay, pending, prompt, promptText }) {
+  async addReminder(uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil, analisis, analisisDay, pending, prompt, promptText, catatanLain, catatanLainText }) {
     await db.collection('reminders').add({
       title: title || '',
       description: description || '',
@@ -1272,6 +1272,11 @@ const DB = {
       // supaya isi prompt tetap terpisah dari Keterangan/Daily Report.
       prompt: !!(analisis && prompt),
       promptText: (analisis && prompt) ? (promptText || '') : '',
+      // "Catatan Lain": sama seperti Prompt (terpisah dari Keterangan,
+      // tidak ikut dailyReportText()), tapi tersedia utk semua jenis
+      // pengingat, tidak dibatasi hanya Analisis.
+      catatanLain: !!catatanLain,
+      catatanLainText: catatanLain ? (catatanLainText || '') : '',
       done: false,
       ownerUid: uid,
       createdAtMs: Date.now(),
@@ -1279,7 +1284,7 @@ const DB = {
     });
   },
 
-  async updateReminder(id, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil, analisis, analisisDay, pending, prompt, promptText }) {
+  async updateReminder(id, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil, analisis, analisisDay, pending, prompt, promptText, catatanLain, catatanLainText }) {
     await db.collection('reminders').doc(id).update({
       title: title || '',
       description: description || '',
@@ -1297,7 +1302,9 @@ const DB = {
       analisisDay: (analisis && analisisDay) ? Number(analisisDay) : null,
       pending: !!pending,
       prompt: !!(analisis && prompt),
-      promptText: (analisis && prompt) ? (promptText || '') : ''
+      promptText: (analisis && prompt) ? (promptText || '') : '',
+      catatanLain: !!catatanLain,
+      catatanLainText: catatanLain ? (catatanLainText || '') : ''
     });
   },
 
@@ -7729,10 +7736,23 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
   // atau rentang tanggal) — utk pengingat sekali-jadi biasa, "Hapus
   // tanggal ini saja" = sama saja dgn "Hapus" biasa, jadi tombolnya
   // disembunyikan supaya tidak membingungkan.
-  const showSkipOccurrenceButton = isEdit && !!occurrenceDate && (isRecurringOccurrence || isAnalisisOccurrence);
+  // Juga relevan kalau kemunculan ini adalah hasil "Pindah" (moveOrigin
+  // beda dari occurrenceDate yang sedang ditampilkan) — meskipun
+  // pengingat dasarnya sekali-jadi biasa (bukan berulang/Analisis),
+  // kemunculan pindahan tetap layak dapat tombol "Hapus tanggal ini
+  // saja" yang konsisten dgn kemunculan lain.
+  const isMovedOccurrence = !isAnalisisOccurrence && !!moveOrigin && moveOrigin !== occurrenceDate;
   const currentSkipOccurrence = isAnalisisOccurrence
     ? !!(item.analisisSkipMonths && moveYearMonthKey && item.analisisSkipMonths[moveYearMonthKey])
     : !!(moveOrigin && item.skipDates && item.skipDates[moveOrigin]);
+  // Fitur "Batalkan hapus khusus" (munculkan lagi) sengaja DIHAPUS —
+  // tombol yang sama (ikon & warna berubah tergantung status) ternyata
+  // membingungkan: pengguna mengira masih menghapus, padahal itu
+  // membatalkan penghapusan sebelumnya sehingga kemunculannya muncul
+  // lagi. Sekarang tombol ini HANYA muncul kalau kemunculan ini BELUM
+  // dihapus khusus tanggal ini — begitu sudah dihapus, tombolnya hilang
+  // sama sekali (tidak ada cara membatalkan lewat UI).
+  const showSkipOccurrenceButton = isEdit && !!occurrenceDate && (isRecurringOccurrence || isAnalisisOccurrence || isMovedOccurrence) && !currentSkipOccurrence;
   const initialDescription = isRecurringOccurrence
     ? reminderDescriptionForDate(item, occurrenceDate)
     : isAnalisisOccurrence
@@ -7752,6 +7772,7 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
         <label class="reminder-pending-check"><input type="checkbox" id="reminder-pending-input" ${(item && isReminderPending(item)) ? 'checked' : ''}><span>Pending</span></label>
         <label class="reminder-pending-check" title="Tandai untuk masuk ke fitur 'Reminder Analisis': pilih tanggal tetap yang berulang tiap bulan, otomatis digeser ke tanggal cadangan kalau jatuh Minggu/libur nasional"><input type="checkbox" id="reminder-analisis-input" ${item && item.analisis ? 'checked' : ''}><span>Analisis</span></label>
         <label class="reminder-pending-check" id="reminder-move-check-wrap" style="display:none;" title="Pindahkan kemunculan pengingat ini ke tanggal lain HANYA utk kemunculan/bulan ini — kemunculan lain (tanggal/bulan lain) tetap seperti biasa."><input type="checkbox" id="reminder-move-input" ${currentMoveOverride ? 'checked' : ''}><span>Pindah</span></label>
+        <label class="reminder-pending-check" id="reminder-catatanlain-check-wrap" title="Tambahkan catatan lain untuk pengingat ini. Catatan ini terpisah dari Keterangan dan tidak ikut disalin lewat fitur 'Salin sebagai Daily Report' di sel tanggal."><input type="checkbox" id="reminder-catatanlain-input" ${item && item.catatanLain ? 'checked' : ''}><span>Catatan Lain</span></label>
         <div class="reminder-prompt-wrap" id="reminder-prompt-check-wrap" style="display:none;align-items:center;gap:6px;">
           <label class="reminder-pending-check" style="margin:0;" title="Tambahkan teks prompt khusus untuk pengingat Analisis ini. Teks ini terpisah dari Keterangan dan tidak ikut disalin lewat fitur 'Salin sebagai Daily Report' di sel tanggal."><input type="checkbox" id="reminder-prompt-input" ${item && item.analisis && item.prompt ? 'checked' : ''}><span>Prompt</span></label>
           <button type="button" class="reminder-prompt-icon-btn" id="reminder-prompt-copy-btn" title="Salin teks Prompt">${icon('copy')}</button>
@@ -7770,6 +7791,10 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     <div class="field" id="reminder-move-date-row" style="display:none;">
       <label title="Tanggal pengganti khusus bulan ini saja — bulan lain tetap memakai Tanggal Analisis di atas seperti biasa.">Pindah ke Tanggal (khusus bulan ini)</label>
       <input type="date" id="reminder-move-date-input" min="${moveMin}" max="${moveMax}" value="${currentMoveOverride || occurrenceDate || ''}">
+    </div>
+    <div class="field" id="reminder-catatanlain-row" style="display:${item && item.catatanLain ? '' : 'none'};">
+      <label title="Catatan tambahan, terpisah dari Keterangan. Tidak ikut disalin lewat fitur 'Salin sebagai Daily Report' di sel tanggal.">Catatan Lain</label>
+      <textarea id="reminder-catatanlain-text-input" rows="3" placeholder="Catatan tambahan...">${item && item.catatanLainText ? escapeHTML(item.catatanLainText) : ''}</textarea>
     </div>
     <div style="display:flex;gap:12px;" id="reminder-datetime-row">
       <div class="field" style="flex:1;">
@@ -7823,7 +7848,7 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     <div class="modal-actions" style="justify-content:${isEdit ? 'space-between' : 'flex-end'};">
       ${isEdit ? `<div style="display:flex;gap:8px;">
         <button class="btn ghost danger-action" id="delete-reminder" title="Hapus (seluruh pengingat, semua tanggal)" style="color:var(--danger);border-color:var(--danger);width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:17px;height:17px;">${ICONS.trash}</svg></button>
-        ${showSkipOccurrenceButton ? `<button class="btn ghost danger-action" id="delete-occurrence-reminder" title="${currentSkipOccurrence ? 'Batalkan hapus khusus tanggal ini (munculkan lagi)' : 'Hapus khusus tanggal ini saja — tanggal lain tidak terhapus'}" style="color:${currentSkipOccurrence ? 'var(--slate)' : 'var(--danger)'};border-color:${currentSkipOccurrence ? 'var(--border)' : 'var(--danger)'};width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:17px;height:17px;">${ICONS.calendarX}</svg></button>` : ''}
+        ${showSkipOccurrenceButton ? `<button class="btn ghost danger-action" id="delete-occurrence-reminder" title="Hapus khusus tanggal ini saja — tanggal lain tidak terhapus" style="color:var(--danger);border-color:var(--danger);width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:17px;height:17px;">${ICONS.calendarX}</svg></button>` : ''}
         ${(item.repeat && item.repeat !== 'none') ? `<button class="btn ghost" id="stop-repeat-reminder" title="Hentikan Pengulangan mulai tanggal berikutnya" style="color:var(--slate);border-color:var(--border);width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:17px;height:17px;">${ICONS.stopRepeat}</svg></button>` : ''}
       </div>` : ''}
       <button class="btn primary" id="save-reminder" title="Simpan" style="width:40px;padding:0;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" style="width:18px;height:18px;">${ICONS.check}</svg></button>
@@ -7848,31 +7873,33 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     });
     const deleteOccurrenceBtn = backdrop.querySelector('#delete-occurrence-reminder');
     if (deleteOccurrenceBtn) {
+      // Selain mengandalkan listener realtime (DB.watchReminders) utk
+      // menyegarkan tampilan kalender setelah skipDates/analisisSkipMonths
+      // berubah, di sini state.reminders juga langsung ditimpa manual +
+      // renderCalendarGrid() dipanggil segera setelah tulis ke Firestore
+      // sukses — supaya sel kalender pasti langsung ter-update seketika
+      // tanpa menunggu round-trip listener (yang kadang perlu waktu lebih
+      // lama kalau baru saja reconnect / koneksi lambat).
+      const applyLocalSkipState = () => {
+        const stateItem = state.reminders.find(r => r.id === item.id);
+        if (!stateItem) return;
+        if (isAnalisisOccurrence) {
+          stateItem.analisisSkipMonths = { ...(stateItem.analisisSkipMonths || {}), [moveYearMonthKey]: true };
+        } else {
+          stateItem.skipDates = { ...(stateItem.skipDates || {}), [moveOrigin]: true };
+        }
+        renderCalendarGrid();
+      };
       deleteOccurrenceBtn.addEventListener('click', async () => {
         const label = isAnalisisOccurrence ? `bulan ${moveYearMonthKey}` : `tanggal ${formatDateID(occurrenceDate)}`;
-        if (currentSkipOccurrence) {
-          // Batalkan: munculkan lagi kemunculan ini (tidak perlu konfirmasi
-          // krn ini aksi "undo", bukan destruktif).
-          try {
-            if (isAnalisisOccurrence) {
-              await DB.setReminderAnalisisSkipMonth(item.id, moveYearMonthKey, false);
-            } else {
-              await DB.setReminderSkipDate(item.id, moveOrigin, false);
-            }
-            toast('Kemunculan dimunculkan lagi', 'success');
-            backdrop.remove();
-          } catch (err) {
-            toast('Gagal membatalkan: ' + err.message, 'error');
-          }
-          return;
-        }
-        if (!confirm(`Hapus pengingat "${item.title}" khusus ${label} saja? Kemunculan tanggal lain (masa lalu maupun ke depan) TIDAK ikut terhapus.`)) return;
+        if (!confirm(`Hapus pengingat "${item.title}" khusus ${label} saja? Kemunculan tanggal lain (masa lalu maupun ke depan) TIDAK ikut terhapus. Tindakan ini tidak bisa dibatalkan lewat aplikasi.`)) return;
         try {
           if (isAnalisisOccurrence) {
             await DB.setReminderAnalisisSkipMonth(item.id, moveYearMonthKey, true);
           } else {
             await DB.setReminderSkipDate(item.id, moveOrigin, true);
           }
+          applyLocalSkipState();
           toast('Kemunculan tanggal ini dihapus', 'success');
           backdrop.remove();
         } catch (err) {
@@ -7899,7 +7926,8 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
             customDays: item.customDays, endDate: item.endDate,
             shiftSaturday: item.shiftSaturday, shiftSunday: item.shiftSunday,
             repeatUntil: stopDate, analisis: item.analisis, pending: item.pending,
-            analisisDay: item.analisisDay, prompt: item.prompt, promptText: item.promptText
+            analisisDay: item.analisisDay, prompt: item.prompt, promptText: item.promptText,
+            catatanLain: item.catatanLain, catatanLainText: item.catatanLainText
           });
           toast('Pengulangan dihentikan', 'success');
           backdrop.remove();
@@ -7938,6 +7966,12 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
   const moveCheckbox = backdrop.querySelector('#reminder-move-input');
   const moveDateRow = backdrop.querySelector('#reminder-move-date-row');
   const moveDateInput = backdrop.querySelector('#reminder-move-date-input');
+  const catatanLainCheckbox = backdrop.querySelector('#reminder-catatanlain-input');
+  const catatanLainRow = backdrop.querySelector('#reminder-catatanlain-row');
+  const catatanLainTextInput = backdrop.querySelector('#reminder-catatanlain-text-input');
+  catatanLainCheckbox.addEventListener('change', () => {
+    catatanLainRow.style.display = catatanLainCheckbox.checked ? '' : 'none';
+  });
   // Opsi tanggal menyesuaikan tier yang dipilih: Prioritas dari
   // ANALISIS_PRIORITY_DATES, Standar dari ANALISIS_FALLBACK_DATES.
   // Kalau item yang diedit sudah punya analisisDay yang masih cocok
@@ -8082,6 +8116,13 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     const analisisDay = isAnalisis ? Number(analisisDaySelect.value) : null;
     const prompt = isAnalisis && promptCheckbox.checked;
     const promptText = prompt ? promptTextValue.trim() : '';
+    // "Catatan Lain": catatan tambahan yang sengaja TERPISAH dari
+    // Keterangan dan tidak ikut dipakai di dailyReportText() (fitur
+    // copas "Salin sebagai Daily Report" di pojok kanan atas sel
+    // tanggal) — sama seperti "Prompt", tapi tersedia utk SEMUA jenis
+    // pengingat (tidak dibatasi hanya Analisis).
+    const catatanLain = catatanLainCheckbox.checked;
+    const catatanLainText = catatanLain ? catatanLainTextInput.value.trim() : '';
     const description = backdrop.querySelector('#reminder-desc-input').value.trim();
     if (!title) { toast('Judul wajib diisi', 'error'); return; }
     if (title.length > 22) { toast('Judul maksimal 22 karakter', 'error'); return; }
@@ -8140,7 +8181,7 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
             analisisOccurrenceNote = '';
           }
         }
-        await DB.updateReminder(item.id, { title, description: baseDescription, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil: item.repeatUntil || '', analisis, analisisDay, pending: isPending, prompt, promptText });
+        await DB.updateReminder(item.id, { title, description: baseDescription, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil: item.repeatUntil || '', analisis, analisisDay, pending: isPending, prompt, promptText, catatanLain, catatanLainText });
         if (isRecurringOccurrence) {
           await DB.setReminderDescriptionForDate(item.id, occurrenceDate, description);
         } else if (isAnalisisOccurrence) {
@@ -8162,7 +8203,7 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
         }
         toast('Pengingat diperbarui', 'success');
       } else {
-        await DB.addReminder(state.user.uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, analisis, analisisDay, pending: isPending, prompt, promptText });
+        await DB.addReminder(state.user.uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, analisis, analisisDay, pending: isPending, prompt, promptText, catatanLain, catatanLainText });
         toast('Pengingat ditambahkan', 'success');
       }
       backdrop.remove();
