@@ -1249,8 +1249,11 @@ const DB = {
       }, (err) => { if (onError) onError(err); else console.error('watchReminders error', err); });
   },
 
+  // Mengembalikan id dokumen baru (dipakai kalau perlu langsung menulis
+  // override per-tanggal, mis. "Catatan Tambahan", tepat setelah
+  // pengingat baru ini dibuat).
   async addReminder(uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil, analisis, analisisDay, pending, prompt, promptText, catatanLain, catatanLainText }) {
-    await db.collection('reminders').add({
+    const docRef = await db.collection('reminders').add({
       title: title || '',
       description: description || '',
       date: date || '',
@@ -1282,6 +1285,7 @@ const DB = {
       createdAtMs: Date.now(),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+    return docRef.id;
   },
 
   async updateReminder(id, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil, analisis, analisisDay, pending, prompt, promptText, catatanLain, catatanLainText }) {
@@ -1361,6 +1365,24 @@ const DB = {
     const path = `dateMoveOverrides.${originDateKeyStr}`;
     if (targetDateKeyStr) {
       await db.collection('reminders').doc(id).update({ [path]: targetDateKeyStr });
+    } else {
+      await db.collection('reminders').doc(id).update({ [path]: firebase.firestore.FieldValue.delete() });
+    }
+  },
+
+  // "Catatan Tambahan" per SATU tanggal kemunculan — pola sama seperti
+  // descriptionOverrides/dateMoveOverrides: disimpan di map bersarang
+  // `catatanTambahanOverrides.<dateKeyStr>`, sehingga mengisi/mengubah
+  // catatan pada satu tanggal TIDAK ikut memengaruhi tanggal lain
+  // (termasuk kemunculan lain dari pengingat berulang yang sama) —
+  // beda dengan "Catatan Lain" (catatanLain/catatanLainText) yang
+  // berlaku global utk seluruh dokumen. Kirim text null/'' utk
+  // menghapus catatan tanggal ini. Lihat catatanTambahanForDate() utk
+  // cara bacanya.
+  async setReminderCatatanTambahanForDate(id, dateKeyStr, text) {
+    const path = `catatanTambahanOverrides.${dateKeyStr}`;
+    if (text) {
+      await db.collection('reminders').doc(id).update({ [path]: text });
     } else {
       await db.collection('reminders').doc(id).update({ [path]: firebase.firestore.FieldValue.delete() });
     }
@@ -6571,6 +6593,16 @@ function reminderDescriptionForDate(item, dateKeyStr) {
   return item.description || '';
 }
 
+// Catatan Tambahan efektif utk satu tanggal kemunculan (lihat
+// DB.setReminderCatatanTambahanForDate) — beda dari "Catatan Lain"
+// (catatanLain/catatanLainText, berlaku global utk seluruh dokumen),
+// catatan ini kosong kalau tanggal itu belum diisi, dan mengisinya
+// tidak memengaruhi tanggal lain.
+function catatanTambahanForDate(item, dateKeyStr) {
+  if (!dateKeyStr || !item.catatanTambahanOverrides) return '';
+  return item.catatanTambahanOverrides[dateKeyStr] || '';
+}
+
 // Konvensi khusus Keterangan pengingat ANALISIS: kalimat sebelum tanda
 // ";" (termasuk satu kata dalam tanda kutip, mis. "Agustus") adalah
 // TEMPLATE yang tetap dipakai tiap bulan (persist ke kemunculan bulan
@@ -7782,6 +7814,17 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     : isAnalisisOccurrence
     ? analisisEffectiveDescription(item, occurrenceDate)
     : (item ? item.description : '');
+  // Fitur "Catatan Tambahan": catatan per tanggal kemunculan, terpisah
+  // dari "Catatan Lain" (berlaku global) — HANYA berlaku utk tanggal
+  // kemunculan yang sedang dibuka, tidak ikut ke kemunculan/tanggal
+  // lain ke depannya (lihat DB.setReminderCatatanTambahanForDate).
+  // dateKeyStr yang dipakai: occurrenceDate kalau modal dibuka dari
+  // satu kemunculan spesifik di sel kalender, atau tanggal dasar
+  // dokumen (item.date) kalau tidak (pengingat sekali-jadi biasa yang
+  // diedit langsung, tanpa lewat sel kalender).
+  const catatanTambahanDateKey = occurrenceDate || (item ? item.date : null) || null;
+  const initialCatatanTambahanText = (item && catatanTambahanDateKey) ? catatanTambahanForDate(item, catatanTambahanDateKey) : '';
+  const initialCatatanTambahanChecked = !!initialCatatanTambahanText;
   const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:460px;">
     <button class="modal-close" id="close-modal" title="Tutup">${icon('close')}</button>
     <h3 style="padding-right:34px;">
@@ -7796,7 +7839,6 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
         <label class="reminder-pending-check"><input type="checkbox" id="reminder-pending-input" ${(item && isReminderPending(item)) ? 'checked' : ''}><span>Pending</span></label>
         <label class="reminder-pending-check" title="Tandai untuk masuk ke fitur 'Reminder Analisis': pilih tanggal tetap yang berulang tiap bulan, otomatis digeser ke tanggal cadangan kalau jatuh Minggu/libur nasional"><input type="checkbox" id="reminder-analisis-input" ${item && item.analisis ? 'checked' : ''}><span>Analisis</span></label>
         <label class="reminder-pending-check" id="reminder-move-check-wrap" style="display:none;" title="Pindahkan kemunculan pengingat ini ke tanggal lain HANYA utk kemunculan/bulan ini — kemunculan lain (tanggal/bulan lain) tetap seperti biasa."><input type="checkbox" id="reminder-move-input" ${currentMoveOverride ? 'checked' : ''}><span>Pindah</span></label>
-        <label class="reminder-pending-check" id="reminder-catatanlain-check-wrap" title="Tambahkan catatan lain untuk pengingat ini. Catatan ini terpisah dari Keterangan dan tidak ikut disalin lewat fitur 'Salin sebagai Daily Report' di sel tanggal."><input type="checkbox" id="reminder-catatanlain-input" ${item && item.catatanLain ? 'checked' : ''}><span>Catatan Lain</span></label>
         <div class="reminder-prompt-wrap" id="reminder-prompt-check-wrap" style="display:none;align-items:center;gap:6px;">
           <label class="reminder-pending-check" style="margin:0;" title="Tambahkan teks prompt khusus untuk pengingat Analisis ini. Teks ini terpisah dari Keterangan dan tidak ikut disalin lewat fitur 'Salin sebagai Daily Report' di sel tanggal."><input type="checkbox" id="reminder-prompt-input" ${item && item.analisis && item.prompt ? 'checked' : ''}><span>Prompt</span></label>
           <button type="button" class="reminder-prompt-icon-btn" id="reminder-prompt-copy-btn" title="Salin teks Prompt">${icon('copy')}</button>
@@ -7806,6 +7848,12 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
       <div class="reminder-priority-group" id="reminder-priority-group">
         <label><input type="radio" name="reminder-priority" value="priority" ${item && item.priority === 'priority' ? 'checked' : ''}><span>Prioritas</span></label>
         <label><input type="radio" name="reminder-priority" value="standard" ${!item || item.priority !== 'priority' ? 'checked' : ''}><span>Standar</span></label>
+      </div>
+    </div>
+    <div class="reminder-pending-row" id="reminder-catatan-row" style="margin-top:8px;">
+      <div style="display:flex;align-items:center;gap:16px;">
+        <label class="reminder-pending-check" id="reminder-catatanlain-check-wrap" title="Tambahkan catatan lain untuk pengingat ini. Catatan ini terpisah dari Keterangan dan tidak ikut disalin lewat fitur 'Salin sebagai Daily Report' di sel tanggal."><input type="checkbox" id="reminder-catatanlain-input" ${item && item.catatanLain ? 'checked' : ''}><span>Catatan Lain</span></label>
+        <label class="reminder-pending-check" id="reminder-catatantambahan-check-wrap" title="Tambahkan catatan tambahan HANYA untuk tanggal kemunculan ini saja — tidak ikut ke kemunculan/tanggal lain ke depannya."><input type="checkbox" id="reminder-catatantambahan-input" ${initialCatatanTambahanChecked ? 'checked' : ''}><span>Catatan Tambahan</span></label>
       </div>
     </div>
     <div class="field" id="reminder-analisis-day-row" style="display:none;">
@@ -7819,6 +7867,10 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     <div class="field" id="reminder-catatanlain-row" style="display:${item && item.catatanLain ? '' : 'none'};">
       <label title="Catatan tambahan, terpisah dari Keterangan. Tidak ikut disalin lewat fitur 'Salin sebagai Daily Report' di sel tanggal.">Catatan Lain</label>
       <textarea id="reminder-catatanlain-text-input" rows="3" placeholder="Catatan tambahan...">${item && item.catatanLainText ? escapeHTML(item.catatanLainText) : ''}</textarea>
+    </div>
+    <div class="field" id="reminder-catatantambahan-row" style="display:${initialCatatanTambahanChecked ? '' : 'none'};">
+      <label title="Catatan ini HANYA berlaku utk tanggal kemunculan ini saja — tidak ikut ke kemunculan/tanggal lain ke depannya, meskipun pengingatnya berulang.">Catatan Tambahan (khusus tanggal ini)</label>
+      <textarea id="reminder-catatantambahan-text-input" rows="3" placeholder="Catatan khusus tanggal ini...">${escapeHTML(initialCatatanTambahanText)}</textarea>
     </div>
     <div style="display:flex;gap:12px;" id="reminder-datetime-row">
       <div class="field" style="flex:1;">
@@ -7996,6 +8048,12 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
   catatanLainCheckbox.addEventListener('change', () => {
     catatanLainRow.style.display = catatanLainCheckbox.checked ? '' : 'none';
   });
+  const catatanTambahanCheckbox = backdrop.querySelector('#reminder-catatantambahan-input');
+  const catatanTambahanRow = backdrop.querySelector('#reminder-catatantambahan-row');
+  const catatanTambahanTextInput = backdrop.querySelector('#reminder-catatantambahan-text-input');
+  catatanTambahanCheckbox.addEventListener('change', () => {
+    catatanTambahanRow.style.display = catatanTambahanCheckbox.checked ? '' : 'none';
+  });
   // Opsi tanggal menyesuaikan tier yang dipilih: Prioritas dari
   // ANALISIS_PRIORITY_DATES, Standar dari ANALISIS_FALLBACK_DATES.
   // Kalau item yang diedit sudah punya analisisDay yang masih cocok
@@ -8147,10 +8205,20 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     // pengingat (tidak dibatasi hanya Analisis).
     const catatanLain = catatanLainCheckbox.checked;
     const catatanLainText = catatanLain ? catatanLainTextInput.value.trim() : '';
+    // "Catatan Tambahan": kebalikan dari "Catatan Lain" — HANYA berlaku
+    // utk SATU tanggal kemunculan (lihat DB.setReminderCatatanTambahanForDate),
+    // jadi butuh tanggal kemunculan yang pasti. Dihitung ulang di sini
+    // (bukan pakai catatanTambahanDateKey dari render awal) supaya tetap
+    // akurat kalau field Tanggal baru saja diubah pengguna sebelum
+    // menyimpan (mis. pengingat baru yang belum tersimpan).
+    const catatanTambahan = catatanTambahanCheckbox.checked;
+    const catatanTambahanText = catatanTambahan ? catatanTambahanTextInput.value.trim() : '';
+    const catatanTambahanTargetDate = occurrenceDate || date || (item ? item.date : null) || null;
     const description = backdrop.querySelector('#reminder-desc-input').value.trim();
     if (!title) { toast('Judul wajib diisi', 'error'); return; }
     if (title.length > 22) { toast('Judul maksimal 22 karakter', 'error'); return; }
     if (isAnalisis && !analisisDay) { toast('Pilih Tanggal Analisis', 'error'); return; }
+    if (catatanTambahan && !catatanTambahanTargetDate) { toast('Isi Tanggal dulu untuk pakai "Catatan Tambahan" (perlu tanggal kemunculan yang pasti)', 'error'); return; }
     if (isCustomRepeat && customDays.length === 0) { toast('Pilih minimal satu hari untuk repeat "Bulanan, Hari Tertentu"', 'error'); return; }
     if (isCustomRepeat && !date) { toast('Isi Tanggal untuk repeat "Bulanan, Hari Tertentu" (menentukan tanggal yang diulang tiap bulan)', 'error'); return; }
     if (isWeeklyCustom && customDays.length === 0) { toast('Pilih minimal satu hari untuk repeat "Mingguan, Hari Tertentu"', 'error'); return; }
@@ -8225,9 +8293,19 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
           // sama.
           await DB.setReminderDateMove(item.id, moveOrigin, wantsMove ? moveDateInput.value : null);
         }
+        // "Catatan Tambahan" khusus tanggal ini saja — lihat catatan di
+        // atas dekat catatanTambahanTargetDate. Kalau tidak dicentang
+        // (atau tanggalnya kosong), catatan tanggal ini dihapus supaya
+        // tidak nyangkut catatan lama yang sudah tidak relevan.
+        if (catatanTambahanTargetDate) {
+          await DB.setReminderCatatanTambahanForDate(item.id, catatanTambahanTargetDate, catatanTambahan ? catatanTambahanText : null);
+        }
         toast('Pengingat diperbarui', 'success');
       } else {
-        await DB.addReminder(state.user.uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, analisis, analisisDay, pending: isPending, prompt, promptText, catatanLain, catatanLainText });
+        const newId = await DB.addReminder(state.user.uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, analisis, analisisDay, pending: isPending, prompt, promptText, catatanLain, catatanLainText });
+        if (catatanTambahan && catatanTambahanTargetDate) {
+          await DB.setReminderCatatanTambahanForDate(newId, catatanTambahanTargetDate, catatanTambahanText);
+        }
         toast('Pengingat ditambahkan', 'success');
       }
       backdrop.remove();
