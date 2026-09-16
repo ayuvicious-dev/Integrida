@@ -3252,9 +3252,6 @@ function paintDashboard(allStatements) {
   const sumTotalAset = latestList.reduce((a, s) => a + (s.neraca.totalAset || 0), 0);
   const sumPendapatan = latestList.reduce((a, s) => a + (s.labaRugi.pendapatan || 0), 0);
   const sumLabaBersih = latestList.reduce((a, s) => a + (s.labaRugi.labaBersih || 0), 0);
-  const avgCurrentRatio = latestList.length
-    ? latestList.reduce((a, s) => a + (computeRatios(s).likuiditas.currentRatio || 0), 0) / latestList.length
-    : 0;
 
   // Tren gabungan seluruh perusahaan per periode, dipakai untuk kartu
   // utama (hero) — total aset (batang) berdampingan dengan laba bersih
@@ -3283,7 +3280,7 @@ function paintDashboard(allStatements) {
   const labels = latestList.map(s => state.companies.find(c => c.id === s.companyId)?.name || '?');
 
   root.innerHTML = `
-    <div class="section-block grid grid-4">
+    <div class="section-block grid grid-3">
       <div class="card kpi-card">
         <div class="kpi-label">Total Perusahaan</div>
         <div class="kpi-value">${state.companies.length}</div>
@@ -3295,10 +3292,6 @@ function paintDashboard(allStatements) {
       <div class="card kpi-card">
         <div class="kpi-label">Total Pendapatan (periode terbaru)</div>
         <div class="kpi-value">${formatIDR(sumPendapatan)}</div>
-      </div>
-      <div class="card kpi-card">
-        <div class="kpi-label">Rata-rata Current Ratio</div>
-        <div class="kpi-value">${avgCurrentRatio.toFixed(2)}x</div>
       </div>
     </div>
 
@@ -3493,13 +3486,18 @@ function getDescendantIds(companyId) {
 
 // Bilah tab "Grid / Bagan Struktur / Impor Data" — dipakai bersama di
 // halaman Perusahaan maupun Impor Data supaya tetap terlihat & bisa
-// dipakai berpindah menu tanpa harus balik ke Perusahaan dulu.
+// dipakai berpindah menu tanpa harus balik ke Perusahaan dulu. Tab
+// "Impor Data" sengaja disembunyikan utk akun kategori Reviewer — Reviewer
+// memang tidak diizinkan mengimpor data (lihat isReviewer() & setView, yang
+// sudah menolak view "import" utk Reviewer; ini hanya menyembunyikan
+// tombolnya juga supaya tidak membingungkan).
 function companiesTabBarHTML(active) {
+  const showImportTab = !isReviewer();
   return `
     <div class="pill-row" id="companies-view-tabs" style="margin-bottom:0;">
       <div class="pill ${active === 'table' ? 'active' : ''}" data-tab="table">Grid</div>
       <div class="pill ${active === 'chart' ? 'active' : ''}" data-tab="chart">Bagan Struktur</div>
-      <div class="pill ${active === 'import' ? 'active' : ''}" data-tab="import">Impor Data</div>
+      ${showImportTab ? `<div class="pill ${active === 'import' ? 'active' : ''}" data-tab="import">Impor Data</div>` : ''}
     </div>
   `;
 }
@@ -5401,7 +5399,7 @@ function paintCompanyDetail(statements) {
   if (statements.length === 0) {
     content.innerHTML = `
       ${company ? businessInfoHTML(company, 0) : ''}
-      <div class="card" style="color:var(--slate);margin-bottom:20px;">Belum ada data laporan keuangan untuk perusahaan ini. Silakan impor data terlebih dahulu di menu <strong>Impor Data</strong>.</div>
+      <div class="card" style="color:var(--slate);margin-bottom:20px;">Belum ada data laporan keuangan untuk perusahaan ini.${isReviewer() ? '' : ' Silakan impor data terlebih dahulu di menu <strong>Impor Data</strong>.'}</div>
       <div class="section-block">
         <div class="section-title">Riwayat Impor</div>
         <div class="card" style="color:var(--slate);">Belum ada riwayat impor.</div>
@@ -6213,9 +6211,11 @@ function renderSettings() {
   }
 
   // Kategori Maker mendapat akses penuh ke semua MENU aplikasi (termasuk
-  // Kalender, Impor Data, dst.), tapi TIDAK melihat kartu Manajemen User
-  // di Setting — menambah/menghapus akses User lain tetap wewenang akun
-  // utama/pemilik saja.
+  // Kalender, Impor Data, dst.), TERMASUK kartu Manajemen User di Setting —
+  // Maker bisa menambah/menghapus/mengubah kategori User lain, sama seperti
+  // akun utama/pemilik. Hanya Reviewer yang tidak melihat kartu ini (lihat
+  // isReviewer() di atas).
+  const canManageTeam = !state.isSubUser || state.subUserRole === 'maker';
   const accountCardHTML = `
     <div class="card" style="width:100%;margin-top:16px;">
       <div class="section-title">Akun</div>
@@ -6228,22 +6228,21 @@ function renderSettings() {
 
   const teamManagementCardHTML = `
     <div class="card" style="width:100%;margin-top:16px;">
-      <div class="section-title">Manajemen User</div>
-      <div class="modal-sub" style="margin:2px 0 12px;">
-        Tambahkan akun tambahan berkategori <strong>Reviewer</strong> (hanya bisa mengakses menu
-        Dashboard, Perusahaan, Report, dan Setting — Ukuran Font &amp; Tentang) atau
-        <strong>Maker</strong> (akses penuh ke semua menu, kecuali Manajemen User ini sendiri),
-        memakai data perusahaan yang sama dengan akun ini.
+      <div class="section-title" style="display:flex;align-items:center;gap:6px;">Manajemen User
+        <span class="info-popover-wrap">
+          <button type="button" class="info-icon-btn" id="team-management-info-btn" title="Keterangan">${icon('info')}</button>
+          <div class="info-popover" id="team-management-info-popover">Tambahkan akun tambahan berkategori <strong>Reviewer</strong> (hanya bisa mengakses menu Dashboard, Perusahaan, Report, dan Setting — Ukuran Font &amp; Tentang) atau <strong>Maker</strong> (akses penuh ke semua menu, termasuk Manajemen User ini), memakai data perusahaan yang sama dengan akun ini.</div>
+        </span>
       </div>
       <div id="team-user-list"><div class="upgrade-empty">Memuat…</div></div>
       <button class="btn primary" id="add-team-user-btn" style="margin-top:12px;">+ Tambah User</button>
     </div>`;
 
-  root.innerHTML = fontCardHTML + accountCardHTML + (state.isSubUser ? '' : teamManagementCardHTML) + aboutCardHTML;
+  root.innerHTML = fontCardHTML + accountCardHTML + (canManageTeam ? teamManagementCardHTML : '') + aboutCardHTML;
 
   document.getElementById('logout-btn-2').addEventListener('click', () => auth.signOut());
   wireSettingsFontPills();
-  if (!state.isSubUser) wireTeamUserSection();
+  if (canManageTeam) wireTeamUserSection();
 }
 
 function wireSettingsFontPills() {
@@ -6261,7 +6260,10 @@ function wireSettingsFontPills() {
 // teardownActiveDataListener), sama seperti listener halaman lain.
 function wireTeamUserSection() {
   const listEl = document.getElementById('team-user-list');
-  state.unsubData = DB.watchTeamUsers(state.user.uid, (users) => {
+  // Pakai dataOwnerUid (bukan state.user.uid) supaya akun Maker — yang
+  // uid login-nya berbeda dari pemilik — tetap melihat & mengelola daftar
+  // User yang sama persis dengan yang dilihat akun utama/pemilik.
+  state.unsubData = DB.watchTeamUsers(state.dataOwnerUid, (users) => {
     state.teamUsers = users;
     if (!listEl || !listEl.isConnected) return;
     listEl.innerHTML = users.length
@@ -6286,6 +6288,26 @@ function wireTeamUserSection() {
   }, (err) => { if (listEl) listEl.innerHTML = `<div class="upgrade-empty">Gagal memuat: ${escapeHTML(err.message)}</div>`; });
 
   document.getElementById('add-team-user-btn').addEventListener('click', openAddTeamUserModal);
+
+  const infoBtn = document.getElementById('team-management-info-btn');
+  const infoPopover = document.getElementById('team-management-info-popover');
+  if (infoBtn && infoPopover) {
+    infoBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = infoPopover.classList.toggle('is-open');
+      if (isOpen) {
+        const closeOnOutsideClick = (evt) => {
+          if (!infoPopover.contains(evt.target) && evt.target !== infoBtn) {
+            infoPopover.classList.remove('is-open');
+            document.removeEventListener('click', closeOnOutsideClick);
+          }
+        };
+        // Ditunda 1 tick supaya klik yang membuka popover ini sendiri
+        // tidak langsung terhitung sebagai "klik di luar" dan menutupnya.
+        setTimeout(() => document.addEventListener('click', closeOnOutsideClick), 0);
+      }
+    });
+  }
 }
 
 function openAddTeamUserModal() {
@@ -6315,7 +6337,7 @@ function openAddTeamUserModal() {
     const role = backdrop.querySelector('#new-team-user-role').value === 'maker' ? 'maker' : 'reviewer';
     if (!email) { toast('Email wajib diisi', 'error'); return; }
     if (!password || password.length < 6) { toast('Kata sandi minimal 6 karakter', 'error'); return; }
-    const ownerUid = state.user.uid;
+    const ownerUid = state.dataOwnerUid;
     const saveBtn = backdrop.querySelector('#save-team-user');
     saveBtn.disabled = true;
     saveBtn.textContent = 'Menyimpan…';
@@ -7860,8 +7882,16 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
   // punya keterangan khusus, textarea mulai dari `description` dasar
   // (dipakai sbg template awal) tapi menyimpannya nanti tetap sbg
   // override tanggal ini saja — dasar tidak ikut tertimpa.
+  //
+  // Pengingat RENTANG TANGGAL sekali-jadi (repeat "none" + endDate) sengaja
+  // TIDAK ikut dianggap "kemunculan berulang" di sini — beda dari pengingat
+  // berulang, satu rentang tanggal itu adalah SATU peristiwa/tugas yang
+  // sama yang berlangsung beberapa hari, jadi Keterangan-nya wajar berlaku
+  // sama di semua tanggal dalam rentang itu (spt Judul), bukan per-tanggal.
+  // itemHasEndDate tetap dipakai terpisah di bawah (showSkipOccurrenceButton)
+  // supaya fitur "Hapus tanggal ini saja" tetap tersedia utk rentang tanggal.
   const itemHasEndDate = isEdit && !!item.endDate && item.date && item.endDate >= item.date;
-  const isRecurringOccurrence = isEdit && !!occurrenceDate && ((item.repeat && item.repeat !== 'none') || itemHasEndDate);
+  const isRecurringOccurrence = isEdit && !!occurrenceDate && !!item.repeat && item.repeat !== 'none';
   // Pengingat ANALISIS punya konvensi Keterangan sendiri (lihat
   // analisisEffectiveDescription): kalimat sebelum ";" adalah template
   // bersama semua bulan (kata dalam kutip otomatis ikut bulan sebelum
@@ -7915,7 +7945,7 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
   // lagi. Sekarang tombol ini HANYA muncul kalau kemunculan ini BELUM
   // dihapus khusus tanggal ini — begitu sudah dihapus, tombolnya hilang
   // sama sekali (tidak ada cara membatalkan lewat UI).
-  const showSkipOccurrenceButton = isEdit && !!occurrenceDate && (isRecurringOccurrence || isAnalisisOccurrence || isMovedOccurrence) && !currentSkipOccurrence;
+  const showSkipOccurrenceButton = isEdit && !!occurrenceDate && (isRecurringOccurrence || isAnalisisOccurrence || isMovedOccurrence || itemHasEndDate) && !currentSkipOccurrence;
   const initialDescription = isRecurringOccurrence
     ? reminderDescriptionForDate(item, occurrenceDate)
     : isAnalisisOccurrence
@@ -8353,7 +8383,10 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
         // dokumen — supaya kemunculan lain (tanggal lain) tetap memakai
         // keterangan dasar/template atau override-nya sendiri masing-
         // masing. Field lain (judul, tanggal, ulangi, dst.) tetap berlaku
-        // global spt sebelumnya.
+        // global spt sebelumnya. Pengingat RENTANG TANGGAL (repeat "none"
+        // + endDate) TIDAK masuk cabang ini (lihat isRecurringOccurrence) —
+        // Keterangan-nya langsung menimpa `description` dasar spt pengingat
+        // sekali-jadi biasa, supaya berlaku sama di semua tanggal rentang.
         // Pengingat ANALISIS: kalau Keterangan mengandung ";", bagian
         // sebelum & termasuk ";" itu disimpan sbg `description` dasar
         // (template bulanan bersama), bagian setelahnya disimpan sbg
