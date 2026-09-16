@@ -429,28 +429,7 @@ tbody tr:hover{background:var(--surface-2);}
 .ownership-row .pct-wrap input{padding:8px 22px 8px 10px;border:1px solid var(--border);border-radius:7px;font-size:16px;width:100%;text-align:right;}
 .ownership-row .pct-wrap span{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--slate);pointer-events:none;}
 
-.upgrade-progress-wrap{margin:2px 0 18px 0;}
-.upgrade-progress-bar{height:8px;border-radius:999px;background:var(--border);overflow:hidden;width:100%;}
-.upgrade-progress-fill{height:100%;border-radius:999px;background:var(--teal);transition:width .25s ease;}
-.upgrade-progress-label{display:flex;justify-content:space-between;font-size:12px;color:var(--slate);margin-top:6px;}
-.upgrade-progress-label strong{color:var(--text);font-size:13px;}
-.upgrade-list{display:flex;flex-direction:column;gap:10px;}
-.upgrade-item{display:flex;gap:11px;align-items:flex-start;border:1px solid var(--border);border-radius:9px;padding:12px 13px;background:var(--surface-2);}
-.upgrade-item input[type="checkbox"]{width:19px;height:19px;flex-shrink:0;margin-top:1px;cursor:pointer;accent-color:var(--teal);}
-.upgrade-item-body{flex:1;min-width:0;}
-.upgrade-item-title{font-size:14px;font-weight:600;color:var(--text);word-break:break-word;}
-.upgrade-item-desc{font-size:12.5px;color:var(--slate);line-height:1.55;margin-top:4px;white-space:pre-wrap;word-break:break-word;}
-.upgrade-item-more{font-size:12px;color:var(--teal);cursor:pointer;font-weight:600;margin-top:4px;display:inline-block;}
-.upgrade-item-actions{display:flex;gap:6px;flex-shrink:0;margin-top:1px;}
-.upgrade-item-actions button{
-  width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--slate);
-  display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
-}
-.upgrade-item-actions button:hover{background:var(--surface-3,rgba(0,0,0,.05));color:var(--text);}
-.upgrade-item-actions button.danger-action:hover{color:var(--danger);border-color:var(--danger);}
-.upgrade-item-actions svg{width:14px;height:14px;}
 .upgrade-empty{font-size:13px;color:var(--slate-light);padding:14px 2px;text-align:center;}
-.upgrade-toggle-done{font-size:12px;color:var(--teal);cursor:pointer;font-weight:600;background:none;border:none;padding:0;margin-bottom:12px;display:inline-block;}
 
 .cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap;}
 .cal-nav{display:flex;align-items:center;gap:6px;}
@@ -1195,45 +1174,6 @@ const DB = {
       if (debounceTimer) clearTimeout(debounceTimer);
       unsubs.forEach(u => { if (typeof u === 'function') u(); });
     };
-  },
-
-  // ---- Setting → Upgrade Aplikasi (checklist poin rencana/progres upgrade) ----
-  watchUpgradeItems(uid, onData, onError) {
-    return db.collection('upgradeItems').where('ownerUid', '==', uid)
-      .onSnapshot({ includeMetadataChanges: true }, (snap) => {
-        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-          .sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
-        onData(items, {
-          pendingWrites: snap.metadata.hasPendingWrites,
-          fromCache: snap.metadata.fromCache
-        });
-      }, (err) => { if (onError) onError(err); else console.error('watchUpgradeItems error', err); });
-  },
-
-  async addUpgradeItem(uid, title, description) {
-    await db.collection('upgradeItems').add({
-      title: title || '',
-      description: description || '',
-      checked: false,
-      ownerUid: uid,
-      createdAtMs: Date.now(),
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  },
-
-  async updateUpgradeItem(itemId, { title, description }) {
-    await db.collection('upgradeItems').doc(itemId).update({
-      title: title || '',
-      description: description || ''
-    });
-  },
-
-  async setUpgradeItemChecked(itemId, checked) {
-    await db.collection('upgradeItems').doc(itemId).update({ checked: !!checked });
-  },
-
-  async deleteUpgradeItem(itemId) {
-    await db.collection('upgradeItems').doc(itemId).delete();
   },
 
   // ---- Kalender → Pengingat (catatan/reminder tugas bebas per tanggal) ----
@@ -2676,11 +2616,7 @@ const state = {
   importType: 'bukuBesar', // jenis data yang sedang dipilih di halaman Impor Data
   companyDetailId: null,      // perusahaan yang sedang dilihat rinciannya
   companyDetailPeriodId: null, // periode (statementId) yang sedang dipilih di halaman rincian
-  upgradeItems: [],           // daftar poin checklist Upgrade Aplikasi (menu Setting)
-  upgradeItemsLoaded: false,  // true setelah listener watchUpgradeItems berhasil membalas min. 1x sesi ini (dipakai utk skip layar "Memuat..." saat kembali ke menu Setting, & sbg penanda watchdog di bawah)
   loadingWatchdog: null,      // id setTimeout watchdog "Memuat..." yang macet (lihat startLoadingWatchdog)
-  upgradeShowDone: false,     // true = tampilkan juga poin yang sudah dicentang (biasanya auto-hide)
-  upgradeExpanded: {},        // itemId -> true jika keterangan panjang sedang ditampilkan penuh
   reminders: [],              // daftar pengingat/catatan tugas bebas (menu Kalender)
   dayOffDates: [],             // daftar tanggal (yyyy-mm-dd) yang ditandai Libur/Cuti/Sakit — lihat DB.watchDayOffDates & isDayOff()
   unsubDayOff: null,           // listener realtime khusus dayOffDates (terpisah dari unsubData supaya tidak bentrok dgn listener reminders di menu Kalender)
@@ -3108,7 +3044,6 @@ function renderShell() {
           <div style="display:flex;align-items:center;gap:12px;">
             <button class="theme-toggle-topbar" id="theme-toggle-btn"></button>
             <div class="sync-badge" id="sync-badge"></div>
-            <button class="btn ghost" id="refresh-btn">Muat ulang data</button>
           </div>
         </div>
         <div class="content" id="view-root"></div>
@@ -3130,8 +3065,6 @@ function renderShell() {
   document.querySelectorAll('#bottom-nav .bottom-nav-item').forEach(navEl => {
     navEl.addEventListener('click', () => setView(navEl.dataset.view));
   });
-
-  document.getElementById('refresh-btn').addEventListener('click', reloadCompanies);
 
   paintThemeToggleBtn();
   document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
@@ -3169,8 +3102,9 @@ function renderCurrentView() {
 async function reloadCompanies() {
   // Daftar perusahaan biasanya sudah otomatis ter-update lewat listener
   // realtime (watchCompanies). Fungsi ini dipakai sebagai jalan pintas
-  // agar tampilan langsung merespon setelah menambah/menghapus perusahaan,
-  // dan sebagai aksi tombol "Muat ulang data". Listener data view yang
+  // agar tampilan langsung merespon setelah menambah/menghapus perusahaan
+  // (dipanggil langsung dari kode, bukan lagi lewat tombol "Muat ulang
+  // data" di topbar yang sudah dihapus). Listener data view yang
   // sedang aktif dihentikan dulu (teardownActiveDataListener) sebelum
   // render ulang, supaya tidak menumpuk listener lama yang belum
   // di-unsubscribe (lihat setView) — penumpukan listener inilah salah
@@ -6124,208 +6058,58 @@ function paintRatios(statements) {
 }
 
 // ---------- Setting ----------
+// Tanggal rilis pertama Integrida — dipakai untuk menghitung otomatis
+// sudah berapa lama aplikasi ini berjalan (ditampilkan di kartu
+// "Tentang Integrida" pada menu Setting), supaya tidak perlu diupdate
+// manual tiap bulan/tahun.
+const APP_RELEASE_DATE = new Date(2026, 8, 1); // 1 September 2026
+function appReleaseAgeLabel() {
+  const now = new Date();
+  let months = (now.getFullYear() - APP_RELEASE_DATE.getFullYear()) * 12 + (now.getMonth() - APP_RELEASE_DATE.getMonth());
+  if (now.getDate() < APP_RELEASE_DATE.getDate()) months -= 1;
+  if (months < 1) return 'kurang dari 1 bulan';
+  const years = Math.floor(months / 12);
+  const remMonths = months % 12;
+  if (years === 0) return `${months} bulan`;
+  if (remMonths === 0) return `${years} tahun`;
+  return `${years} tahun ${remMonths} bulan`;
+}
+
 function renderSettings() {
   const root = document.getElementById('view-root');
   root.innerHTML = `
-    <div style="max-width:900px;margin:0 auto;">
-      <div class="card" style="width:100%;">
-        <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-          <span>Upgrade Aplikasi</span>
-          <button class="btn primary" id="add-upgrade-btn" style="font-size:12.5px;padding:7px 12px;">+ Tambah Poin</button>
-        </div>
-        <div id="upgrade-body">
-          ${state.upgradeItemsLoaded ? '' : '<div class="upgrade-empty">Memuat…</div>'}
-        </div>
+    <div class="card" style="width:100%;">
+      <div class="section-title">Ukuran Font</div>
+      <div class="segmented" id="font-size-pills" style="margin-top:10px;">
+        ${FONT_SIZE_OPTIONS.map(o => `<div class="seg-item ${getStoredFontSize() === o.key ? 'active' : ''}" data-font-size="${o.key}">${o.label}</div>`).join('')}
       </div>
+    </div>
 
-      <div class="card" style="width:100%;margin-top:16px;">
-        <div class="section-title">Ukuran Font</div>
-        <div class="segmented" id="font-size-pills" style="margin-top:10px;">
-          ${FONT_SIZE_OPTIONS.map(o => `<div class="seg-item ${getStoredFontSize() === o.key ? 'active' : ''}" data-font-size="${o.key}">${o.label}</div>`).join('')}
-        </div>
+    <div class="card" style="width:100%;margin-top:16px;">
+      <div class="section-title">Akun</div>
+      <div class="user-chip" style="color:var(--text);font-size:13.5px;margin-top:6px;">
+        <div class="dot">${(state.user.email || '?')[0].toUpperCase()}</div>
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${state.user.email}</div>
       </div>
+      <button class="logout-btn" id="logout-btn-2" style="border-color:var(--border);color:var(--text);max-width:260px;">Keluar</button>
+    </div>
 
-      <div class="card" style="width:100%;margin-top:16px;">
-        <div class="section-title">Akun</div>
-        <div class="user-chip" style="color:var(--text);font-size:13.5px;margin-top:6px;">
-          <div class="dot">${(state.user.email || '?')[0].toUpperCase()}</div>
-          <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${state.user.email}</div>
-        </div>
-        <button class="logout-btn" id="logout-btn-2" style="border-color:var(--border);color:var(--text);max-width:260px;">Keluar</button>
-        <div class="section-title" style="margin-top:20px;">Tentang Integrida</div>
-        <p style="font-size:13.5px;color:var(--slate);line-height:1.6;max-width:640px;">
-          Integrida adalah aplikasi konsolidasi laporan keuangan untuk beberapa perusahaan.
-          Data neraca dan laba rugi diimpor dari Excel, kemudian dibandingkan per bulan, triwulan,
-          semester, maupun tahunan, lengkap dengan analisis likuiditas, solvabilitas, dan profitabilitas.
-          Seluruh data tersimpan pada Firebase project yang Anda konfigurasikan sendiri.
-        </p>
-      </div>
+    <div class="card" style="width:100%;margin-top:16px;">
+      <div class="section-title">Tentang Integrida</div>
+      <p style="font-size:13.5px;color:var(--slate);line-height:1.6;">
+        Integrida adalah aplikasi konsolidasi laporan keuangan untuk beberapa perusahaan,
+        lengkap dengan analisis likuiditas, solvabilitas, dan profitabilitas.
+        Dirilis pertama kali pada <strong style="color:var(--text);">1 September 2026</strong>
+        — sudah berjalan selama <strong style="color:var(--text);">${appReleaseAgeLabel()}</strong>.
+      </p>
     </div>
   `;
   document.getElementById('logout-btn-2').addEventListener('click', () => auth.signOut());
-  document.getElementById('add-upgrade-btn').addEventListener('click', () => openUpgradeItemModal());
   document.querySelectorAll('#font-size-pills .seg-item').forEach(seg => {
     seg.addEventListener('click', () => {
       applyFontSize(seg.dataset.fontSize);
       document.querySelectorAll('#font-size-pills .seg-item').forEach(s => s.classList.toggle('active', s === seg));
     });
-  });
-
-  // Kalau sudah pernah berhasil dimuat sesi ini, tampilkan langsung dari
-  // cache (state.upgradeItems) supaya tidak ada jeda "Memuat..." tiap kali
-  // kembali ke menu Setting — listener di bawah tetap dipasang ulang utk
-  // menerima perubahan terbaru secara realtime.
-  if (state.upgradeItemsLoaded) renderUpgradeBody();
-  else startLoadingWatchdog('upgrade-body', 8000, () => { teardownActiveDataListener(); renderSettings(); });
-
-  state.unsubData = DB.watchUpgradeItems(state.user.uid, (items) => {
-    clearLoadingWatchdog();
-    state.upgradeItemsLoaded = true;
-    state.upgradeItems = items;
-    renderUpgradeBody();
-  }, (err) => {
-    clearLoadingWatchdog();
-    const body = document.getElementById('upgrade-body');
-    if (body) body.innerHTML = `<div class="upgrade-empty">Gagal memuat: ${escapeHTML(err.message)}</div>`;
-  });
-}
-
-// Merender ulang isi daftar checklist Upgrade Aplikasi saja (dipanggil
-// setiap ada perubahan realtime, atau setelah aksi lokal seperti
-// expand/collapse keterangan panjang & toggle tampilkan yang selesai),
-// tanpa perlu menggambar ulang seluruh halaman Setting.
-function renderUpgradeBody() {
-  const body = document.getElementById('upgrade-body');
-  if (!body) return; // pengguna sudah pindah dari menu Setting
-  const items = state.upgradeItems;
-  const total = items.length;
-  const doneCount = items.filter(i => i.checked).length;
-  const pct = total === 0 ? 0 : Math.round((doneCount / total) * 100);
-  const visibleItems = items.filter(i => state.upgradeShowDone ? true : !i.checked);
-
-  body.innerHTML = `
-    <div class="upgrade-progress-wrap">
-      <div class="upgrade-progress-bar"><div class="upgrade-progress-fill" style="width:${pct}%;"></div></div>
-      <div class="upgrade-progress-label"><span>Progres upgrade</span><strong>${pct}% (${doneCount}/${total} selesai)</strong></div>
-    </div>
-    ${doneCount > 0 ? `<button class="upgrade-toggle-done" id="toggle-upgrade-done">${state.upgradeShowDone ? 'Sembunyikan poin yang sudah selesai' : `Tampilkan poin yang sudah selesai (${doneCount})`}</button>` : ''}
-    <div class="upgrade-list" id="upgrade-list">
-      ${visibleItems.length === 0
-        ? `<div class="upgrade-empty">${total === 0 ? 'Belum ada poin upgrade. Klik "+ Tambah Poin" untuk menambahkan.' : 'Semua poin sudah selesai dicentang.'}</div>`
-        : visibleItems.map(item => upgradeItemHTML(item)).join('')}
-    </div>
-  `;
-
-  const toggleBtn = document.getElementById('toggle-upgrade-done');
-  if (toggleBtn) toggleBtn.addEventListener('click', () => { state.upgradeShowDone = !state.upgradeShowDone; renderUpgradeBody(); });
-
-  body.querySelectorAll('[data-upgrade-check]').forEach(cb => {
-    cb.addEventListener('change', async () => {
-      const id = cb.dataset.upgradeCheck;
-      try {
-        await DB.setUpgradeItemChecked(id, cb.checked);
-      } catch (err) {
-        toast('Gagal memperbarui status: ' + err.message, 'error');
-      }
-    });
-  });
-
-  body.querySelectorAll('[data-upgrade-more]').forEach(a => {
-    a.addEventListener('click', () => {
-      const id = a.dataset.upgradeMore;
-      state.upgradeExpanded[id] = !state.upgradeExpanded[id];
-      renderUpgradeBody();
-    });
-  });
-
-  body.querySelectorAll('[data-upgrade-copy]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const item = items.find(i => i.id === btn.dataset.upgradeCopy);
-      if (!item) return;
-      const text = item.description ? `${item.title}\n\n${item.description}` : item.title;
-      copyToClipboard(text);
-    });
-  });
-
-  body.querySelectorAll('[data-upgrade-edit]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const item = items.find(i => i.id === btn.dataset.upgradeEdit);
-      if (item) openUpgradeItemModal(item);
-    });
-  });
-
-  body.querySelectorAll('[data-upgrade-delete]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const item = items.find(i => i.id === btn.dataset.upgradeDelete);
-      if (!item) return;
-      if (!confirm(`Hapus poin "${item.title}"?`)) return;
-      try {
-        await DB.deleteUpgradeItem(item.id);
-        toast('Poin dihapus', 'success');
-      } catch (err) {
-        toast('Gagal menghapus poin: ' + err.message, 'error');
-      }
-    });
-  });
-}
-
-// Keterangan boleh sangat panjang (>500 karakter) sehingga dipotong
-// ringkas di daftar dengan tautan "Lihat selengkapnya" per poin.
-function upgradeItemHTML(item) {
-  const desc = item.description || '';
-  const isLong = desc.length > 220;
-  const expanded = !!state.upgradeExpanded[item.id];
-  const shown = isLong && !expanded ? desc.slice(0, 220) + '…' : desc;
-  return `
-    <div class="upgrade-item">
-      <input type="checkbox" data-upgrade-check="${item.id}" ${item.checked ? 'checked' : ''} title="Tandai selesai">
-      <div class="upgrade-item-body">
-        <div class="upgrade-item-title" style="${item.checked ? 'text-decoration:line-through;color:var(--slate-light);' : ''}">${escapeHTML(item.title)}</div>
-        ${desc ? `<div class="upgrade-item-desc">${escapeHTML(shown)}</div>` : ''}
-        ${isLong ? `<span class="upgrade-item-more" data-upgrade-more="${item.id}">${expanded ? 'Sembunyikan' : 'Lihat selengkapnya'}</span>` : ''}
-      </div>
-      <div class="upgrade-item-actions">
-        <button data-upgrade-copy="${item.id}" title="Salin judul & keterangan">${icon('copy')}</button>
-        <button data-upgrade-edit="${item.id}" title="Edit poin">${icon('edit')}</button>
-        <button class="danger-action" data-upgrade-delete="${item.id}" title="Hapus poin">${icon('trash')}</button>
-      </div>
-    </div>
-  `;
-}
-
-// item kosong/undefined => mode tambah baru; item terisi => mode edit.
-function openUpgradeItemModal(item) {
-  const isEdit = !!item;
-  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:520px;">
-    <h3>${isEdit ? 'Edit Poin Upgrade' : 'Tambah Poin Upgrade'}</h3>
-    <div class="modal-sub">Judul singkat dan keterangan rinci mengenai rencana/progres upgrade aplikasi. Keterangan tidak dibatasi panjangnya (boleh lebih dari 500 karakter).</div>
-    <div class="field"><label>Judul</label><input type="text" id="upgrade-title-input" placeholder="Contoh: Tambah fitur ekspor PDF" value="${escapeHTML(item ? item.title : '')}"></div>
-    <div class="field"><label>Keterangan</label><textarea id="upgrade-desc-input" rows="7" placeholder="Jelaskan detail poin ini...">${escapeHTML(item ? item.description : '')}</textarea></div>
-    <div class="modal-actions">
-      <button class="btn ghost" id="cancel-modal">Batal</button>
-      <button class="btn primary" id="save-upgrade-item">Simpan</button>
-    </div>
-  </div></div>`);
-  document.body.appendChild(backdrop);
-  backdrop.querySelector('#cancel-modal').addEventListener('click', () => backdrop.remove());
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
-  backdrop.querySelector('#upgrade-title-input').focus();
-  backdrop.querySelector('#save-upgrade-item').addEventListener('click', async () => {
-    const title = backdrop.querySelector('#upgrade-title-input').value.trim();
-    const description = backdrop.querySelector('#upgrade-desc-input').value.trim();
-    if (!title) { toast('Judul wajib diisi', 'error'); return; }
-    try {
-      if (isEdit) {
-        await DB.updateUpgradeItem(item.id, { title, description });
-        toast('Poin diperbarui', 'success');
-      } else {
-        await DB.addUpgradeItem(state.user.uid, title, description);
-        toast('Poin ditambahkan', 'success');
-      }
-      backdrop.remove();
-    } catch (err) {
-      toast('Gagal menyimpan: ' + err.message, 'error');
-    }
   });
 }
 
@@ -6538,6 +6322,26 @@ function occursOnDate(reminder, dateKeyStr) {
     const targetDay = Math.min(bd, daysInCurMonth);
     if (kd !== targetDay) return false;
     return filterDays.includes(curDow);
+  }
+  if (repeat === 'yearly') {
+    // "Tahunan": berulang tiap tahun di bulan & tanggal yang sama dengan
+    // tanggal awal (reminder.date). Kalau bulan berjalan (km) beda dgn
+    // bulan awal (bm), pengingat tidak muncul sama sekali bulan itu
+    // (bukan digeser ke bulan lain). Tanggal 29 Feb pada tahun bukan
+    // kabisat otomatis jatuh di tanggal terakhir bulan itu (28 Feb),
+    // sama seperti penyesuaian akhir bulan pada repeat "Bulanan". "s.d.
+    // tgl lain" (endDate) melebarkan jadi rentang tanggal DI BULAN YANG
+    // SAMA tiap tahun (sama seperti repeat "Bulanan" dengan endDate).
+    if (km !== bm) return false;
+    const daysInCurMonth = new Date(ky, km, 0).getDate();
+    if (hasEndDate) {
+      const spanDays = Math.max(0, ed - bd);
+      const startDayEff = Math.min(bd, daysInCurMonth);
+      const endDayEff = Math.min(bd + spanDays, daysInCurMonth);
+      return kd >= startDayEff && kd <= endDayEff && passesWeekdayFilter();
+    }
+    const targetDay = Math.min(bd, daysInCurMonth);
+    return kd === targetDay;
   }
   return false;
 }
@@ -6787,7 +6591,7 @@ function remindersForDate(dateKeyStr) {
     });
 }
 
-const REPEAT_LABELS = { none: 'Tidak berulang', daily: 'Harian', weekday: 'Weekday (Senin–Jumat)', weekly: 'Mingguan', weeklyCustom: 'Mingguan, Hari Tertentu', monthly: 'Bulanan', custom: 'Bulanan, Hari Tertentu' };
+const REPEAT_LABELS = { none: 'Tidak berulang', daily: 'Harian', weekday: 'Weekday (Senin–Jumat)', weekly: 'Mingguan', weeklyCustom: 'Mingguan, Hari Tertentu', monthly: 'Bulanan', custom: 'Bulanan, Hari Tertentu', yearly: 'Tahunan' };
 // Label singkat hari berdasarkan konvensi Date.getDay() (0=Minggu...6=Sabtu),
 // dipakai untuk menampilkan pilihan hari pada repeat "Bulanan, Hari Tertentu".
 const CAL_DOW_BY_JSDOW = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -6808,6 +6612,19 @@ function repeatDisplayLabel(item) {
   if (repeat === 'weeklyCustom') {
     if (days.length === 0) return REPEAT_LABELS.weeklyCustom;
     return `${REPEAT_LABELS.weeklyCustom} · ${days.map(d => CAL_DOW_BY_JSDOW[d]).join(', ')}`;
+  }
+  if (repeat === 'yearly') {
+    const [, bm2, bd2] = item.date.split('-').map(Number);
+    const monthName = cap(BULAN_ID[bm2 - 1]);
+    let datePart = `${bd2} ${monthName}`;
+    if (hasEndDate) {
+      const ed2 = Number(item.endDate.split('-')[2]);
+      datePart = `${bd2}-${ed2} ${monthName}`;
+    }
+    let yearlyLabel = `${REPEAT_LABELS.yearly} (${datePart})`;
+    if (days.length > 0) yearlyLabel += ` · ${days.map(d => CAL_DOW_BY_JSDOW[d]).join(', ')}`;
+    if (item.repeatUntil) yearlyLabel += ` · berhenti stlh ${formatDateID(item.repeatUntil)}`;
+    return yearlyLabel;
   }
   let label = REPEAT_LABELS[repeat] || REPEAT_LABELS.none;
   if (hasEndDate) {
@@ -7000,7 +6817,6 @@ async function exportCalendarAgendaPDF() {
 function renderCalendar() {
   const root = document.getElementById('view-root');
   root.innerHTML = `
-    <div style="max-width:1240px;margin:0 auto;">
       <div class="card" style="width:100%;">
         <div class="cal-header">
           <div class="cal-nav">
@@ -7023,7 +6839,6 @@ function renderCalendar() {
           <div class="cal-grid" id="cal-grid"></div>
         </div>
       </div>
-    </div>
     <button class="cal-fab" id="add-reminder-btn" title="Tambah Pengingat">${icon('plus')}</button>
   `;
   document.getElementById('cal-prev').addEventListener('click', () => shiftCalendarMonth(-1));
@@ -7895,6 +7710,7 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
         <option value="weeklyCustom" ${item && item.repeat === 'weeklyCustom' ? 'selected' : ''}>Mingguan, Hari Tertentu</option>
         <option value="monthly" ${item && item.repeat === 'monthly' ? 'selected' : ''}>Bulanan</option>
         <option value="custom" ${item && item.repeat === 'custom' ? 'selected' : ''}>Bulanan, Hari Tertentu</option>
+        <option value="yearly" ${item && item.repeat === 'yearly' ? 'selected' : ''}>Tahunan</option>
       </select>
     </div>
     <div class="field" id="reminder-shiftweekend-row" style="display:none;">
