@@ -905,6 +905,46 @@ db.enablePersistence().catch(() => {
   /* Diabaikan jika gagal (mis. dibuka di banyak tab sekaligus) */
 });
 
+// Membuat akun Firebase Authentication (email/password) BARU tanpa
+// mengganti sesi login yang sedang aktif. Secara default, memanggil
+// createUserWithEmailAndPassword lewat `auth` utama otomatis membuat
+// browser langsung login sebagai akun baru tsb — supaya pemilik akun
+// (yang sedang menambahkan User baru lewat menu Setting) tetap login
+// sebagai dirinya sendiri, akun baru dibuat lewat instance app Firebase
+// KEDUA yang sifatnya sementara, lalu langsung dibuang setelah selesai.
+async function createUserAccountKeepSession(email, password) {
+  const secondaryApp = firebase.initializeApp(firebaseConfig, 'Secondary-' + Date.now());
+  try {
+    const cred = await secondaryApp.auth().createUserWithEmailAndPassword(email, password);
+    const uid = cred.user.uid;
+    await secondaryApp.auth().signOut();
+    return uid;
+  } finally {
+    await secondaryApp.delete();
+  }
+}
+
+// Login (bukan bikin akun baru) lewat instance app Firebase KEDUA yang
+// sementara, tanpa mengganti sesi login yang aktif — dipakai sbg jalan
+// "penyembuhan" utk kasus akun yang sempat berhasil dibuat di Firebase
+// Authentication tapi GAGAL tersimpan sbg dokumen teamUsers (mis. krn
+// dicoba sebelum Firestore Rules sempat di-publish): begitu Simpan
+// gagal dgn kode auth/email-already-in-use, sistem coba login dgn
+// email+kata sandi yang baru diketik utk mendapatkan UID akun yg
+// "menggantung" tsb, lalu mendaftarkannya sbg User tanpa perlu membuat
+// akun baru lagi.
+async function signInAccountKeepSession(email, password) {
+  const secondaryApp = firebase.initializeApp(firebaseConfig, 'Secondary-' + Date.now());
+  try {
+    const cred = await secondaryApp.auth().signInWithEmailAndPassword(email, password);
+    const uid = cred.user.uid;
+    await secondaryApp.auth().signOut();
+    return uid;
+  } finally {
+    await secondaryApp.delete();
+  }
+}
+
 </script>
 <script>
 // ===== db.js =====
@@ -938,6 +978,41 @@ const DB = {
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     return ref.id;
+  },
+
+  // ---- Manajemen User tambahan (akses terbatas) ----
+  // teamUsers/{uid}  { ownerUid, email, createdAt }
+  // Dokumen berid = UID akun Firebase Auth-nya sendiri; keberadaan
+  // dokumen ini menandakan akun tsb adalah "User" tambahan berakses
+  // terbatas (Dashboard, Perusahaan, Report, Setting) yang memakai data
+  // milik `ownerUid`.
+  async getTeamUserDoc(uid) {
+    const doc = await db.collection('teamUsers').doc(uid).get();
+    return doc.exists ? { id: doc.id, ...doc.data() } : null;
+  },
+
+  watchTeamUsers(ownerUid, onData, onError) {
+    return db.collection('teamUsers').where('ownerUid', '==', ownerUid)
+      .onSnapshot((snap) => {
+        onData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (err) => { if (onError) onError(err); else console.error('watchTeamUsers error', err); });
+  },
+
+  async addTeamUser(uid, ownerUid, email, role) {
+    await db.collection('teamUsers').doc(uid).set({
+      ownerUid,
+      email,
+      role: role === 'maker' ? 'maker' : 'reviewer',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  },
+
+  async deleteTeamUser(uid) {
+    await db.collection('teamUsers').doc(uid).delete();
+  },
+
+  async updateTeamUserRole(uid, role) {
+    await db.collection('teamUsers').doc(uid).update({ role: role === 'maker' ? 'maker' : 'reviewer' });
   },
 
   async updateCompanyCode(companyId, code) {
@@ -2601,6 +2676,10 @@ function formatRatio(value, fmt) {
 
 const state = {
   user: null,
+  dataOwnerUid: null,    // UID pemilik data yang sedang dipakai (== user.uid utk akun utama; == ownerUid dari teamUsers utk akun User terbatas)
+  isSubUser: false,      // true jika akun yang login adalah "User" tambahan berakses terbatas (lihat teamUsers)
+  subUserRole: null,     // kategori akun User: 'reviewer' (akses terbatas) atau 'maker' (akses penuh kecuali Manajemen User) — null utk akun utama/pemilik
+  teamUsers: [],          // cache daftar User tambahan milik akun ini (utk menu Setting > Manajemen User)
   companies: [],
   view: 'dashboard',
   compareCompanyIds: [],
@@ -2732,6 +2811,18 @@ const NAV_ITEMS = [
   { id: 'settings', label: 'Setting', icon: 'gear' }
 ];
 
+// Menu yang boleh diakses akun "User" tambahan berkategori Reviewer
+// (dibuat lewat Setting > Manajemen User) — lihat state.isSubUser &
+// state.subUserRole. Kategori Maker memakai NAV_ITEMS penuh (semua
+// menu), sama seperti akun utama/pemilik.
+const RESTRICTED_NAV_IDS = ['dashboard', 'companies', 'report', 'settings'];
+function isReviewer() {
+  return state.isSubUser && state.subUserRole !== 'maker';
+}
+function visibleNavItems() {
+  return isReviewer() ? NAV_ITEMS.filter(item => RESTRICTED_NAV_IDS.includes(item.id)) : NAV_ITEMS;
+}
+
 const ICONS = {
   grid: '<path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z" stroke="currentColor" stroke-width="1.6" fill="none"/>',
   building: '<path d="M4 21V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v16M14 21v-9a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v9M4 21h16M7 8h1M7 11h1M7 14h1M11 8h1M11 11h1M11 14h1" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>',
@@ -2752,7 +2843,8 @@ const ICONS = {
   stopRepeat: '<path d="M4 4v5h5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.6 9A8 8 0 1 1 6.3 16.2" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M3.5 20.5l17-17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
   info: '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.7" r="1.15" fill="currentColor"/>',
   download: '<path d="M12 4v11M12 15l-4-4M12 15l4-4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
-  calendarX: '<rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M16 3v4M8 3v4M3 10h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M9.2 14.2l5.6 5.6M14.8 14.2l-5.6 5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>'
+  calendarX: '<rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M16 3v4M8 3v4M3 10h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M9.2 14.2l5.6 5.6M14.8 14.2l-5.6 5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17l5-5-5-5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>'
 };
 
 function icon(name) {
@@ -3042,6 +3134,7 @@ function renderShell() {
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;">
+            ${isReviewer() ? `<button class="theme-toggle-topbar" id="topbar-logout-btn" title="Keluar">${icon('logout')}</button>` : ''}
             <button class="theme-toggle-topbar" id="theme-toggle-btn"></button>
             <div class="sync-badge" id="sync-badge"></div>
           </div>
@@ -3049,14 +3142,14 @@ function renderShell() {
         <div class="content" id="view-root"></div>
       </div>
       <nav class="bottom-nav" id="bottom-nav">
-        ${NAV_ITEMS.map(item => `<div class="bottom-nav-item" data-view="${item.id}">${icon(item.icon)}<span>${item.label}</span></div>`).join('')}
+        ${visibleNavItems().map(item => `<div class="bottom-nav-item" data-view="${item.id}">${icon(item.icon)}<span>${item.label}</span></div>`).join('')}
       </nav>
     </div>
     <div class="toast-wrap" id="toast-wrap"></div>
   `;
 
   const navList = document.getElementById('nav-list');
-  NAV_ITEMS.forEach(item => {
+  visibleNavItems().forEach(item => {
     const navEl = el(`<div class="nav-item" data-view="${item.id}">${icon(item.icon)}<span>${item.label}</span></div>`);
     navEl.addEventListener('click', () => setView(item.id));
     navList.appendChild(navEl);
@@ -3068,9 +3161,21 @@ function renderShell() {
 
   paintThemeToggleBtn();
   document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
+
+  // Tombol Keluar di topbar HANYA muncul utk akun User terbatas, karena
+  // menu Setting-nya sengaja tidak menampilkan kartu Akun (hanya Ukuran
+  // Font & Tentang) — tombol ini menggantikan jalur logout tsb, dan
+  // selalu terlihat di semua ukuran layar (beda dgn sidebar yang
+  // disembunyikan di mobile).
+  const topbarLogoutBtn = document.getElementById('topbar-logout-btn');
+  if (topbarLogoutBtn) topbarLogoutBtn.addEventListener('click', () => auth.signOut());
 }
 
 function setView(viewId) {
+  // Jaga-jaga: akun User terbatas tidak boleh masuk ke view di luar
+  // menu yang diizinkan (mis. Kalender/Impor Data), meskipun dipanggil
+  // langsung lewat kode (bukan klik menu yang memang sudah disaring).
+  if (isReviewer() && !RESTRICTED_NAV_IDS.includes(viewId)) viewId = 'dashboard';
   teardownActiveDataListener();
   state.view = viewId;
   document.querySelectorAll('.nav-item, .bottom-nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === viewId));
@@ -3109,7 +3214,7 @@ async function reloadCompanies() {
   // render ulang, supaya tidak menumpuk listener lama yang belum
   // di-unsubscribe (lihat setView) — penumpukan listener inilah salah
   // satu penyebab tampilan kadang terasa macet/lambat "Memuat..." di HP.
-  state.companies = await DB.getCompanies(state.user.uid);
+  state.companies = await DB.getCompanies(state.dataOwnerUid);
   teardownActiveDataListener();
   renderCurrentView();
 }
@@ -3608,7 +3713,7 @@ function openAddCompanyModal() {
     const category = backdrop.querySelector('#new-company-category').value || null;
     const parentId = backdrop.querySelector('#new-company-parent').value || null;
     if (!name) { toast('Nama perusahaan wajib diisi', 'error'); return; }
-    await DB.addCompany(state.user.uid, name, code, parentId, category);
+    await DB.addCompany(state.dataOwnerUid, name, code, parentId, category);
     backdrop.remove();
     toast('Perusahaan ditambahkan', 'success');
     await reloadCompanies();
@@ -6077,23 +6182,16 @@ function appReleaseAgeLabel() {
 
 function renderSettings() {
   const root = document.getElementById('view-root');
-  root.innerHTML = `
+
+  const fontCardHTML = `
     <div class="card" style="width:100%;">
       <div class="section-title">Ukuran Font</div>
       <div class="segmented" id="font-size-pills" style="margin-top:10px;">
         ${FONT_SIZE_OPTIONS.map(o => `<div class="seg-item ${getStoredFontSize() === o.key ? 'active' : ''}" data-font-size="${o.key}">${o.label}</div>`).join('')}
       </div>
-    </div>
+    </div>`;
 
-    <div class="card" style="width:100%;margin-top:16px;">
-      <div class="section-title">Akun</div>
-      <div class="user-chip" style="color:var(--text);font-size:13.5px;margin-top:6px;">
-        <div class="dot">${(state.user.email || '?')[0].toUpperCase()}</div>
-        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${state.user.email}</div>
-      </div>
-      <button class="logout-btn" id="logout-btn-2" style="border-color:var(--border);color:var(--text);max-width:260px;">Keluar</button>
-    </div>
-
+  const aboutCardHTML = `
     <div class="card" style="width:100%;margin-top:16px;">
       <div class="section-title">Tentang Integrida</div>
       <p style="font-size:13.5px;color:var(--slate);line-height:1.6;">
@@ -6102,14 +6200,208 @@ function renderSettings() {
         Dirilis pertama kali pada <strong style="color:var(--text);">1 September 2026</strong>
         — sudah berjalan selama <strong style="color:var(--text);">${appReleaseAgeLabel()}</strong>.
       </p>
-    </div>
-  `;
+    </div>`;
+
+  // Kategori Reviewer HANYA melihat 2 kartu di atas (Ukuran Font &
+  // Tentang) — tanpa kartu Akun/Manajemen User. Logout untuk Reviewer
+  // tetap tersedia lewat tombol di topbar (lihat renderShell), bukan
+  // lewat halaman Setting.
+  if (isReviewer()) {
+    root.innerHTML = fontCardHTML + aboutCardHTML;
+    wireSettingsFontPills();
+    return;
+  }
+
+  // Kategori Maker mendapat akses penuh ke semua MENU aplikasi (termasuk
+  // Kalender, Impor Data, dst.), tapi TIDAK melihat kartu Manajemen User
+  // di Setting — menambah/menghapus akses User lain tetap wewenang akun
+  // utama/pemilik saja.
+  const accountCardHTML = `
+    <div class="card" style="width:100%;margin-top:16px;">
+      <div class="section-title">Akun</div>
+      <div class="user-chip" style="color:var(--text);font-size:13.5px;margin-top:6px;">
+        <div class="dot">${(state.user.email || '?')[0].toUpperCase()}</div>
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${state.user.email}</div>
+      </div>
+      <button class="logout-btn" id="logout-btn-2" style="border-color:var(--border);color:var(--text);max-width:260px;">Keluar</button>
+    </div>`;
+
+  const teamManagementCardHTML = `
+    <div class="card" style="width:100%;margin-top:16px;">
+      <div class="section-title">Manajemen User</div>
+      <div class="modal-sub" style="margin:2px 0 12px;">
+        Tambahkan akun tambahan berkategori <strong>Reviewer</strong> (hanya bisa mengakses menu
+        Dashboard, Perusahaan, Report, dan Setting — Ukuran Font &amp; Tentang) atau
+        <strong>Maker</strong> (akses penuh ke semua menu, kecuali Manajemen User ini sendiri),
+        memakai data perusahaan yang sama dengan akun ini.
+      </div>
+      <div id="team-user-list"><div class="upgrade-empty">Memuat…</div></div>
+      <button class="btn primary" id="add-team-user-btn" style="margin-top:12px;">+ Tambah User</button>
+    </div>`;
+
+  root.innerHTML = fontCardHTML + accountCardHTML + (state.isSubUser ? '' : teamManagementCardHTML) + aboutCardHTML;
+
   document.getElementById('logout-btn-2').addEventListener('click', () => auth.signOut());
+  wireSettingsFontPills();
+  if (!state.isSubUser) wireTeamUserSection();
+}
+
+function wireSettingsFontPills() {
   document.querySelectorAll('#font-size-pills .seg-item').forEach(seg => {
     seg.addEventListener('click', () => {
       applyFontSize(seg.dataset.fontSize);
       document.querySelectorAll('#font-size-pills .seg-item').forEach(s => s.classList.toggle('active', s === seg));
     });
+  });
+}
+
+// Daftar User tambahan (menu Setting > Manajemen User, hanya utk akun
+// utama/pemilik). Listener realtime-nya dititipkan di state.unsubData
+// supaya otomatis di-unsubscribe begitu pindah halaman (lihat setView ->
+// teardownActiveDataListener), sama seperti listener halaman lain.
+function wireTeamUserSection() {
+  const listEl = document.getElementById('team-user-list');
+  state.unsubData = DB.watchTeamUsers(state.user.uid, (users) => {
+    state.teamUsers = users;
+    if (!listEl || !listEl.isConnected) return;
+    listEl.innerHTML = users.length
+      ? users.map(u => `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:9px;min-width:0;">
+            <div class="dot">${(u.email || '?')[0].toUpperCase()}</div>
+            <div style="min-width:0;">
+              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;color:var(--text);">${escapeHTML(u.email || '')}</div>
+              <div style="font-size:11px;color:var(--teal,#2F6FE4);cursor:pointer;text-decoration:underline;" data-edit-team-user-role="${u.id}" data-current-role="${u.role === 'maker' ? 'maker' : 'reviewer'}">${u.role === 'maker' ? 'Maker' : 'Reviewer'}</div>
+            </div>
+          </div>
+          <button type="button" class="reminder-prompt-icon-btn" data-delete-team-user="${u.id}" title="Hapus User">${icon('trash')}</button>
+        </div>`).join('')
+      : `<div class="upgrade-empty">Belum ada User tambahan.</div>`;
+    listEl.querySelectorAll('[data-delete-team-user]').forEach(btn => {
+      btn.addEventListener('click', () => confirmDeleteTeamUser(btn.dataset.deleteTeamUser));
+    });
+    listEl.querySelectorAll('[data-edit-team-user-role]').forEach(badge => {
+      badge.addEventListener('click', () => toggleTeamUserRole(badge.dataset.editTeamUserRole, badge.dataset.currentRole));
+    });
+  }, (err) => { if (listEl) listEl.innerHTML = `<div class="upgrade-empty">Gagal memuat: ${escapeHTML(err.message)}</div>`; });
+
+  document.getElementById('add-team-user-btn').addEventListener('click', openAddTeamUserModal);
+}
+
+function openAddTeamUserModal() {
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal">
+    <h3>Tambah User</h3>
+    <div class="modal-sub">Memakai data perusahaan yang sama dengan akun Anda.</div>
+    <div class="field"><label>Email</label><input type="email" id="new-team-user-email" placeholder="nama@email.com" autocomplete="off"></div>
+    <div class="field"><label>Kata Sandi</label><input type="password" id="new-team-user-password" placeholder="Minimal 6 karakter" minlength="6" autocomplete="new-password"></div>
+    <div class="field">
+      <label>Kategori</label>
+      <select id="new-team-user-role">
+        <option value="reviewer">Reviewer — hanya Dashboard, Perusahaan, Report, Setting (Ukuran Font &amp; Tentang)</option>
+        <option value="maker">Maker — akses penuh semua fitur (kecuali Manajemen User)</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="cancel-modal">Batal</button>
+      <button class="btn primary" id="save-team-user">Simpan</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#cancel-modal').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelector('#save-team-user').addEventListener('click', async () => {
+    const email = backdrop.querySelector('#new-team-user-email').value.trim();
+    const password = backdrop.querySelector('#new-team-user-password').value;
+    const role = backdrop.querySelector('#new-team-user-role').value === 'maker' ? 'maker' : 'reviewer';
+    if (!email) { toast('Email wajib diisi', 'error'); return; }
+    if (!password || password.length < 6) { toast('Kata sandi minimal 6 karakter', 'error'); return; }
+    const ownerUid = state.user.uid;
+    const saveBtn = backdrop.querySelector('#save-team-user');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Menyimpan…';
+    try {
+      const newUid = await createUserAccountKeepSession(email, password);
+      await DB.addTeamUser(newUid, ownerUid, email, role);
+      backdrop.remove();
+      toast('User berhasil ditambahkan', 'success');
+    } catch (err) {
+      if (err && err.code === 'auth/email-already-in-use') {
+        // Kemungkinan akun ini pernah "kepencet" berhasil dibuat di
+        // Firebase Authentication di percobaan sebelumnya, tapi gagal
+        // tersimpan sbg User (mis. krn dicoba sebelum Firestore Rules
+        // sempat di-publish) — coba "sembuhkan" dgn login pakai email +
+        // kata sandi yang sama persis lalu daftarkan sbg User, tanpa
+        // perlu membuat akun baru lagi.
+        try {
+          const uid = await signInAccountKeepSession(email, password);
+          await DB.addTeamUser(uid, ownerUid, email, role);
+          backdrop.remove();
+          toast('User berhasil ditambahkan', 'success');
+          return;
+        } catch (healErr) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Simpan';
+          toast('Email sudah terdaftar dengan kata sandi lain. Pakai email lain, atau hapus akun tsb dulu di Firebase Console > Authentication.', 'error');
+          return;
+        }
+      }
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Simpan';
+      toast('Gagal menambah user: ' + translateAuthError(err), 'error');
+    }
+  });
+}
+
+function toggleTeamUserRole(uid, currentRole) {
+  const nextRole = currentRole === 'maker' ? 'reviewer' : 'maker';
+  const teamUser = state.teamUsers.find(u => u.id === uid);
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal">
+    <h3>Ubah Kategori</h3>
+    <div class="modal-sub">Ubah kategori <strong>${escapeHTML(teamUser ? teamUser.email : '')}</strong> dari
+      <strong>${currentRole === 'maker' ? 'Maker' : 'Reviewer'}</strong> menjadi
+      <strong>${nextRole === 'maker' ? 'Maker' : 'Reviewer'}</strong>?</div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="cancel-modal">Batal</button>
+      <button class="btn primary" id="confirm-change-role">Ubah</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#cancel-modal').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelector('#confirm-change-role').addEventListener('click', async () => {
+    try {
+      await DB.updateTeamUserRole(uid, nextRole);
+      backdrop.remove();
+      toast('Kategori diubah', 'success');
+    } catch (err) {
+      toast('Gagal mengubah kategori: ' + err.message, 'error');
+    }
+  });
+}
+
+function confirmDeleteTeamUser(uid) {
+  const teamUser = state.teamUsers.find(u => u.id === uid);
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal">
+    <h3>Hapus User</h3>
+    <div class="modal-sub">Hapus akses <strong>${escapeHTML(teamUser ? teamUser.email : '')}</strong>? Akun ini tidak akan
+      bisa lagi mengakses data Anda. Login (email/kata sandi) akun ini sendiri tidak otomatis
+      terhapus dari Firebase Authentication — hapus manual lewat Firebase Console bila perlu.</div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="cancel-modal">Batal</button>
+      <button class="btn danger" id="confirm-delete-team-user">Hapus</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#cancel-modal').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelector('#confirm-delete-team-user').addEventListener('click', async () => {
+    try {
+      await DB.deleteTeamUser(uid);
+      backdrop.remove();
+      toast('User dihapus', 'success');
+    } catch (err) {
+      toast('Gagal menghapus: ' + err.message, 'error');
+    }
   });
 }
 
@@ -6862,14 +7154,14 @@ function renderCalendar() {
     calDowRow.style.transform = `translateX(-${calGridScroll.scrollLeft}px)`;
   });
 
-  state.unsubData = DB.watchReminders(state.user.uid, (items) => {
+  state.unsubData = DB.watchReminders(state.dataOwnerUid, (items) => {
     state.reminders = items;
     renderCalendarGrid();
   }, (err) => {
     toast('Gagal memuat pengingat: ' + err.message, 'error');
   });
 
-  state.unsubDayOff = DB.watchDayOffDates(state.user.uid, (dates) => {
+  state.unsubDayOff = DB.watchDayOffDates(state.dataOwnerUid, (dates) => {
     state.dayOffDates = dates;
     renderCalendarGrid();
   }, (err) => {
@@ -7064,7 +7356,7 @@ function renderCalendarGrid() {
         return;
       }
       try {
-        await DB.setDayOff(state.user.uid, dateKeyStr, checked);
+        await DB.setDayOff(state.dataOwnerUid, dateKeyStr, checked);
       } catch (err) {
         cb.checked = !checked;
         toast('Gagal memperbarui status Libur/Cuti/Sakit: ' + err.message, 'error');
@@ -8118,7 +8410,7 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
         }
         toast('Pengingat diperbarui', 'success');
       } else {
-        const newId = await DB.addReminder(state.user.uid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, analisis, analisisDay, pending: isPending, prompt, promptText, catatanLain, catatanLainText });
+        const newId = await DB.addReminder(state.dataOwnerUid, { title, description, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, analisis, analisisDay, pending: isPending, prompt, promptText, catatanLain, catatanLainText });
         if (catatanTambahan && catatanTambahanTargetDate) {
           await DB.setReminderCatatanTambahanForDate(newId, catatanTambahanTargetDate, catatanTambahanText);
         }
@@ -8333,12 +8625,22 @@ auth.onAuthStateChanged(async (user) => {
 
   if (user) {
     state.user = user;
+    // Cek apakah akun ini adalah "User" tambahan berakses terbatas
+    // (dibuat lewat Setting > Manajemen User oleh akun lain) — kalau
+    // ya, seluruh data (Perusahaan, dst.) diambil memakai UID pemilik
+    // aslinya (ownerUid), bukan UID akun ini sendiri, dan menu yang
+    // ditampilkan dibatasi (lihat visibleNavItems/RESTRICTED_NAV_IDS).
+    let teamDoc = null;
+    try { teamDoc = await DB.getTeamUserDoc(user.uid); } catch (err) { console.error('Gagal memeriksa status User:', err); }
+    state.isSubUser = !!teamDoc;
+    state.subUserRole = teamDoc ? (teamDoc.role === 'maker' ? 'maker' : 'reviewer') : null;
+    state.dataOwnerUid = teamDoc ? teamDoc.ownerUid : user.uid;
     renderShell();
     // Listener realtime: daftar perusahaan otomatis ter-update begitu ada
     // perubahan — baik dari tab/perangkat ini maupun dari perangkat lain
     // yang login dengan akun yang sama. Ini juga memberi tahu status
     // sinkronisasi (badge di topbar).
-    state.unsubCompanies = DB.watchCompanies(user.uid, (companies, meta) => {
+    state.unsubCompanies = DB.watchCompanies(state.dataOwnerUid, (companies, meta) => {
       state.companies = companies;
       Sync.report('companies', meta);
       const safeToRerender = ['dashboard', 'companies', 'company-detail', 'report'].includes(state.view)
@@ -8348,6 +8650,9 @@ auth.onAuthStateChanged(async (user) => {
     setView('dashboard');
   } else {
     state.user = null;
+    state.isSubUser = false;
+    state.subUserRole = null;
+    state.dataOwnerUid = null;
     renderAuthScreen('login');
   }
 });
