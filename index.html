@@ -704,16 +704,13 @@ tbody tr:hover{background:var(--surface-2);}
 .auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--ink);
   background-image:repeating-linear-gradient(to bottom, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 30px);}
 .auth-card{width:380px;max-width:92vw;background:#fff;border-radius:14px;padding:32px 28px;}
-.auth-brand{display:flex;align-items:center;gap:10px;margin-bottom:22px;}
+.auth-brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:22px;}
 /* Kartu login (.auth-card) selalu berlatar putih di kedua tema (lihat
    komentar pada .auth-card), jadi warna logo di sini SENGAJA dikunci ke
    navy tetap (bukan var(--text) yang ikut berganti terang/gelap) supaya
    kontrasnya tetap terjaga di kedua tema. */
 .auth-brand .mark{width:36px;height:36px;flex-shrink:0;background-color:#16213A;}
 .auth-brand .name{font-family:var(--font-display);font-weight:700;font-size:20px;color:#16213A;}
-.auth-tabs{display:flex;gap:6px;margin-bottom:18px;background:#f2f3f4;padding:4px;border-radius:9px;}
-.auth-tab{flex:1;text-align:center;padding:8px;border-radius:7px;font-size:13px;cursor:pointer;color:var(--slate);}
-.auth-tab.active{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.08);}
 /* Sama seperti .auth-card & .auth-brand di atas: input Email/Kata Sandi
    di kartu login ini dikunci putih+teks gelap di KEDUA tema (bukan ikut
    var(--card)/var(--text) yang gelap saat tema dark) — supaya tetap
@@ -721,7 +718,6 @@ tbody tr:hover{background:var(--surface-2);}
 .auth-card .field input{background:#fff;color:#16213A;border-color:#d7dbe0;}
 .auth-card .field input::placeholder{color:#9aa1ab;}
 .auth-error{background:var(--danger-light);color:var(--danger);font-size:12.5px;padding:9px 11px;border-radius:7px;margin-bottom:12px;}
-.auth-hint{font-size:11.5px;color:var(--slate-light);margin-top:14px;line-height:1.5;}
 
 .chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
 .chart-box canvas{max-height:280px;}
@@ -2969,6 +2965,13 @@ function el(html) {
 }
 
 // ---------- Auth ----------
+// Tab "Daftar" (pendaftaran akun baru sendiri) sengaja dihapus dari
+// halaman login — akun baru sekarang HANYA dibuat lewat Setting >
+// Manajemen User (lihat openAddTeamUserModal), supaya tidak ada akun
+// "liar" yang mendaftar sendiri tanpa terhubung ke data perusahaan
+// siapa pun. Parameter `mode` & argumen renderAuthScreen('login', ...)
+// tetap dipertahankan (bukan dihapus total) supaya kalau suatu saat mode
+// lain perlu ditambah lagi, strukturnya sudah siap dipakai.
 function renderAuthScreen(mode = 'login', errorMsg = '') {
   const root = document.getElementById('root');
   root.innerHTML = `
@@ -2977,10 +2980,6 @@ function renderAuthScreen(mode = 'login', errorMsg = '') {
         <div class="auth-brand">
           <div class="mark logo-mark"></div>
           <div class="name">Integrida</div>
-        </div>
-        <div class="auth-tabs">
-          <div class="auth-tab ${mode === 'login' ? 'active' : ''}" data-mode="login">Masuk</div>
-          <div class="auth-tab ${mode === 'register' ? 'active' : ''}" data-mode="register">Daftar</div>
         </div>
         ${errorMsg ? `<div class="auth-error">${errorMsg}</div>` : ''}
         <form id="auth-form">
@@ -2993,30 +2992,18 @@ function renderAuthScreen(mode = 'login', errorMsg = '') {
             <input type="password" id="auth-password" required minlength="6" autocomplete="current-password">
           </div>
           <button type="submit" class="btn primary" style="width:100%;justify-content:center;">
-            ${mode === 'login' ? 'Masuk' : 'Buat akun'}
+            Masuk
           </button>
         </form>
-        <div class="auth-hint">
-          Integrida &mdash; konsolidasi laporan keuangan multi-perusahaan.
-          Data disimpan pada Firebase project Anda sendiri.
-        </div>
       </div>
     </div>`;
-
-  root.querySelectorAll('.auth-tab').forEach(tab => {
-    tab.addEventListener('click', () => renderAuthScreen(tab.dataset.mode));
-  });
 
   document.getElementById('auth-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = document.getElementById('auth-email').value.trim();
     const password = document.getElementById('auth-password').value;
     try {
-      if (mode === 'login') {
-        await auth.signInWithEmailAndPassword(email, password);
-      } else {
-        await auth.createUserWithEmailAndPassword(email, password);
-      }
+      await auth.signInWithEmailAndPassword(email, password);
     } catch (err) {
       renderAuthScreen(mode, translateAuthError(err));
     }
@@ -3140,7 +3127,7 @@ function renderShell() {
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;">
-            ${isReviewer() ? `<button class="theme-toggle-topbar" id="topbar-logout-btn" title="Keluar">${icon('logout')}</button>` : ''}
+            ${state.isSubUser ? `<button class="theme-toggle-topbar" id="topbar-logout-btn" title="Keluar">${icon('logout')}</button>` : ''}
             <button class="theme-toggle-topbar" id="theme-toggle-btn"></button>
             <div class="sync-badge" id="sync-badge"></div>
           </div>
@@ -3168,11 +3155,13 @@ function renderShell() {
   paintThemeToggleBtn();
   document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
 
-  // Tombol Keluar di topbar HANYA muncul utk akun User terbatas, karena
-  // menu Setting-nya sengaja tidak menampilkan kartu Akun (hanya Ukuran
-  // Font & Tentang) — tombol ini menggantikan jalur logout tsb, dan
-  // selalu terlihat di semua ukuran layar (beda dgn sidebar yang
-  // disembunyikan di mobile).
+  // Tombol Keluar di topbar muncul utk SEMUA akun "User" tambahan
+  // (Reviewer maupun Maker, lihat state.isSubUser) — akun utama/pemilik
+  // tetap logout lewat kartu Akun di menu Setting seperti biasa. Tombol
+  // ini selalu terlihat di semua ukuran layar (beda dgn sidebar yang
+  // disembunyikan di mobile), berguna khususnya utk Reviewer yang menu
+  // Setting-nya sengaja tidak menampilkan kartu Akun sama sekali (hanya
+  // Ukuran Font & Tentang).
   const topbarLogoutBtn = document.getElementById('topbar-logout-btn');
   if (topbarLogoutBtn) topbarLogoutBtn.addEventListener('click', () => auth.signOut());
 }
@@ -3305,7 +3294,7 @@ function paintDashboard(allStatements) {
       <div class="dash-hero-head">
         <div>
           <div class="dash-hero-title">Tren Aset &amp; Laba Bersih</div>
-          <div class="dash-hero-sub">Gabungan seluruh perusahaan, per periode</div>
+          <div class="dash-hero-sub">Konsolidasi seluruh perusahaan, per periode</div>
         </div>
         <div class="dash-hero-stats">
           <div>
