@@ -1286,15 +1286,16 @@ const DB = {
       analisis: !!analisis,
       analisisDay: (analisis && analisisDay) ? Number(analisisDay) : null,
       pending: !!pending,
-      // "Prompt" hanya bermakna kalau Analisis dicentang — teks prompt ini
-      // sengaja TIDAK ikut dipakai di dailyReportText() (fitur copas
-      // "Salin sebagai Daily Report" di pojok kanan atas sel tanggal),
-      // supaya isi prompt tetap terpisah dari Keterangan/Daily Report.
-      prompt: !!(analisis && prompt),
-      promptText: (analisis && prompt) ? (promptText || '') : '',
+      // "Prompt": teks prompt ini sengaja TIDAK ikut dipakai di
+      // dailyReportText() (fitur copas "Salin sebagai Daily Report" di
+      // pojok kanan atas sel tanggal), supaya isi prompt tetap terpisah
+      // dari Keterangan/Daily Report. Tersedia utk SEMUA jenis pengingat,
+      // tidak dibatasi hanya Analisis.
+      prompt: !!prompt,
+      promptText: prompt ? (promptText || '') : '',
       // "Catatan Lain": sama seperti Prompt (terpisah dari Keterangan,
-      // tidak ikut dailyReportText()), tapi tersedia utk semua jenis
-      // pengingat, tidak dibatasi hanya Analisis.
+      // tidak ikut dailyReportText()), tersedia utk semua jenis
+      // pengingat.
       catatanLain: !!catatanLain,
       catatanLainText: catatanLain ? (catatanLainText || '') : '',
       done: false,
@@ -1322,8 +1323,8 @@ const DB = {
       analisis: !!analisis,
       analisisDay: (analisis && analisisDay) ? Number(analisisDay) : null,
       pending: !!pending,
-      prompt: !!(analisis && prompt),
-      promptText: (analisis && prompt) ? (promptText || '') : '',
+      prompt: !!prompt,
+      promptText: prompt ? (promptText || '') : '',
       catatanLain: !!catatanLain,
       catatanLainText: catatanLain ? (catatanLainText || '') : ''
     });
@@ -3114,7 +3115,7 @@ function renderShell() {
           <div>
             <div class="name">Integrida</div>
             <div class="tag">Konsolidasi Keuangan</div>
-            <div class="tag" style="opacity:.55;margin-top:2px;">Build v31</div>
+            <div class="tag" style="opacity:.55;margin-top:2px;">Build v32</div>
           </div>
         </div>
         <div class="sidebar-section" id="nav-list"></div>
@@ -3127,7 +3128,7 @@ function renderShell() {
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;">
-            ${state.isSubUser ? `<button class="theme-toggle-topbar" id="topbar-logout-btn" title="Keluar">${icon('logout')}</button>` : ''}
+            <button class="theme-toggle-topbar" id="topbar-logout-btn" title="Keluar">${icon('logout')}</button>
             <button class="theme-toggle-topbar" id="theme-toggle-btn"></button>
             <div class="sync-badge" id="sync-badge"></div>
           </div>
@@ -3155,15 +3156,12 @@ function renderShell() {
   paintThemeToggleBtn();
   document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
 
-  // Tombol Keluar di topbar muncul utk SEMUA akun "User" tambahan
-  // (Reviewer maupun Maker, lihat state.isSubUser) — akun utama/pemilik
-  // tetap logout lewat kartu Akun di menu Setting seperti biasa. Tombol
-  // ini selalu terlihat di semua ukuran layar (beda dgn sidebar yang
-  // disembunyikan di mobile), berguna khususnya utk Reviewer yang menu
-  // Setting-nya sengaja tidak menampilkan kartu Akun sama sekali (hanya
-  // Ukuran Font & Tentang).
-  const topbarLogoutBtn = document.getElementById('topbar-logout-btn');
-  if (topbarLogoutBtn) topbarLogoutBtn.addEventListener('click', () => auth.signOut());
+  // Tombol Keluar di topbar muncul utk SEMUA akun (pemilik/utama, Maker,
+  // maupun Reviewer) — menu Setting tidak lagi punya kartu Akun terpisah,
+  // jadi topbar ini menjadi satu-satunya cara logout utk semua kategori
+  // akun. Tombol ini selalu terlihat di semua ukuran layar (beda dgn
+  // sidebar yang disembunyikan di mobile).
+  document.getElementById('topbar-logout-btn').addEventListener('click', () => auth.signOut());
 }
 
 function setView(viewId) {
@@ -6196,9 +6194,8 @@ function renderSettings() {
     </div>`;
 
   // Kategori Reviewer HANYA melihat 2 kartu di atas (Ukuran Font &
-  // Tentang) — tanpa kartu Akun/Manajemen User. Logout untuk Reviewer
-  // tetap tersedia lewat tombol di topbar (lihat renderShell), bukan
-  // lewat halaman Setting.
+  // Tentang) — tanpa kartu Manajemen User. Logout tersedia lewat tombol
+  // di topbar (lihat renderShell) utk semua kategori akun.
   if (isReviewer()) {
     root.innerHTML = fontCardHTML + aboutCardHTML;
     wireSettingsFontPills();
@@ -6211,15 +6208,6 @@ function renderSettings() {
   // akun utama/pemilik. Hanya Reviewer yang tidak melihat kartu ini (lihat
   // isReviewer() di atas).
   const canManageTeam = !state.isSubUser || state.subUserRole === 'maker';
-  const accountCardHTML = `
-    <div class="card" style="width:100%;margin-top:16px;">
-      <div class="section-title">Akun</div>
-      <div class="user-chip" style="color:var(--text);font-size:13.5px;margin-top:6px;">
-        <div class="dot">${(state.user.email || '?')[0].toUpperCase()}</div>
-        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${state.user.email}</div>
-      </div>
-      <button class="logout-btn" id="logout-btn-2" style="border-color:var(--border);color:var(--text);max-width:260px;">Keluar</button>
-    </div>`;
 
   const teamManagementCardHTML = `
     <div class="card" style="width:100%;margin-top:16px;">
@@ -6233,9 +6221,8 @@ function renderSettings() {
       <button class="btn primary" id="add-team-user-btn" style="margin-top:12px;">+ Tambah User</button>
     </div>`;
 
-  root.innerHTML = fontCardHTML + accountCardHTML + (canManageTeam ? teamManagementCardHTML : '') + aboutCardHTML;
+  root.innerHTML = fontCardHTML + (canManageTeam ? teamManagementCardHTML : '') + aboutCardHTML;
 
-  document.getElementById('logout-btn-2').addEventListener('click', () => auth.signOut());
   wireSettingsFontPills();
   if (canManageTeam) wireTeamUserSection();
 }
@@ -7458,9 +7445,10 @@ function dailyReportText(dateKeyStr) {
 // bukan lewat angka yang diketik manual.
 function calCellReminderHTML(item, occurrenceDate) {
   const isDone = isReminderDoneOnDate(item, occurrenceDate);
-  // Fitur "Prompt" (lihat openReminderModal): pengingat Analisis yang
-  // punya teks Prompt tersendiri dapat tombol salin kecil di sini supaya
-  // bisa langsung disalin dari kalender tanpa buka modal. Ini TERPISAH
+  // Fitur "Prompt" (lihat openReminderModal): pengingat apa pun (tidak
+  // dibatasi hanya Analisis) yang punya teks Prompt tersendiri dapat
+  // tombol salin kecil di sini supaya bisa langsung disalin dari
+  // kalender tanpa buka modal. Ini TERPISAH
   // dari tombol "Salin sebagai Daily Report" di pojok kanan atas sel
   // tanggal (dailyReportText) — teks Prompt sengaja tidak ikut masuk ke
   // situ.
@@ -7972,7 +7960,7 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
         <label class="reminder-pending-check" title="Tandai untuk masuk ke fitur 'Reminder Analisis': pilih tanggal tetap yang berulang tiap bulan, otomatis digeser ke tanggal cadangan kalau jatuh Minggu/libur nasional"><input type="checkbox" id="reminder-analisis-input" ${item && item.analisis ? 'checked' : ''}><span>Analisis</span></label>
         <label class="reminder-pending-check" id="reminder-move-check-wrap" style="display:none;" title="Pindahkan kemunculan pengingat ini ke tanggal lain HANYA utk kemunculan/bulan ini — kemunculan lain (tanggal/bulan lain) tetap seperti biasa."><input type="checkbox" id="reminder-move-input" ${currentMoveOverride ? 'checked' : ''}><span>Pindah</span></label>
         <div class="reminder-prompt-wrap" id="reminder-prompt-check-wrap" style="display:none;align-items:center;gap:6px;">
-          <label class="reminder-pending-check" style="margin:0;" title="Tambahkan teks prompt khusus untuk pengingat Analisis ini. Teks ini terpisah dari Keterangan dan tidak ikut disalin lewat fitur 'Salin sebagai Daily Report' di sel tanggal."><input type="checkbox" id="reminder-prompt-input" ${item && item.analisis && item.prompt ? 'checked' : ''}><span>Prompt</span></label>
+          <label class="reminder-pending-check" style="margin:0;" title="Tambahkan teks prompt khusus untuk pengingat ini. Teks ini terpisah dari Keterangan dan tidak ikut disalin lewat fitur 'Salin sebagai Daily Report' di sel tanggal."><input type="checkbox" id="reminder-prompt-input" ${item && item.prompt ? 'checked' : ''}><span>Prompt</span></label>
           <button type="button" class="reminder-prompt-icon-btn" id="reminder-prompt-copy-btn" title="Salin teks Prompt">${icon('copy')}</button>
           <button type="button" class="reminder-prompt-icon-btn" id="reminder-prompt-edit-btn" title="Edit teks Prompt">${icon('edit')}</button>
         </div>
@@ -8246,12 +8234,11 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     priorityGroup.classList.toggle('show', hideSchedule);
     analisisDayRow.style.display = isAnalisis ? '' : 'none';
     if (isAnalisis) populateAnalisisDayOptions();
-    // Checkbox "Prompt" cuma relevan & tampil kalau "Analisis" dicentang
-    // (lihat request fitur: "apabila dicentang analisis maka disampingnya
-    // muncul kolom centang Prompt"). Kalau Analisis dimatikan, checkbox &
-    // teks Prompt ikut direset supaya tidak tersimpan nyasar.
-    promptCheckWrap.style.display = isAnalisis ? 'flex' : 'none';
-    if (!isAnalisis) { promptCheckbox.checked = false; promptTextValue = ''; }
+    // Checkbox "Prompt" tersedia utk SEMUA jenis pengingat (tidak lagi
+    // dibatasi hanya kalau "Analisis" dicentang), sama seperti "Catatan
+    // Lain" — jadi selalu tampil & nilainya tidak direset saat Analisis
+    // dimatikan.
+    promptCheckWrap.style.display = 'flex';
     // "Pindah" relevan utk SEMUA jenis pengingat, asalkan ini kemunculan
     // spesifik yang sudah ada di kalender (showMoveFeature, tetap dari
     // saat modal dibuka) dan bukan Pending (Pending tidak punya tanggal
@@ -8329,7 +8316,7 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
     const priority = hideSchedule ? (backdrop.querySelector('input[name="reminder-priority"]:checked').value) : 'standard';
     const analisis = isAnalisis;
     const analisisDay = isAnalisis ? Number(analisisDaySelect.value) : null;
-    const prompt = isAnalisis && promptCheckbox.checked;
+    const prompt = promptCheckbox.checked;
     const promptText = prompt ? promptTextValue.trim() : '';
     // "Catatan Lain": catatan tambahan yang sengaja TERPISAH dari
     // Keterangan dan tidak ikut dipakai di dailyReportText() (fitur
@@ -8451,10 +8438,11 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
   });
 }
 
-// Popup kecil untuk mengedit teks Prompt pengingat Analisis, dibuka dari
-// tombol pensil di sebelah checkbox "Prompt" pada form Tambah/Edit
-// Pengingat (lihat openReminderModal). Menggantikan textarea yang dulu
-// selalu tampil di form supaya tampilan form lebih ringkas.
+// Popup kecil untuk mengedit teks Prompt pengingat (berlaku utk semua
+// jenis pengingat, tidak dibatasi hanya Analisis), dibuka dari tombol
+// pensil di sebelah checkbox "Prompt" pada form Tambah/Edit Pengingat
+// (lihat openReminderModal). Menggantikan textarea yang dulu selalu
+// tampil di form supaya tampilan form lebih ringkas.
 function openPromptTextPopup(initialText, onSave) {
   const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:420px;">
     <button class="modal-close" id="close-modal" title="Tutup">${icon('close')}</button>
