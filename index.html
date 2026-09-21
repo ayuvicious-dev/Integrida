@@ -43,9 +43,6 @@
 <link rel="icon" href="icons/icon-192.png?v=2">
 <link rel="apple-touch-icon" href="icons/icon-192.png?v=2">
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" crossorigin="anonymous">
 <style>
 :root{
   /* Ukuran zoom aplikasi (fitur "Ukuran Font" di menu Setting), default
@@ -111,14 +108,14 @@
   --sidebar-text-strong:var(--text);
 
   --radius:10px;
-  /* Satu keluarga font untuk seluruh aplikasi (body & display) — sans
-     geometris/rounded yang lebih "friendly" & modern dibanding Inter,
-     dibedakan lewat bobot (weight), bukan lewat typeface terpisah.
-     Font mono tetap dipakai khusus untuk tabel akun/rincian angka padat
-     yang butuh perataan kolom presisi (bukan untuk angka besar/KPI). */
-  --font-body:'Plus Jakarta Sans',system-ui,sans-serif;
-  --font-display:'Plus Jakarta Sans',var(--font-body);
-  --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+  /* Font sistem (Segoe UI di Windows, San Francisco di iOS/Mac, Roboto di
+     Android): bentuk huruf sederhana & netral, tidak perlu mengunduh font
+     web (lebih cepat & tetap konsisten saat offline sebagai PWA). Satu
+     keluarga untuk semua teks — angka memakai tabular-nums supaya lebar
+     tiap digit sama dan kolom rapi, tanpa font monospace terpisah. */
+  --font-body:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --font-display:var(--font-body);
+  --font-mono:var(--font-body);
 }
 
 /* ---------- Dark mode ---------- */
@@ -166,6 +163,7 @@
 html,body{margin:0;padding:0;height:100%;overflow-x:hidden;}
 body{
   font-family:var(--font-body);
+  font-variant-numeric:tabular-nums;
   background:var(--paper);
   color:var(--text);
   -webkit-font-smoothing:antialiased;
@@ -262,6 +260,20 @@ input,select{font-family:inherit;}
 }
 .theme-toggle-topbar:hover{background:var(--border);color:var(--text);}
 .theme-toggle-topbar svg{width:16px;height:16px;flex-shrink:0;}
+.topbar-actions{display:flex;align-items:center;gap:12px;}
+/* Tombol Kalender di topbar (di sebelah kanan badge Tersinkron): hanya
+   simbol (lingkaran 34px, senada tombol Keluar & mode gelap). */
+.topbar-cal-btn{
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  width:34px;height:34px;padding:0;border-radius:50%;
+  border:1px solid var(--border);background:var(--surface-2);color:var(--slate);
+  cursor:pointer;
+}
+.topbar-cal-btn:hover{background:var(--border);color:var(--text);}
+.topbar-cal-btn svg{width:16px;height:16px;flex-shrink:0;}
+.topbar-cal-btn.active{background:rgba(47,111,228,0.14);border-color:transparent;color:var(--teal);}
+[data-theme="dark"] .topbar-cal-btn.active{background:rgba(47,111,228,0.24);color:#7fb0ff;}
+@media(max-width:480px){ .topbar-actions{gap:8px;} }
 .logout-btn{margin-top:10px;width:100%;background:transparent;border:1px solid var(--sidebar-border);color:var(--sidebar-text);padding:7px;border-radius:7px;font-size:12.5px;cursor:pointer;}
 .logout-btn:hover{background:var(--sidebar-hover-bg);}
 
@@ -347,12 +359,15 @@ input,select{font-family:inherit;}
 .sync-checkbox-label.is-synced{color:var(--teal);font-weight:600;}
 
 .kpi-card{display:flex;flex-direction:column;gap:6px;}
-.kpi-card-split{display:flex;align-items:stretch;gap:0;}
-.kpi-split-half{flex:0 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px;}
-.kpi-split-divider{width:1px;align-self:stretch;background:var(--border);margin:0 16px;flex-shrink:0;}
-@media(max-width:520px){.kpi-card-split{flex-direction:column;gap:14px;}.kpi-split-divider{width:auto;height:1px;margin:0;}}
+.kpi-card-split{display:flex;flex-direction:column;align-items:stretch;gap:10px;}
+.kpi-card-title{text-align:center;font-size:13px;font-weight:600;color:var(--slate);letter-spacing:.3px;}
+.kpi-split-row{display:flex;align-items:stretch;justify-content:space-evenly;gap:0;}
+.kpi-split-half{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.kpi-level-name{font-size:11.5px;color:var(--slate-light);letter-spacing:.2px;white-space:nowrap;}
+.kpi-split-divider{width:1px;align-self:stretch;background:var(--border);margin:0 12px;flex-shrink:0;}
+@media(max-width:520px){.kpi-split-row{flex-direction:column;gap:12px;}.kpi-split-divider{width:auto;height:1px;margin:0;}}
 .kpi-label{font-size:12px;color:var(--slate);letter-spacing:.2px;}
-.kpi-value{font-family:var(--font-display);font-size:25px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums;overflow-wrap:break-word;word-break:break-word;}
+.kpi-value{font-family:var(--font-display);font-size:25px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums;overflow-wrap:break-word;word-break:break-word;}
 .kpi-card-split .kpi-value{font-size:clamp(15px,4.2vw,22px);white-space:nowrap;overflow-wrap:normal;word-break:normal;}
 .kpi-delta{font-size:12.5px;font-family:var(--font-display);font-weight:600;}
 .kpi-delta.up{color:var(--teal);}
@@ -734,20 +749,59 @@ tbody tr:hover{background:var(--surface-2);}
   box-shadow:0 22px 44px -18px rgba(22,33,58,.28),0 4px 14px rgba(22,33,58,.06);
 }
 [data-theme="dark"] .dash-hero{box-shadow:0 22px 44px -18px rgba(0,0,0,.6),0 4px 14px rgba(0,0,0,.3);}
+.dash-hero-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px;}
+.dash-hero-pair .dash-hero{padding:20px 20px 12px 20px;min-width:0;}
 .dash-hero-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:6px;}
 .dash-hero-title{font-family:var(--font-display);font-weight:700;font-size:16.5px;}
 .dash-hero-sub{font-size:12.5px;color:var(--slate);margin-top:2px;}
 .dash-hero-stats{display:flex;gap:26px;flex-wrap:wrap;}
 .dash-hero-stat-label{font-size:12px;color:var(--slate);}
-.dash-hero-stat-value{font-family:var(--font-display);font-weight:800;font-size:19px;letter-spacing:-.01em;margin-top:2px;font-variant-numeric:tabular-nums;overflow-wrap:break-word;word-break:break-word;}
+.dash-hero-stat-value{font-family:var(--font-display);font-weight:700;font-size:19px;letter-spacing:-.01em;margin-top:2px;font-variant-numeric:tabular-nums;overflow-wrap:break-word;word-break:break-word;}
 .dash-hero-chart-wrap{position:relative;height:270px;margin-top:10px;}
 
-.dash-widgets{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:16px;}
-@media(max-width:1100px){.dash-widgets{grid-template-columns:1fr 1fr;}}
-@media(max-width:640px){.dash-widgets{grid-template-columns:1fr;}}
-.dash-widget-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px 18px;}
-.dash-widget-title{font-family:var(--font-display);font-weight:600;font-size:13px;color:var(--text);margin-bottom:10px;}
-.dash-widget-chart-wrap{position:relative;height:150px;}
+/* ---------- Dashboard: tata letak bento (kartu bersudut membulat, grid 12 kolom) ---------- */
+.dash-bento{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;}
+.bento-card{
+  background:var(--card);border:1px solid var(--border);border-radius:20px;
+  padding:18px 20px;min-width:0;
+  box-shadow:0 14px 34px -20px rgba(47,111,228,.30),0 2px 8px rgba(22,33,58,.04);
+}
+[data-theme="dark"] .bento-card{box-shadow:0 14px 34px -20px rgba(0,0,0,.65);}
+.span-3{grid-column:span 3;}.span-6{grid-column:span 6;}.span-12{grid-column:span 12;}
+@media(max-width:1100px){.span-3{grid-column:span 6;}}
+@media(max-width:900px){.span-6{grid-column:span 12;}}
+@media(max-width:600px){.span-3{grid-column:span 12;}.bento-card{padding:16px;border-radius:18px;}}
+.bento-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
+.bento-title{font-family:var(--font-display);font-weight:700;font-size:14px;color:var(--text);}
+.bento-pill{font-size:11px;font-weight:600;padding:3px 10px;border-radius:100px;background:var(--teal-light);color:var(--teal);white-space:nowrap;}
+.bento-chart{position:relative;height:230px;}
+.bento-empty{display:flex;align-items:center;justify-content:center;height:100%;min-height:80px;color:var(--slate-light);font-size:13px;}
+.ring-wrap{position:relative;flex-shrink:0;}
+.ring-wrap svg{display:block;}
+.ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 6px;}
+.ring-value{font-family:var(--font-display);font-weight:700;font-size:26px;letter-spacing:-.01em;font-variant-numeric:tabular-nums;}
+.ring-value.sm{font-size:16px;}
+.ring-caption{font-size:11px;color:var(--slate);margin-top:2px;}
+.gauge-body{display:flex;flex-direction:column;align-items:center;gap:12px;}
+.gauge-note{font-size:12px;color:var(--slate);text-align:center;line-height:1.45;}
+.gauge-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;}
+.gauge-chip{font-size:12px;color:var(--slate);background:var(--teal-light);border-radius:100px;padding:5px 12px;white-space:nowrap;}
+.gauge-chip b{color:var(--teal);font-family:var(--font-display);margin-left:3px;}
+.mini-rings{display:flex;justify-content:space-around;align-items:flex-start;gap:12px;padding-top:6px;}
+.mini-ring{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;text-align:center;}
+.mini-ring-label{font-size:12px;color:var(--slate);}
+.mini-ring-amt{font-family:var(--font-display);font-weight:700;font-size:13px;white-space:nowrap;}
+.cap-bar{display:flex;height:16px;border-radius:100px;overflow:hidden;background:var(--border);}
+.cap-bar>span{display:block;height:100%;min-width:0;}
+.cap-legend{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:14px;}
+.cap-legend-item{display:flex;align-items:center;gap:8px;font-size:12.5px;min-width:0;}
+.cap-legend-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+.cap-legend-item b{font-family:var(--font-display);font-weight:700;}
+.cap-legend-item .cap-pct{color:var(--slate);}
+.dash-search{display:flex;align-items:center;gap:0;background:var(--surface-2);border:1px solid var(--border);border-radius:100px;padding:3px 3px 3px 14px;min-width:220px;max-width:100%;}
+.dash-search input{flex:1;min-width:0;border:none;outline:none;background:transparent;font-size:13px;color:var(--text);font-family:inherit;padding:5px 0;}
+.dash-search-btn{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--teal);color:#fff;flex-shrink:0;}
+.dash-search-btn svg{width:15px;height:15px;}
 .dash-donut-wrap{display:flex;align-items:center;gap:14px;}
 .dash-donut-canvas{position:relative;width:104px;height:104px;flex-shrink:0;}
 .dash-donut-legend{display:flex;flex-direction:column;gap:7px;flex:1;min-width:0;}
@@ -790,12 +844,12 @@ tbody tr:hover{background:var(--surface-2);}
   .grid-4,.grid-3,.grid-2{grid-template-columns:1fr;}
   .content{padding:16px;padding-bottom:100px;}
   .topbar{padding:0 16px;}
-  .dash-hero{padding:18px 16px 14px 16px;border-radius:16px;}
+  .dash-hero-pair{grid-template-columns:1fr;gap:16px;}
+  .dash-hero,.dash-hero-pair .dash-hero{padding:18px 16px 14px 16px;border-radius:16px;}
   .dash-hero-head{flex-direction:column;align-items:flex-start;gap:12px;}
   .dash-hero-stats{width:100%;gap:16px;}
   .dash-hero-stats>div{flex:1 1 0;min-width:0;}
   .dash-hero-chart-wrap{height:220px;}
-  .dash-widget-card{padding:14px 16px;}
   .dash-donut-wrap{flex-direction:column;align-items:stretch;gap:12px;}
   .dash-donut-canvas{align-self:center;}
 }
@@ -1727,6 +1781,7 @@ const CASH_NAME_RE = /\b(kas|bank|cash)\b/i;
 const INVENTORY_NAME_RE = /\b(persediaan|inventory|stok|stock)\b/i;
 const RECEIVABLE_NAME_RE = /\b(piutang|receivable)\b/i;
 const PAYABLE_NAME_RE = /\b(hutang usaha|hutang dagang|utang usaha|utang dagang|accounts? payable)\b/i;
+const FUNDING_DEBT_NAME_RE = /\bhutang pendanaan\b/i;
 
 // ---------- Parser Buku Besar: export general ledger asli ----------
 // Format yang dikenali (hasil export software akuntansi seperti QuickBooks):
@@ -1778,7 +1833,13 @@ function parseLedgerAccountLabel(raw) {
 // impor ulang file Excel-nya. Ini membuat pembaruan logika turunan
 // otomatis berlaku ke data yang sudah pernah diimpor, satu periode setiap
 // kali periode itu dibuka.
-const DERIVATION_VERSION = 6;
+// v7: Neraca kini memisahkan "Hutang Usaha" dari "Kewajiban Lancar
+// Lainnya" (field baru kewajibanLancarLainnya) di bawah subgrup Kewajiban
+// Lancar — snapshot lama dihitung ulang otomatis dari Buku Besar.
+// v8: Neraca juga memisahkan "Hutang Pendanaan" (field hutangPendanaan)
+// dari Kewajiban Lancar Lainnya; KPI Debt di Dashboard = Kewajiban
+// Jangka Panjang + Hutang Pendanaan.
+const DERIVATION_VERSION = 8;
 
 function classifyLedgerAccount(code, name) {
   const n = normalizeKey(name);
@@ -1795,8 +1856,15 @@ function classifyLedgerAccount(code, name) {
   }
   if (prefix === 2) {
     const nonCurrent = /jangka panjang/.test(n);
-    const isPayable = PAYABLE_NAME_RE.test(n);
-    return { group: 'kewajiban', bucket: nonCurrent ? 'jangkaPanjang' : 'lancar', field: isPayable ? 'hutangUsaha' : null };
+    // Hutang Usaha adalah bagian dari Kewajiban LANCAR; akun bernama
+    // hutang usaha yang eksplisit "jangka panjang" tidak dihitung sebagai AP.
+    const isPayable = !nonCurrent && PAYABLE_NAME_RE.test(n);
+    // Hutang Pendanaan (utang berbunga/pinjaman) dipisahkan dari Kewajiban
+    // Lancar Lainnya; dipakai juga untuk KPI Debt di Dashboard. Akun yang
+    // eksplisit "jangka panjang" tetap di Kewajiban Jangka Panjang (sudah
+    // ikut dihitung di Debt lewat totalKewajibanJangkaPanjang).
+    const isFundingDebt = !nonCurrent && !isPayable && FUNDING_DEBT_NAME_RE.test(n);
+    return { group: 'kewajiban', bucket: nonCurrent ? 'jangkaPanjang' : 'lancar', field: isPayable ? 'hutangUsaha' : (isFundingDebt ? 'hutangPendanaan' : null) };
   }
   if (prefix === 3) return { group: 'ekuitas', bucket: null, field: null };
   // Laba Rugi: klasifikasi murni dari digit pertama kode akun, bukan dari
@@ -1824,7 +1892,8 @@ const LEDGER_GROUP_ORDER = [
   { key: 'asetLancarLainnya', label: 'Aset Lancar Lainnya' },
   { key: 'asetTidakLancar', label: 'Aset Tidak Lancar' },
   { key: 'hutangUsaha', label: 'Hutang Usaha' },
-  { key: 'kewajibanLancar', label: 'Kewajiban Lancar' },
+  { key: 'hutangPendanaan', label: 'Hutang Pendanaan' },
+  { key: 'kewajibanLancar', label: 'Kewajiban Lancar Lainnya' },
   { key: 'kewajibanJangkaPanjang', label: 'Kewajiban Jangka Panjang' },
   { key: 'ekuitas', label: 'Ekuitas' },
   { key: 'pendapatan', label: 'Pendapatan' },
@@ -1848,6 +1917,7 @@ function ledgerGroupKey(code, name) {
   }
   if (c.group === 'kewajiban') {
     if (c.field === 'hutangUsaha') return 'hutangUsaha';
+    if (c.field === 'hutangPendanaan') return 'hutangPendanaan';
     return c.bucket === 'lancar' ? 'kewajibanLancar' : 'kewajibanJangkaPanjang';
   }
   if (c.group === 'ekuitas') return 'ekuitas';
@@ -1969,7 +2039,8 @@ function deriveStatementsFromLedgerAccounts(accounts) {
   const neraca = {
     kasSetaraKas: 0, piutangUsaha: 0, persediaan: 0, asetLancarLainnya: 0,
     totalAsetLancar: 0, totalAsetTidakLancar: 0, totalAset: 0,
-    totalKewajibanLancar: 0, totalKewajibanJangkaPanjang: 0, totalKewajiban: 0, hutangUsaha: 0,
+    hutangUsaha: 0, hutangPendanaan: 0, kewajibanLancarLainnya: 0,
+    totalKewajibanLancar: 0, totalKewajibanJangkaPanjang: 0, totalKewajiban: 0,
     totalEkuitas: 0
   };
   const labaRugi = {
@@ -2015,6 +2086,8 @@ function deriveStatementsFromLedgerAccounts(accounts) {
       else { neraca.totalAsetTidakLancar += akhir; addContribution('totalAsetTidakLancar', a, akhir); }
     } else if (c.group === 'kewajiban') {
       if (c.field === 'hutangUsaha') { neraca.hutangUsaha += akhir; addContribution('hutangUsaha', a, akhir); }
+      else if (c.field === 'hutangPendanaan') { neraca.hutangPendanaan += akhir; addContribution('hutangPendanaan', a, akhir); }
+      else if (c.bucket === 'lancar') { neraca.kewajibanLancarLainnya += akhir; addContribution('kewajibanLancarLainnya', a, akhir); }
       if (c.bucket === 'lancar') { neraca.totalKewajibanLancar += akhir; addContribution('totalKewajibanLancar', a, akhir); }
       else { neraca.totalKewajibanJangkaPanjang += akhir; addContribution('totalKewajibanJangkaPanjang', a, akhir); }
     } else if (c.group === 'ekuitas') {
@@ -2824,10 +2897,12 @@ const PERIOD_LABELS = {
   tahunan: 'Tahunan'
 };
 
+// Menu Kalender TIDAK ada di sidebar/bottom-nav lagi — aksesnya lewat
+// tombol di topbar (sebelah kanan badge Tersinkron, lihat renderShell).
+// View 'calendar' tetap sama; hanya akun non-Reviewer yang melihat tombolnya.
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid' },
   { id: 'companies', label: 'Perusahaan', icon: 'building' },
-  { id: 'calendar', label: 'Kalender', icon: 'calendar' },
   { id: 'report', label: 'Report', icon: 'bars' },
   { id: 'settings', label: 'Setting', icon: 'gear' }
 ];
@@ -3159,10 +3234,11 @@ function renderShell() {
               <h1 id="topbar-title">Dashboard</h1>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:12px;">
+          <div class="topbar-actions">
             <button class="theme-toggle-topbar" id="topbar-logout-btn" title="Keluar">${icon('logout')}</button>
             <button class="theme-toggle-topbar" id="theme-toggle-btn"></button>
             <div class="sync-badge" id="sync-badge"></div>
+            ${isReviewer() ? '' : `<button class="topbar-cal-btn" id="topbar-calendar-btn" data-view="calendar" title="Kalender" aria-label="Kalender">${icon('calendar')}</button>`}
           </div>
         </div>
         <div class="content" id="view-root"></div>
@@ -3194,6 +3270,9 @@ function renderShell() {
   // akun. Tombol ini selalu terlihat di semua ukuran layar (beda dgn
   // sidebar yang disembunyikan di mobile).
   document.getElementById('topbar-logout-btn').addEventListener('click', () => auth.signOut());
+
+  const calBtn = document.getElementById('topbar-calendar-btn');
+  if (calBtn) calBtn.addEventListener('click', () => setView('calendar'));
 }
 
 function setView(viewId) {
@@ -3203,7 +3282,7 @@ function setView(viewId) {
   if (isReviewer() && !RESTRICTED_NAV_IDS.includes(viewId)) viewId = 'dashboard';
   teardownActiveDataListener();
   state.view = viewId;
-  document.querySelectorAll('.nav-item, .bottom-nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === viewId));
+  document.querySelectorAll('.nav-item, .bottom-nav-item, .topbar-cal-btn').forEach(n => n.classList.toggle('active', n.dataset.view === viewId));
   const titles = {
     dashboard: 'Dashboard',
     companies: 'Perusahaan',
@@ -3253,21 +3332,35 @@ async function reloadCompanies() {
 // milik perusahaan Induk (root) sendiri tidak dihitung di kedua angka
 // ini. valueFn menerima data statement terbaru satu perusahaan dan
 // mengembalikan angka yang mau dijumlahkan (mis. s => s.labaRugi.pendapatan).
-function computeByOwnershipLevel(latestByCompany, valueFn) {
+// Kedalaman kepemilikan tiap perusahaan (companyId -> depth): 0 = induk/
+// holding, 1 = Subsidiary, >=2 = Sub-Subsidiary. Satu sumber kebenaran yang
+// dipakai KPI card DAN grafik Tren Aset & Laba Bersih, supaya cakupan
+// keduanya selalu identik.
+function ownershipDepthMap() {
   const byId = {};
   state.companies.forEach(c => { byId[c.id] = c; });
-  let totalAnak = 0;
-  let totalCucu = 0;
+  const depthById = {};
   state.companies.forEach(c => {
-    const s = latestByCompany[c.id];
-    const value = s ? (valueFn(s) || 0) : 0;
-    if (!value) return;
     const chain = [c];
     let depth = 0;
     while (chain[chain.length - 1].parentId && byId[chain[chain.length - 1].parentId] && !chain.includes(byId[chain[chain.length - 1].parentId])) {
       chain.push(byId[chain[chain.length - 1].parentId]);
       depth++;
     }
+    depthById[c.id] = depth;
+  });
+  return depthById;
+}
+
+function computeByOwnershipLevel(latestByCompany, valueFn) {
+  const depthById = ownershipDepthMap();
+  let totalAnak = 0;
+  let totalCucu = 0;
+  state.companies.forEach(c => {
+    const s = latestByCompany[c.id];
+    const value = s ? (valueFn(s) || 0) : 0;
+    if (!value) return;
+    const depth = depthById[c.id];
     if (depth === 1) totalAnak += value;
     else if (depth >= 2) totalCucu += value;
   });
@@ -3317,6 +3410,51 @@ function renderDashboard() {
   }, (err) => toast('Gagal memuat data laporan: ' + err.message, 'error'));
 }
 
+// ---------- Widget bergaya bento di Dashboard ----------
+const fmtPctDash = (v) => (v == null || isNaN(v)) ? '–' : v.toLocaleString('id-ID', { maximumFractionDigits: 1 }) + '%';
+const fmtXDash = (v) => (v == null || isNaN(v)) ? '–' : v.toLocaleString('id-ID', { maximumFractionDigits: 2 }) + 'x';
+
+// Cincin persentase (SVG, tanpa Chart.js): dipakai untuk gauge Net Profit
+// Margin & cincin Struktur Pendanaan. `pct` di luar 0–100 hanya membatasi isi
+// cincin; teks di tengah (`center`) tetap menampilkan nilai aslinya.
+function dashRingHtml({ pct, size = 120, stroke = 12, id, center = '', from = '#5B93FF', to = '#2F6FE4' }) {
+  const p = (pct == null || isNaN(pct)) ? 0 : Math.max(0, Math.min(100, pct));
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const half = size / 2;
+  return `<div class="ring-wrap" style="width:${size}px;height:${size}px;">
+    <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">
+      <defs><linearGradient id="ring-grad-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs>
+      <circle cx="${half}" cy="${half}" r="${r}" fill="none" style="stroke:var(--border);" stroke-width="${stroke}"/>
+      ${p > 0 ? `<circle cx="${half}" cy="${half}" r="${r}" fill="none" stroke="url(#ring-grad-${id})" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${(c * p / 100).toFixed(2)} ${c.toFixed(2)}" transform="rotate(-90 ${half} ${half})"/>` : ''}
+    </svg>
+    <div class="ring-center">${center}</div>
+  </div>`;
+}
+
+// Nama level kepemilikan yang tampil di bawah judul tiap KPI card.
+const KPI_LEVEL_NAMES = { anak: 'Subsidiary', cucu: 'Sub-Subsidiary' };
+
+// Satu KPI card berpasangan: judul metrik ditulis SEKALI di tengah atas
+// card (mis. "Asset"), di bawahnya baris klasifikasi level — nama
+// Subsidiary di kiri dan Sub-Subsidiary di kanan, masing-masing di atas
+// nilainya.
+// signColor = true -> nilai negatif berwarna merah (Net Profit, EBITDA).
+function kpiSplitCardHtml(label, valAnak, valCucu, signColor) {
+  const half = (level, v) => `
+          <div class="kpi-split-half">
+            <div class="kpi-level-name">${KPI_LEVEL_NAMES[level]}</div>
+            <div class="kpi-value"${signColor ? ` style="color:${v >= 0 ? 'inherit' : 'var(--danger)'};"` : ''} title="${formatIDR(v)}">${formatIDRKPI(v)}</div>
+          </div>`;
+  return `
+      <div class="card kpi-card-split">
+        <div class="kpi-card-title">${label}</div>
+        <div class="kpi-split-row">${half('anak', valAnak)}
+          <div class="kpi-split-divider"></div>${half('cucu', valCucu)}
+        </div>
+      </div>`;
+}
+
 function paintDashboard(allStatements) {
   const root = document.getElementById('view-root');
   const latestByCompany = {};
@@ -3331,17 +3469,31 @@ function paintDashboard(allStatements) {
   const sumPendapatan = latestList.reduce((a, s) => a + (s.labaRugi.pendapatan || 0), 0);
   const sumLabaBersih = latestList.reduce((a, s) => a + (s.labaRugi.labaBersih || 0), 0);
 
-  // Tren gabungan seluruh perusahaan per periode, dipakai untuk kartu
-  // utama (hero) — total aset (batang) berdampingan dengan laba bersih
-  // (garis), 8 periode terakhir yang tersedia.
-  const periodMap = {};
-  allStatements.forEach(s => {
-    const key = `${s.year}-${String(s.periodIndex).padStart(3, '0')}`;
-    if (!periodMap[key]) periodMap[key] = { label: s.periodLabel, year: s.year, periodIndex: s.periodIndex, aset: 0, laba: 0 };
-    periodMap[key].aset += (s.neraca.totalAset || 0);
-    periodMap[key].laba += (s.labaRugi.labaBersih || 0);
-  });
-  const trend = Object.values(periodMap).sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex).slice(-8);
+  // Tren per periode untuk kartu utama (hero) — total aset (batang) dan
+  // laba bersih (garis), 8 periode terakhir yang tersedia. Cakupan & level
+  // SAMA dengan KPI card di atasnya (lihat computeByOwnershipLevel):
+  // Subsidiary (depth 1) dan Sub-Subsidiary (depth >= 2) masing-masing
+  // punya grafik sendiri; induk/holding tidak ikut. Bila belum ada struktur
+  // kepemilikan sama sekali (semua perusahaan berdiri sendiri), tampil satu
+  // grafik gabungan seluruh perusahaan.
+  const depthById = ownershipDepthMap();
+  const depthOf = (c) => depthById[c.id] || 0;
+  const hasSubs = state.companies.some(c => depthOf(c) >= 1);
+  const anakCount = state.companies.filter(c => depthOf(c) === 1).length;
+  const cucuCount = state.companies.filter(c => depthOf(c) >= 2).length;
+  const buildTrend = (includeDepth) => {
+    const map = {};
+    allStatements.forEach(s => {
+      if (!includeDepth(depthById[s.companyId] || 0)) return;
+      const key = `${s.year}-${String(s.periodIndex).padStart(3, '0')}`;
+      if (!map[key]) map[key] = { label: s.periodLabel, year: s.year, periodIndex: s.periodIndex, aset: 0, laba: 0 };
+      map[key].aset += (s.neraca.totalAset || 0);
+      map[key].laba += (s.labaRugi.labaBersih || 0);
+    });
+    return Object.values(map).sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex).slice(-8);
+  };
+  const trendAnak = buildTrend(d => hasSubs ? d === 1 : true);
+  const trendCucu = hasSubs ? buildTrend(d => d >= 2) : [];
 
   // Komposisi total aset per perusahaan (periode terbaru masing-masing),
   // 5 terbesar + sisanya digabung jadi "Lainnya".
@@ -3362,135 +3514,129 @@ function paintDashboard(allStatements) {
   const { totalAnak: labaAnak, totalCucu: labaCucu } = computeByOwnershipLevel(latestByCompany, s => s.labaRugi.labaBersih);
   const { totalAnak: ebitdaAnak, totalCucu: ebitdaCucu } = computeByOwnershipLevel(latestByCompany, s => statementEbitda(s));
   const { totalAnak: cashAnak, totalCucu: cashCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.kasSetaraKas);
-  const { totalAnak: debtAnak, totalCucu: debtCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.totalKewajibanJangkaPanjang);
+  const { totalAnak: debtAnak, totalCucu: debtCucu } = computeByOwnershipLevel(latestByCompany, s => (s.neraca.totalKewajibanJangkaPanjang || 0) + (s.neraca.hutangPendanaan || 0));
   const { totalAnak: arAnak, totalCucu: arCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.piutangUsaha);
   const { totalAnak: apAnak, totalCucu: apCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.hutangUsaha);
 
+  // ---- Angka konsolidasi untuk widget bento (cakupan sama dengan KPI card:
+  // Subsidiary + Sub-Subsidiary; tanpa struktur induk-anak = semua perusahaan) ----
+  const scopeList = latestList.filter(s => !hasSubs || (depthById[s.companyId] || 0) >= 1);
+  const sumScope = (fn) => scopeList.reduce((a, s) => a + (fn(s) || 0), 0);
+  const cAset = sumScope(s => s.neraca.totalAset);
+  const cAsetLancar = sumScope(s => s.neraca.totalAsetLancar);
+  const cKewLancar = sumScope(s => s.neraca.totalKewajibanLancar);
+  const cKew = sumScope(s => s.neraca.totalKewajiban);
+  const cPendapatan = sumScope(s => s.labaRugi.pendapatan);
+  const cLaba = sumScope(s => s.labaRugi.labaBersih);
+  const cEkuitas = cAset - cKew;
+  const pctOf = (a, b) => b ? a / b * 100 : null;
+  const npm = pctOf(cLaba, cPendapatan);
+  const roa = pctOf(cLaba, cAset);
+  const debtToAsset = pctOf(cKew, cAset);
+  const equityRatio = pctOf(cEkuitas, cAset);
+  const currentRatio = cKewLancar ? cAsetLancar / cKewLancar : null;
+  const isDarkDash = document.documentElement.getAttribute('data-theme') === 'dark';
+  const hasCashFlow = latestList.some(s => s.arusKas && (s.arusKas.totalOperasi || s.arusKas.totalInvestasi || s.arusKas.totalPendanaan));
+  const capPalette = isDarkDash ? ['#2F6FE4', '#5B93FF', '#8FB6FF', '#C3DAFF', '#E4EEFF'] : ['#12306B', '#2F6FE4', '#5B93FF', '#8FB6FF', '#C3DAFF'];
+  const capSegments = [
+    { name: 'Hutang Usaha', value: sumScope(s => s.neraca.hutangUsaha) },
+    { name: 'Hutang Pendanaan', value: sumScope(s => s.neraca.hutangPendanaan) },
+    { name: 'Kewajiban Lancar Lainnya', value: sumScope(s => (s.neraca.totalKewajibanLancar || 0) - (s.neraca.hutangUsaha || 0) - (s.neraca.hutangPendanaan || 0)) },
+    { name: 'Kewajiban Jangka Panjang', value: sumScope(s => s.neraca.totalKewajibanJangkaPanjang) },
+    { name: 'Ekuitas', value: cEkuitas }
+  ].map((x, i) => ({ ...x, color: capPalette[i] }));
+  const capTotal = capSegments.reduce((a, x) => a + Math.max(0, x.value), 0);
+  const emptyBento = '<div class="bento-empty">Belum ada data</div>';
+
+  // Pertahankan fokus kolom pencarian bila render ulang (data realtime) terjadi saat mengetik.
+  const hadSearchFocus = !!(document.activeElement && document.activeElement.id === 'dash-search-input');
+
+  // Kartu grafik tren (satu per level). Angka header tiap kartu = sisi KPI
+  // card yang bersesuaian (Pendapatan & Laba Bersih level itu).
+  const heroCardHtml = ({ title, sub, pendapatan, laba, canvasId, hasData }) => `
+      <div class="dash-hero">
+        <div class="dash-hero-head">
+          <div>
+            <div class="dash-hero-title">${title}</div>
+            <div class="dash-hero-sub">${sub}</div>
+          </div>
+          <div class="dash-hero-stats">
+            <div>
+              <div class="dash-hero-stat-label">Pendapatan</div>
+              <div class="dash-hero-stat-value">${formatIDR(pendapatan)}</div>
+            </div>
+            <div>
+              <div class="dash-hero-stat-label">Laba Bersih</div>
+              <div class="dash-hero-stat-value" style="color:${laba >= 0 ? 'var(--teal)' : 'var(--danger)'};">${formatIDR(laba)}</div>
+            </div>
+          </div>
+        </div>
+        <div class="dash-hero-chart-wrap">
+          ${hasData ? `<canvas id="${canvasId}"></canvas>` : '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--slate-light);font-size:13px;">Belum ada data periode untuk ditampilkan</div>'}
+        </div>
+      </div>`;
+
   root.innerHTML = `
-    <div class="section-block grid grid-4">
-      <div class="card kpi-card-split">
-        <div class="kpi-split-half">
-          <div class="kpi-label">Asset Subsidiary</div>
-          <div class="kpi-value" title="${formatIDR(asetAnak)}">${formatIDRKPI(asetAnak)}</div>
-        </div>
-        <div class="kpi-split-divider"></div>
-        <div class="kpi-split-half">
-          <div class="kpi-label">Asset Sub-Subsidiary</div>
-          <div class="kpi-value" title="${formatIDR(asetCucu)}">${formatIDRKPI(asetCucu)}</div>
-        </div>
-      </div>
-      <div class="card kpi-card-split">
-        <div class="kpi-split-half">
-          <div class="kpi-label">Revenue Subsidiary</div>
-          <div class="kpi-value" title="${formatIDR(revenueAnak)}">${formatIDRKPI(revenueAnak)}</div>
-        </div>
-        <div class="kpi-split-divider"></div>
-        <div class="kpi-split-half">
-          <div class="kpi-label">Revenue Sub-subsidiary</div>
-          <div class="kpi-value" title="${formatIDR(revenueCucu)}">${formatIDRKPI(revenueCucu)}</div>
-        </div>
-      </div>
-      <div class="card kpi-card-split">
-        <div class="kpi-split-half">
-          <div class="kpi-label">Net Profit Subsidiary</div>
-          <div class="kpi-value" style="color:${labaAnak >= 0 ? 'inherit' : 'var(--danger)'};" title="${formatIDR(labaAnak)}">${formatIDRKPI(labaAnak)}</div>
-        </div>
-        <div class="kpi-split-divider"></div>
-        <div class="kpi-split-half">
-          <div class="kpi-label">Net Profit Sub-Subsidiary</div>
-          <div class="kpi-value" style="color:${labaCucu >= 0 ? 'inherit' : 'var(--danger)'};" title="${formatIDR(labaCucu)}">${formatIDRKPI(labaCucu)}</div>
-        </div>
-      </div>
-      <div class="card kpi-card-split">
-        <div class="kpi-split-half">
-          <div class="kpi-label">Debt Subsidiary</div>
-          <div class="kpi-value" title="${formatIDR(debtAnak)}">${formatIDRKPI(debtAnak)}</div>
-        </div>
-        <div class="kpi-split-divider"></div>
-        <div class="kpi-split-half">
-          <div class="kpi-label">Debt Sub-Subsidiary</div>
-          <div class="kpi-value" title="${formatIDR(debtCucu)}">${formatIDRKPI(debtCucu)}</div>
-        </div>
-      </div>
-      <div class="card kpi-card-split">
-        <div class="kpi-split-half">
-          <div class="kpi-label">AR Subsidiary</div>
-          <div class="kpi-value" title="${formatIDR(arAnak)}">${formatIDRKPI(arAnak)}</div>
-        </div>
-        <div class="kpi-split-divider"></div>
-        <div class="kpi-split-half">
-          <div class="kpi-label">AR Sub-Subsidiary</div>
-          <div class="kpi-value" title="${formatIDR(arCucu)}">${formatIDRKPI(arCucu)}</div>
-        </div>
-      </div>
-      <div class="card kpi-card-split">
-        <div class="kpi-split-half">
-          <div class="kpi-label">AP Subsidiary</div>
-          <div class="kpi-value" title="${formatIDR(apAnak)}">${formatIDRKPI(apAnak)}</div>
-        </div>
-        <div class="kpi-split-divider"></div>
-        <div class="kpi-split-half">
-          <div class="kpi-label">AP Sub-Subsidiary</div>
-          <div class="kpi-value" title="${formatIDR(apCucu)}">${formatIDRKPI(apCucu)}</div>
-        </div>
-      </div>
-      <div class="card kpi-card-split">
-        <div class="kpi-split-half">
-          <div class="kpi-label">EBITDA Subsidiary</div>
-          <div class="kpi-value" style="color:${ebitdaAnak >= 0 ? 'inherit' : 'var(--danger)'};" title="${formatIDR(ebitdaAnak)}">${formatIDRKPI(ebitdaAnak)}</div>
-        </div>
-        <div class="kpi-split-divider"></div>
-        <div class="kpi-split-half">
-          <div class="kpi-label">EBITDA Sub-Subsidiary</div>
-          <div class="kpi-value" style="color:${ebitdaCucu >= 0 ? 'inherit' : 'var(--danger)'};" title="${formatIDR(ebitdaCucu)}">${formatIDRKPI(ebitdaCucu)}</div>
-        </div>
-      </div>
-      <div class="card kpi-card-split">
-        <div class="kpi-split-half">
-          <div class="kpi-label">Cash Subsidiary</div>
-          <div class="kpi-value" title="${formatIDR(cashAnak)}">${formatIDRKPI(cashAnak)}</div>
-        </div>
-        <div class="kpi-split-divider"></div>
-        <div class="kpi-split-half">
-          <div class="kpi-label">Cash Sub-subsidiary</div>
-          <div class="kpi-value" title="${formatIDR(cashCucu)}">${formatIDRKPI(cashCucu)}</div>
-        </div>
-      </div>
+    <div class="section-block grid grid-4">${kpiSplitCardHtml('Asset', asetAnak, asetCucu)}${kpiSplitCardHtml('Revenue', revenueAnak, revenueCucu)}${kpiSplitCardHtml('Net Profit', labaAnak, labaCucu, true)}${kpiSplitCardHtml('Debt', debtAnak, debtCucu)}${kpiSplitCardHtml('AR', arAnak, arCucu)}${kpiSplitCardHtml('AP', apAnak, apCucu)}${kpiSplitCardHtml('EBITDA', ebitdaAnak, ebitdaCucu, true)}${kpiSplitCardHtml('Cash', cashAnak, cashCucu)}
     </div>
 
-    <div class="section-block dash-hero">
-      <div class="dash-hero-head">
-        <div>
-          <div class="dash-hero-title">Tren Aset &amp; Laba Bersih</div>
-          <div class="dash-hero-sub">Konsolidasi ${state.companies.length} perusahaan, per periode</div>
-        </div>
-        <div class="dash-hero-stats">
-          <div>
-            <div class="dash-hero-stat-label">Pendapatan</div>
-            <div class="dash-hero-stat-value">${formatIDR(sumPendapatan)}</div>
-          </div>
-          <div>
-            <div class="dash-hero-stat-label">Laba Bersih</div>
-            <div class="dash-hero-stat-value" style="color:${sumLabaBersih >= 0 ? 'var(--teal)' : 'var(--danger)'};">${formatIDR(sumLabaBersih)}</div>
+    ${hasSubs ? `<div class="dash-hero-pair">
+      ${heroCardHtml({ title: 'Tren Aset &amp; Laba Bersih &middot; Subsidiary', sub: `Konsolidasi ${anakCount} perusahaan, per periode`, pendapatan: revenueAnak, laba: labaAnak, canvasId: 'dash-hero-chart-anak', hasData: trendAnak.length > 0 })}
+      ${heroCardHtml({ title: 'Tren Aset &amp; Laba Bersih &middot; Sub-Subsidiary', sub: `Konsolidasi ${cucuCount} perusahaan, per periode`, pendapatan: revenueCucu, laba: labaCucu, canvasId: 'dash-hero-chart-cucu', hasData: trendCucu.length > 0 })}
+    </div>` : `<div class="section-block">
+      ${heroCardHtml({ title: 'Tren Aset &amp; Laba Bersih', sub: `Konsolidasi ${state.companies.length} perusahaan, per periode`, pendapatan: sumPendapatan, laba: sumLabaBersih, canvasId: 'dash-hero-chart-anak', hasData: trendAnak.length > 0 })}
+    </div>`}
+
+    <div class="dash-bento">
+      <div class="bento-card span-3">
+        <div class="bento-head"><div class="bento-title">Net Profit Margin</div><span class="bento-pill">${hasSubs ? 'Konsolidasi' : 'Semua Perusahaan'}</span></div>
+        <div class="gauge-body">
+          ${dashRingHtml({
+            pct: npm, size: 150, stroke: 13, id: 'npm',
+            from: (npm || 0) < 0 ? '#E2695D' : '#5B93FF', to: (npm || 0) < 0 ? '#B5453B' : '#2F6FE4',
+            center: `<div class="ring-value" style="color:${(npm || 0) < 0 ? 'var(--danger)' : 'inherit'};">${fmtPctDash(npm)}</div><div class="ring-caption">Laba &divide; Pendapatan</div>`
+          })}
+          <div class="gauge-note">Laba Bersih ${formatIDRKPI(cLaba)} dari Pendapatan ${formatIDRKPI(cPendapatan)}</div>
+          <div class="gauge-chips">
+            <span class="gauge-chip">Current Ratio<b>${fmtXDash(currentRatio)}</b></span>
+            <span class="gauge-chip">ROA<b>${fmtPctDash(roa)}</b></span>
           </div>
         </div>
       </div>
-      <div class="dash-hero-chart-wrap">
-        ${trend.length ? '<canvas id="dash-hero-chart"></canvas>' : '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--slate-light);font-size:13px;">Belum ada data periode untuk ditampilkan</div>'}
-      </div>
-    </div>
 
-    <div class="dash-widgets">
-      <div class="dash-widget-card">
-        <div class="dash-widget-title">Total Aset per Perusahaan</div>
-        <div class="dash-widget-chart-wrap"><canvas id="chart-aset"></canvas></div>
+      <div class="bento-card span-3">
+        <div class="bento-head"><div class="bento-title">Struktur Pendanaan</div><span class="bento-pill">Terhadap Aset</span></div>
+        <div class="mini-rings">
+          <div class="mini-ring">
+            ${dashRingHtml({ pct: debtToAsset, size: 92, stroke: 10, id: 'debt-asset', center: `<div class="ring-value sm">${fmtPctDash(debtToAsset)}</div>` })}
+            <div class="mini-ring-label">Debt to Asset</div>
+            <div class="mini-ring-amt">${formatIDRKPI(cKew)}</div>
+          </div>
+          <div class="mini-ring">
+            ${dashRingHtml({ pct: equityRatio, size: 92, stroke: 10, id: 'equity-ratio', from: '#E0B36A', to: '#C08A3E', center: `<div class="ring-value sm">${fmtPctDash(equityRatio)}</div>` })}
+            <div class="mini-ring-label">Equity Ratio</div>
+            <div class="mini-ring-amt">${formatIDRKPI(cEkuitas)}</div>
+          </div>
+        </div>
       </div>
-      <div class="dash-widget-card">
-        <div class="dash-widget-title">Laba Bersih per Perusahaan</div>
-        <div class="dash-widget-chart-wrap"><canvas id="chart-laba"></canvas></div>
+
+      <div class="bento-card span-6">
+        <div class="bento-head"><div class="bento-title">Arus Kas per Perusahaan</div><span class="bento-pill">Periode terbaru</span></div>
+        <div class="bento-chart">${hasCashFlow ? '<canvas id="chart-arus-kas"></canvas>' : emptyBento}</div>
       </div>
-      <div class="dash-widget-card">
-        <div class="dash-widget-title">Komposisi Total Aset</div>
+
+      <div class="bento-card span-6">
+        <div class="bento-head"><div class="bento-title">Aset, Kewajiban &amp; Ekuitas per Perusahaan</div><span class="bento-pill">Periode terbaru</span></div>
+        <div class="bento-chart">${latestList.length ? '<canvas id="chart-neraca-grouped"></canvas>' : emptyBento}</div>
+      </div>
+
+      <div class="bento-card span-3">
+        <div class="bento-head"><div class="bento-title">Laba Bersih per Perusahaan</div></div>
+        <div class="bento-chart">${latestList.length ? '<canvas id="chart-laba"></canvas>' : emptyBento}</div>
+      </div>
+
+      <div class="bento-card span-3">
+        <div class="bento-head"><div class="bento-title">Komposisi Total Aset</div></div>
         <div class="dash-donut-wrap">
           <div class="dash-donut-canvas">${compTop.length ? '<canvas id="dash-donut"></canvas>' : ''}</div>
           <div class="dash-donut-legend">
@@ -3504,37 +3650,87 @@ function paintDashboard(allStatements) {
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="section-block" style="margin-top:26px;">
-      <div class="section-title">Ringkasan Perusahaan</div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Perusahaan</th><th>Periode Terbaru</th><th class="num">Total Aset</th><th class="num">Pendapatan</th><th class="num">Laba Bersih</th><th class="num">Current Ratio</th></tr></thead>
-          <tbody>
-            ${state.companies.map(c => {
-              const s = latestByCompany[c.id];
-              if (!s) return `<tr><td>${c.name}</td><td colspan="5" style="text-align:left;color:var(--slate-light);">Belum ada data</td></tr>`;
-              const r = computeRatios(s);
-              return `<tr>
-                <td>${c.name}</td>
-                <td>${s.periodLabel}</td>
-                <td class="num">${formatIDR(s.neraca.totalAset)}</td>
-                <td class="num">${formatIDR(s.labaRugi.pendapatan)}</td>
-                <td class="num">${formatIDR(s.labaRugi.labaBersih)}</td>
-                <td class="num">${formatRatio(r.likuiditas.currentRatio, 'x')}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
+      <div class="bento-card span-12">
+        <div class="bento-head"><div class="bento-title">Struktur Permodalan</div><span class="bento-pill">${formatIDRKPI(cAset)} total pasiva</span></div>
+        ${capTotal > 0 ? `
+          <div class="cap-bar">${capSegments.map(x => Math.max(0, x.value) > 0 ? `<span title="${x.name}: ${formatIDR(x.value)}" style="width:${(Math.max(0, x.value) / capTotal * 100).toFixed(2)}%;background:${x.color};"></span>` : '').join('')}</div>
+          <div class="cap-legend">${capSegments.map(x => `
+            <div class="cap-legend-item">
+              <span class="cap-legend-dot" style="background:${x.color};"></span>
+              <span>${x.name}</span><b>${formatIDRKPI(x.value)}</b><span class="cap-pct">${fmtPctDash(pctOf(Math.max(0, x.value), capTotal))}</span>
+            </div>`).join('')}
+          </div>` : emptyBento}
+      </div>
+
+      <div class="bento-card span-12">
+        <div class="bento-head">
+          <div class="bento-title">Ringkasan Perusahaan</div>
+          <div class="dash-search">
+            <input type="text" id="dash-search-input" placeholder="Cari perusahaan…" value="${escapeHTML(state.dashSearch || '')}" autocomplete="off">
+            <span class="dash-search-btn">${icon('search')}</span>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Perusahaan</th><th>Periode Terbaru</th><th class="num">Total Aset</th><th class="num">Pendapatan</th><th class="num">Laba Bersih</th><th class="num">Current Ratio</th></tr></thead>
+            <tbody id="dash-company-rows">
+              ${state.companies.map(c => {
+                const s = latestByCompany[c.id];
+                const nameKey = escapeHTML(normalizeKey(c.name));
+                if (!s) return `<tr data-name="${nameKey}"><td>${c.name}</td><td colspan="5" style="text-align:left;color:var(--slate-light);">Belum ada data</td></tr>`;
+                const r = computeRatios(s);
+                return `<tr data-name="${nameKey}">
+                  <td>${c.name}</td>
+                  <td>${s.periodLabel}</td>
+                  <td class="num">${formatIDR(s.neraca.totalAset)}</td>
+                  <td class="num">${formatIDR(s.labaRugi.pendapatan)}</td>
+                  <td class="num">${formatIDR(s.labaRugi.labaBersih)}</td>
+                  <td class="num">${formatRatio(r.likuiditas.currentRatio, 'x')}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
-
   `;
 
-  if (trend.length) renderHeroChart('dash-hero-chart', trend.map(t => t.label), trend.map(t => t.aset), trend.map(t => t.laba));
-  renderMiniBarChart('chart-aset', labels, latestList.map(s => s.neraca.totalAset || 0), '#2F6FE4');
+  if (trendAnak.length) renderHeroChart('dash-hero-chart-anak', trendAnak.map(t => t.label), trendAnak.map(t => t.aset), trendAnak.map(t => t.laba));
+  if (trendCucu.length) renderHeroChart('dash-hero-chart-cucu', trendCucu.map(t => t.label), trendCucu.map(t => t.aset), trendCucu.map(t => t.laba));
   renderMiniBarChart('chart-laba', labels, latestList.map(s => s.labaRugi.labaBersih || 0), '#C08A3E');
+  const groupedColors = isDarkDash ? ['#2F6FE4', '#5B93FF', '#C3DAFF'] : ['#16213A', '#2F6FE4', '#8FB6FF'];
+  if (latestList.length) renderBarsChart('chart-neraca-grouped', labels, [
+    { label: 'Total Aset', data: latestList.map(s => s.neraca.totalAset || 0), backgroundColor: groupedColors[0] },
+    { label: 'Total Kewajiban', data: latestList.map(s => s.neraca.totalKewajiban || 0), backgroundColor: groupedColors[1] },
+    { label: 'Ekuitas', data: latestList.map(s => (s.neraca.totalAset || 0) - (s.neraca.totalKewajiban || 0)), backgroundColor: groupedColors[2] }
+  ]);
+  if (hasCashFlow) renderBarsChart('chart-arus-kas', labels, [
+    { label: 'Operasi', data: latestList.map(s => (s.arusKas && s.arusKas.totalOperasi) || 0), backgroundColor: '#2F6FE4' },
+    { label: 'Investasi', data: latestList.map(s => (s.arusKas && s.arusKas.totalInvestasi) || 0), backgroundColor: '#8FB6FF' },
+    { label: 'Pendanaan', data: latestList.map(s => (s.arusKas && s.arusKas.totalPendanaan) || 0), backgroundColor: '#C08A3E' }
+  ], { stacked: true });
+
+  // Pencarian perusahaan pada tabel ringkasan (filter sisi klien). Nilai
+  // pencarian disimpan di state supaya tidak hilang saat data realtime
+  // memicu render ulang.
+  const searchInput = document.getElementById('dash-search-input');
+  if (searchInput) {
+    const applyFilter = () => {
+      state.dashSearch = searchInput.value;
+      const q = normalizeKey(searchInput.value);
+      document.querySelectorAll('#dash-company-rows tr[data-name]').forEach(tr => {
+        tr.style.display = (!q || tr.dataset.name.includes(q)) ? '' : 'none';
+      });
+    };
+    searchInput.addEventListener('input', applyFilter);
+    applyFilter();
+    if (hadSearchFocus) {
+      searchInput.focus();
+      const end = searchInput.value.length;
+      try { searchInput.setSelectionRange(end, end); } catch (e) {}
+    }
+  }
   if (compTop.length) renderDonutChart('dash-donut', compTop.map(x => x.name), compTop.map(x => x.value), donutPalette);
 }
 
@@ -4363,7 +4559,7 @@ function openCompanyDetail(companyId) {
   state.view = 'company-detail';
   state.companyDetailId = companyId;
   state.companyDetailPeriodId = null;
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.nav-item, .topbar-cal-btn').forEach(n => n.classList.remove('active'));
   const company = state.companies.find(c => c.id === companyId);
   document.getElementById('topbar-title').textContent = company ? company.name : 'Detail Perusahaan';
   renderCompanyDetail();
@@ -4774,6 +4970,11 @@ function humanizeKey(key) {
 // humanizeKey() supaya istilahnya sesuai maksud aslinya.
 const NERACA_LABELS = {
   asetLancarLainnya: 'Aset Lancar Lainnya',
+  hutangUsaha: 'Hutang Usaha (Accounts Payable)',
+  hutangPendanaan: 'Hutang Pendanaan (Funding Debt)',
+  kewajibanLancarLainnya: 'Kewajiban Lancar Lainnya',
+  totalKewajibanLancar: 'Total Kewajiban Lancar',
+  totalKewajibanJangkaPanjang: 'Total Kewajiban Jangka Panjang',
   penyesuaianSaldoAwalLabaRugi: 'Penyesuaian Saldo Awal Akun Laba Rugi (Belum Ditutup)',
   pendapatanPeriodeIni: 'Pendapatan Periode Ini (Laba Rugi Tahun Berjalan)',
   pendapatanSampaiTahunLalu: 'Pendapatan s.d. Tahun Lalu (Laba Ditahan)',
@@ -4850,13 +5051,24 @@ function withRetainedEarnings(neraca, statements, selected) {
   };
 }
 
+// Snapshot Neraca lama (sebelum derivationVersion 7) belum punya baris
+// "Kewajiban Lancar Lainnya". Supaya subgrup Kewajiban Lancar tetap
+// menjumlah dengan benar di sisi tampilan, selisihnya dihitung dari
+// Total Kewajiban Lancar dikurangi Hutang Usaha (tidak mengubah data tersimpan).
+function withKewajibanLancarBreakdown(neraca) {
+  if (!neraca || !('totalKewajibanLancar' in neraca) || 'kewajibanLancarLainnya' in neraca) return neraca;
+  return { ...neraca, kewajibanLancarLainnya: (neraca.totalKewajibanLancar || 0) - (neraca.hutangUsaha || 0) - (neraca.hutangPendanaan || 0) };
+}
+
 function neracaGroupedTable(neraca) {
+  neraca = withKewajibanLancarBreakdown(neraca);
   if (!neraca || Object.keys(neraca).length === 0) return `<div style="color:var(--slate-light);font-size:13px;padding:6px 2px;">Belum ada data.</div>`;
   const label = (key) => NERACA_LABELS[key] || humanizeKey(key);
   const row = (key) => key in neraca ? `<tr><td>${label(key)}</td><td class="num">${formatIDR(neraca[key])}</td></tr>` : '';
   const rowBold = (key) => key in neraca ? `<tr style="font-weight:600;"><td>${label(key)}</td><td class="num">${formatIDR(neraca[key])}</td></tr>` : '';
   const rowHighlight = (key) => key in neraca ? `<tr style="font-weight:700;background:var(--teal-light);"><td>${label(key)}</td><td class="num">${formatIDR(neraca[key])}</td></tr>` : '';
   const groupRow = (text) => `<tr><td colspan="2" style="font-weight:600;color:var(--slate);padding-top:10px;">${text}</td></tr>`;
+  const subGroupRow = (text) => `<tr><td colspan="2" style="font-weight:500;font-size:12.5px;color:var(--slate-light);padding:6px 0 2px 10px;">${text}</td></tr>`;
   return `<table><tbody>
     ${groupRow('Aset Lancar')}
     ${row('kasSetaraKas')}${row('piutangUsaha')}${row('persediaan')}${row('asetLancarLainnya')}${rowBold('totalAsetLancar')}
@@ -4864,7 +5076,11 @@ function neracaGroupedTable(neraca) {
     ${rowBold('totalAsetTidakLancar')}
     ${rowHighlight('totalAset')}
     ${groupRow('Liabilitas')}
-    ${row('hutangUsaha')}${row('totalKewajibanLancar')}${row('totalKewajibanJangkaPanjang')}${rowBold('totalKewajiban')}
+    ${subGroupRow('Kewajiban Lancar')}
+    ${row('hutangUsaha')}${row('hutangPendanaan')}${row('kewajibanLancarLainnya')}${rowBold('totalKewajibanLancar')}
+    ${subGroupRow('Kewajiban Jangka Panjang')}
+    ${row('totalKewajibanJangkaPanjang')}
+    ${rowBold('totalKewajiban')}
     ${groupRow('Ekuitas')}
     ${rowBold('totalEkuitas')}${row('pendapatanSampaiTahunLalu')}${row('pendapatanPeriodeIni')}${rowHighlight('totalEkuitasTermasukLaba')}
   </tbody></table>${neracaBalanceSummary(neraca)}`;
@@ -5078,7 +5294,7 @@ function ledgerTable(accounts) {
 const NERACA_FORMULAS = {
   totalAsetLancar: (n) => `Kas &amp; Setara Kas (${formatIDR(n.kasSetaraKas)}) + Piutang Usaha (${formatIDR(n.piutangUsaha)}) + Persediaan (${formatIDR(n.persediaan)}) + Aset Lancar Lainnya (${formatIDR(n.asetLancarLainnya)})`,
   totalAset: (n) => `Total Aset Lancar (${formatIDR(n.totalAsetLancar)}) + Total Aset Tidak Lancar (${formatIDR(n.totalAsetTidakLancar)})`,
-  totalKewajiban: (n) => `Total Kewajiban Lancar (${formatIDR(n.totalKewajibanLancar)}) + Total Kewajiban Jangka Panjang (${formatIDR(n.totalKewajibanJangkaPanjang)})`,
+  totalKewajiban: (n) => `Total Kewajiban Lancar (Hutang Usaha ${formatIDR(n.hutangUsaha || 0)} + Hutang Pendanaan ${formatIDR(n.hutangPendanaan || 0)} + Lainnya ${formatIDR(n.kewajibanLancarLainnya || 0)} = ${formatIDR(n.totalKewajibanLancar)}) + Total Kewajiban Jangka Panjang (${formatIDR(n.totalKewajibanJangkaPanjang)})`,
   penyesuaianSaldoAwalLabaRugi: () => `Akun Pendapatan/Beban pada Buku Besar yang diimpor ternyata masih membawa Saldo Awal (semestinya sudah ditutup/dinolkan ke Laba Ditahan oleh software akuntansi asal setiap tutup buku). Karena nilai ini tidak masuk ke Aset/Kewajiban/Ekuitas manapun dan sengaja tidak dihitung sebagai Laba Rugi tahun berjalan, Integrida menutupnya otomatis ke Ekuitas di sini (klik baris ini untuk melihat akun sumbernya) supaya Total Aset = Total Kewajiban + Total Ekuitas persis sesuai Buku Besar yang diimpor.`,
   pendapatanPeriodeIni: () => `Akumulasi Laba Bersih seluruh periode pada tahun yang sama, dari awal tahun sampai periode ini (laba/rugi tahun berjalan).`,
   pendapatanSampaiTahunLalu: () => `Akumulasi Laba Bersih seluruh periode pada tahun-tahun sebelum tahun periode ini, sejak awal berdiri (laba ditahan s.d. akhir tahun lalu).`,
@@ -5403,7 +5619,12 @@ function neracaGroupHeader(label) {
   return `<div style="font-weight:600;color:var(--slate);font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:12px 2px 4px 2px;">${label}</div>`;
 }
 
+function neracaSubGroupHeader(label) {
+  return `<div style="font-weight:500;color:var(--slate-light);font-size:12px;padding:8px 2px 2px 10px;">${label}</div>`;
+}
+
 function derivedNeracaGrouped(neraca, contributions, syncFlags) {
+  neraca = withKewajibanLancarBreakdown(neraca);
   activeContributions = contributions;
   if (!neraca || Object.keys(neraca).length === 0) return `<div style="color:var(--slate-light);font-size:13px;">Tidak ada data.</div>`;
   const row = (key) => key in neraca ? derivedFieldRow(key, neraca[key], contributions, NERACA_FORMULAS[key], neraca, NERACA_LABELS[key], syncFlags, 'neraca') : '';
@@ -5417,7 +5638,11 @@ function derivedNeracaGrouped(neraca, contributions, syncFlags) {
     ${row('totalAsetTidakLancar')}
     ${highlight('totalAset')}
     ${neracaGroupHeader('Liabilitas')}
-    ${row('hutangUsaha')}${row('totalKewajibanLancar')}${row('totalKewajibanJangkaPanjang')}${highlight('totalKewajiban')}
+    ${neracaSubGroupHeader('Kewajiban Lancar')}
+    ${row('hutangUsaha')}${row('hutangPendanaan')}${row('kewajibanLancarLainnya')}${row('totalKewajibanLancar')}
+    ${neracaSubGroupHeader('Kewajiban Jangka Panjang')}
+    ${row('totalKewajibanJangkaPanjang')}
+    ${highlight('totalKewajiban')}
     ${neracaGroupHeader('Ekuitas')}
     ${row('totalEkuitas')}${row('pendapatanSampaiTahunLalu')}${row('pendapatanPeriodeIni')}${highlight('totalEkuitasTermasukLaba')}
   `;
@@ -8657,6 +8882,7 @@ function renderHeroChart(canvasId, labels, asetData, labaData) {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(20,30,50,.06)';
   const tickColor = isDark ? '#A9B2C7' : '#5B6472';
+  const fontFamily = "system-ui, 'Segoe UI', Roboto, sans-serif";
   state.chartInstances[canvasId] = new Chart(ctx, {
     data: {
       labels,
@@ -8703,7 +8929,7 @@ function renderHeroChart(canvasId, labels, asetData, labaData) {
       plugins: {
         legend: {
           display: true, position: 'top', align: 'end',
-          labels: { boxWidth: 9, boxHeight: 9, usePointStyle: true, pointStyle: 'circle', color: tickColor, font: { family: "'Plus Jakarta Sans'", size: 11.5, weight: '600' } }
+          labels: { boxWidth: 9, boxHeight: 9, usePointStyle: true, pointStyle: 'circle', color: tickColor, font: { family: fontFamily, size: 11.5, weight: '600' } }
         },
         tooltip: {
           callbacks: {
@@ -8712,9 +8938,53 @@ function renderHeroChart(canvasId, labels, asetData, labaData) {
         }
       },
       scales: {
-        x: { grid: { display: false }, ticks: { color: tickColor, font: { family: "'Plus Jakarta Sans'", size: 11.5 } } },
-        y: { grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: "'Plus Jakarta Sans'", size: 11 }, callback: v => formatIDRShort(v) } },
-        y1: { position: 'right', grid: { display: false }, border: { display: false }, ticks: { color: tickColor, font: { family: "'Plus Jakarta Sans'", size: 11 }, callback: v => formatIDRShort(v) } }
+        x: { grid: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 11.5 } } },
+        y: { grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 11 }, callback: v => formatIDRShort(v) } },
+        y1: { position: 'right', grid: { display: false }, border: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 11 }, callback: v => formatIDRShort(v) } }
+      }
+    }
+  });
+}
+
+// Grafik batang serbaguna untuk widget bento (berkelompok, atau bertumpuk
+// bila opts.stacked — nilai negatif otomatis turun ke bawah sumbu nol,
+// dipakai untuk Arus Kas). Label perusahaan yang panjang dipendekkan di
+// sumbu; tooltip tetap menampilkan nama lengkap.
+function renderBarsChart(canvasId, labels, datasets, opts = {}) {
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  const stacked = !!opts.stacked;
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(20,30,50,.06)';
+  const tickColor = isDark ? '#A9B2C7' : '#5B6472';
+  const fontFamily = "system-ui, 'Segoe UI', Roboto, sans-serif";
+  state.chartInstances[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: datasets.map(d => ({ borderRadius: stacked ? 4 : 6, borderSkipped: false, maxBarThickness: stacked ? 34 : 22, ...d }))
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true, position: 'top', align: 'end',
+          labels: { boxWidth: 9, boxHeight: 9, usePointStyle: true, pointStyle: 'circle', color: tickColor, font: { family: fontFamily, size: 11.5, weight: '600' } }
+        },
+        tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${formatIDR(item.raw)}` } }
+      },
+      scales: {
+        x: {
+          stacked, grid: { display: false },
+          ticks: {
+            color: tickColor, font: { family: fontFamily, size: 10.5 }, maxRotation: 0, autoSkip: true,
+            callback: function (value) { const l = String(this.getLabelForValue(value)); return l.length > 12 ? l.slice(0, 11) + '…' : l; }
+          }
+        },
+        y: { stacked, grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 10.5 }, callback: v => formatIDRShort(v) } }
       }
     }
   });
@@ -8736,8 +9006,8 @@ function renderMiniBarChart(canvasId, labels, data, color) {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: (item) => formatIDR(item.raw) } } },
       scales: {
-        x: { grid: { display: false }, ticks: { color: tickColor, font: { family: "'Plus Jakarta Sans'", size: 10.5 }, maxRotation: 0, autoSkip: true } },
-        y: { grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: "'Plus Jakarta Sans'", size: 10 }, callback: v => formatIDRShort(v) } }
+        x: { grid: { display: false }, ticks: { color: tickColor, font: { family: "system-ui, 'Segoe UI', Roboto, sans-serif", size: 10.5 }, maxRotation: 0, autoSkip: true } },
+        y: { grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: "system-ui, 'Segoe UI', Roboto, sans-serif", size: 10 }, callback: v => formatIDRShort(v) } }
       }
     }
   });
