@@ -1723,6 +1723,8 @@ function categoryBadgeHTML(value) {
 
 const CASH_NAME_RE = /\b(kas|bank|cash)\b/i;
 const INVENTORY_NAME_RE = /\b(persediaan|inventory|stok|stock)\b/i;
+const RECEIVABLE_NAME_RE = /\b(piutang|receivable)\b/i;
+const PAYABLE_NAME_RE = /\b(hutang usaha|hutang dagang|utang usaha|utang dagang|accounts? payable)\b/i;
 
 // ---------- Parser Buku Besar: export general ledger asli ----------
 // Format yang dikenali (hasil export software akuntansi seperti QuickBooks):
@@ -1774,7 +1776,7 @@ function parseLedgerAccountLabel(raw) {
 // impor ulang file Excel-nya. Ini membuat pembaruan logika turunan
 // otomatis berlaku ke data yang sudah pernah diimpor, satu periode setiap
 // kali periode itu dibuka.
-const DERIVATION_VERSION = 3;
+const DERIVATION_VERSION = 5;
 
 function classifyLedgerAccount(code, name) {
   const n = normalizeKey(name);
@@ -1785,12 +1787,14 @@ function classifyLedgerAccount(code, name) {
   if (prefix === 1) {
     const nonCurrent = /(aset tetap|tidak lancar|jangka panjang|penyusutan|akumulasi)/.test(n);
     if (CASH_NAME_RE.test(n)) return { group: 'aset', bucket: nonCurrent ? 'tidakLancar' : 'lancar', field: 'kasSetaraKas' };
+    if (RECEIVABLE_NAME_RE.test(n)) return { group: 'aset', bucket: nonCurrent ? 'tidakLancar' : 'lancar', field: 'piutangUsaha' };
     if (INVENTORY_NAME_RE.test(n)) return { group: 'aset', bucket: nonCurrent ? 'tidakLancar' : 'lancar', field: 'persediaan' };
     return { group: 'aset', bucket: nonCurrent ? 'tidakLancar' : 'lancar', field: null };
   }
   if (prefix === 2) {
     const nonCurrent = /jangka panjang/.test(n);
-    return { group: 'kewajiban', bucket: nonCurrent ? 'jangkaPanjang' : 'lancar', field: null };
+    const isPayable = PAYABLE_NAME_RE.test(n);
+    return { group: 'kewajiban', bucket: nonCurrent ? 'jangkaPanjang' : 'lancar', field: isPayable ? 'hutangUsaha' : null };
   }
   if (prefix === 3) return { group: 'ekuitas', bucket: null, field: null };
   // Laba Rugi: klasifikasi murni dari digit pertama kode akun, bukan dari
@@ -1813,9 +1817,11 @@ function classifyLedgerAccount(code, name) {
 // Setara Kas" berisi akun Kas, Bank Jatim, Bank Mandiri Sidoarjo, dst).
 const LEDGER_GROUP_ORDER = [
   { key: 'kasSetaraKas', label: 'Kas & Setara Kas' },
+  { key: 'piutangUsaha', label: 'Piutang Usaha' },
   { key: 'persediaan', label: 'Persediaan' },
   { key: 'asetLancarLainnya', label: 'Aset Lancar Lainnya' },
   { key: 'asetTidakLancar', label: 'Aset Tidak Lancar' },
+  { key: 'hutangUsaha', label: 'Hutang Usaha' },
   { key: 'kewajibanLancar', label: 'Kewajiban Lancar' },
   { key: 'kewajibanJangkaPanjang', label: 'Kewajiban Jangka Panjang' },
   { key: 'ekuitas', label: 'Ekuitas' },
@@ -1834,10 +1840,14 @@ function ledgerGroupKey(code, name) {
   const c = classifyLedgerAccount(code, name);
   if (c.group === 'aset') {
     if (c.field === 'kasSetaraKas') return 'kasSetaraKas';
+    if (c.field === 'piutangUsaha') return 'piutangUsaha';
     if (c.field === 'persediaan') return 'persediaan';
     return c.bucket === 'lancar' ? 'asetLancarLainnya' : 'asetTidakLancar';
   }
-  if (c.group === 'kewajiban') return c.bucket === 'lancar' ? 'kewajibanLancar' : 'kewajibanJangkaPanjang';
+  if (c.group === 'kewajiban') {
+    if (c.field === 'hutangUsaha') return 'hutangUsaha';
+    return c.bucket === 'lancar' ? 'kewajibanLancar' : 'kewajibanJangkaPanjang';
+  }
   if (c.group === 'ekuitas') return 'ekuitas';
   if (c.group === 'pendapatan') return c.bucket === 'inti' ? 'pendapatan' : 'pendapatanLainnya';
   if (c.group === 'beban') {
@@ -1955,9 +1965,9 @@ function mergeLedgerPieces(pieces) {
 
 function deriveStatementsFromLedgerAccounts(accounts) {
   const neraca = {
-    kasSetaraKas: 0, persediaan: 0, asetLancarLainnya: 0,
+    kasSetaraKas: 0, piutangUsaha: 0, persediaan: 0, asetLancarLainnya: 0,
     totalAsetLancar: 0, totalAsetTidakLancar: 0, totalAset: 0,
-    totalKewajibanLancar: 0, totalKewajibanJangkaPanjang: 0, totalKewajiban: 0,
+    totalKewajibanLancar: 0, totalKewajibanJangkaPanjang: 0, totalKewajiban: 0, hutangUsaha: 0,
     totalEkuitas: 0
   };
   const labaRugi = {
@@ -1996,11 +2006,13 @@ function deriveStatementsFromLedgerAccounts(accounts) {
 
     if (c.group === 'aset') {
       if (c.field === 'kasSetaraKas') { neraca.kasSetaraKas += akhir; addContribution('kasSetaraKas', a, akhir); }
+      else if (c.field === 'piutangUsaha') { neraca.piutangUsaha += akhir; addContribution('piutangUsaha', a, akhir); }
       else if (c.field === 'persediaan') { neraca.persediaan += akhir; addContribution('persediaan', a, akhir); }
       else if (c.bucket === 'lancar') { neraca.asetLancarLainnya += akhir; addContribution('asetLancarLainnya', a, akhir); }
       if (c.bucket === 'lancar') { neraca.totalAsetLancar += akhir; }
       else { neraca.totalAsetTidakLancar += akhir; addContribution('totalAsetTidakLancar', a, akhir); }
     } else if (c.group === 'kewajiban') {
+      if (c.field === 'hutangUsaha') { neraca.hutangUsaha += akhir; addContribution('hutangUsaha', a, akhir); }
       if (c.bucket === 'lancar') { neraca.totalKewajibanLancar += akhir; addContribution('totalKewajibanLancar', a, akhir); }
       else { neraca.totalKewajibanJangkaPanjang += akhir; addContribution('totalKewajibanJangkaPanjang', a, akhir); }
     } else if (c.group === 'ekuitas') {
@@ -3348,9 +3360,12 @@ function paintDashboard(allStatements) {
   const { totalAnak: labaAnak, totalCucu: labaCucu } = computeByOwnershipLevel(latestByCompany, s => s.labaRugi.labaBersih);
   const { totalAnak: ebitdaAnak, totalCucu: ebitdaCucu } = computeByOwnershipLevel(latestByCompany, s => statementEbitda(s));
   const { totalAnak: cashAnak, totalCucu: cashCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.kasSetaraKas);
+  const { totalAnak: debtAnak, totalCucu: debtCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.totalKewajibanJangkaPanjang);
+  const { totalAnak: arAnak, totalCucu: arCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.piutangUsaha);
+  const { totalAnak: apAnak, totalCucu: apCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.hutangUsaha);
 
   root.innerHTML = `
-    <div class="section-block grid grid-3">
+    <div class="section-block grid grid-4">
       <div class="card kpi-card-split">
         <div class="kpi-split-half">
           <div class="kpi-label">Asset Subsidiary</div>
@@ -3382,6 +3397,39 @@ function paintDashboard(allStatements) {
         <div class="kpi-split-half">
           <div class="kpi-label">Net Profit Sub-Subsidiary</div>
           <div class="kpi-value" style="color:${labaCucu >= 0 ? 'inherit' : 'var(--danger)'};" title="${formatIDR(labaCucu)}">${formatIDRKPI(labaCucu)}</div>
+        </div>
+      </div>
+      <div class="card kpi-card-split">
+        <div class="kpi-split-half">
+          <div class="kpi-label">Debt Subsidiary</div>
+          <div class="kpi-value" title="${formatIDR(debtAnak)}">${formatIDRKPI(debtAnak)}</div>
+        </div>
+        <div class="kpi-split-divider"></div>
+        <div class="kpi-split-half">
+          <div class="kpi-label">Debt Sub-Subsidiary</div>
+          <div class="kpi-value" title="${formatIDR(debtCucu)}">${formatIDRKPI(debtCucu)}</div>
+        </div>
+      </div>
+      <div class="card kpi-card-split">
+        <div class="kpi-split-half">
+          <div class="kpi-label">AR Subsidiary</div>
+          <div class="kpi-value" title="${formatIDR(arAnak)}">${formatIDRKPI(arAnak)}</div>
+        </div>
+        <div class="kpi-split-divider"></div>
+        <div class="kpi-split-half">
+          <div class="kpi-label">AR Sub-Subsidiary</div>
+          <div class="kpi-value" title="${formatIDR(arCucu)}">${formatIDRKPI(arCucu)}</div>
+        </div>
+      </div>
+      <div class="card kpi-card-split">
+        <div class="kpi-split-half">
+          <div class="kpi-label">AP Subsidiary</div>
+          <div class="kpi-value" title="${formatIDR(apAnak)}">${formatIDRKPI(apAnak)}</div>
+        </div>
+        <div class="kpi-split-divider"></div>
+        <div class="kpi-split-half">
+          <div class="kpi-label">AP Sub-Subsidiary</div>
+          <div class="kpi-value" title="${formatIDR(apCucu)}">${formatIDRKPI(apCucu)}</div>
         </div>
       </div>
       <div class="card kpi-card-split">
@@ -3598,20 +3646,15 @@ function getDescendantIds(companyId) {
   return result;
 }
 
-// Bilah tab "Grid / Bagan Struktur / Impor Data" — dipakai bersama di
-// halaman Perusahaan maupun Impor Data supaya tetap terlihat & bisa
-// dipakai berpindah menu tanpa harus balik ke Perusahaan dulu. Tab
-// "Impor Data" sengaja disembunyikan utk akun kategori Reviewer — Reviewer
-// memang tidak diizinkan mengimpor data (lihat isReviewer() & setView, yang
-// sudah menolak view "import" utk Reviewer; ini hanya menyembunyikan
-// tombolnya juga supaya tidak membingungkan).
+// Bilah tab "Grid / Bagan Struktur" di halaman Perusahaan. Tab "Impor Data"
+// yang dulu ada di sini sudah dihapus — sekarang tiap perusahaan punya
+// tombol "Impor Data" sendiri di halaman detailnya (lihat businessInfoHTML),
+// jadi tidak perlu lagi jalur umum yang tidak terikat ke perusahaan tertentu.
 function companiesTabBarHTML(active) {
-  const showImportTab = !isReviewer();
   return `
     <div class="pill-row" id="companies-view-tabs" style="margin-bottom:0;">
       <div class="pill ${active === 'table' ? 'active' : ''}" data-tab="table">Grid</div>
       <div class="pill ${active === 'chart' ? 'active' : ''}" data-tab="chart">Bagan Struktur</div>
-      ${showImportTab ? `<div class="pill ${active === 'import' ? 'active' : ''}" data-tab="import">Impor Data</div>` : ''}
     </div>
   `;
 }
@@ -3620,10 +3663,6 @@ function bindCompaniesTabBar() {
   document.querySelectorAll('#companies-view-tabs .pill[data-tab]').forEach(p => {
     p.addEventListener('click', () => {
       const tab = p.dataset.tab;
-      if (tab === 'import') {
-        if (state.view !== 'import') setView('import');
-        return;
-      }
       if (state.view !== 'companies') {
         state.companiesView = tab;
         setView('companies');
@@ -4536,6 +4575,7 @@ function businessInfoHTML(company, periodCount) {
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
         <span>Informasi Bisnis</span>
         <div style="display:flex;gap:8px;">
+          ${isReviewer() ? '' : `<button class="btn ghost" id="goto-import-btn" style="font-size:12px;">Impor Data</button>`}
           <button class="btn ghost" id="edit-business-info" style="font-size:12px;">Edit Info Bisnis</button>
           <button class="btn ghost" id="delete-company-btn" style="font-size:12px;color:var(--danger);">Hapus Perusahaan</button>
         </div>
@@ -4817,12 +4857,12 @@ function neracaGroupedTable(neraca) {
   const groupRow = (text) => `<tr><td colspan="2" style="font-weight:600;color:var(--slate);padding-top:10px;">${text}</td></tr>`;
   return `<table><tbody>
     ${groupRow('Aset Lancar')}
-    ${row('kasSetaraKas')}${row('persediaan')}${row('asetLancarLainnya')}${rowBold('totalAsetLancar')}
+    ${row('kasSetaraKas')}${row('piutangUsaha')}${row('persediaan')}${row('asetLancarLainnya')}${rowBold('totalAsetLancar')}
     ${groupRow('Aset Tidak Lancar')}
     ${rowBold('totalAsetTidakLancar')}
     ${rowHighlight('totalAset')}
     ${groupRow('Liabilitas')}
-    ${row('totalKewajibanLancar')}${row('totalKewajibanJangkaPanjang')}${rowBold('totalKewajiban')}
+    ${row('hutangUsaha')}${row('totalKewajibanLancar')}${row('totalKewajibanJangkaPanjang')}${rowBold('totalKewajiban')}
     ${groupRow('Ekuitas')}
     ${rowBold('totalEkuitas')}${row('pendapatanSampaiTahunLalu')}${row('pendapatanPeriodeIni')}${rowHighlight('totalEkuitasTermasukLaba')}
   </tbody></table>${neracaBalanceSummary(neraca)}`;
@@ -5034,7 +5074,7 @@ function ledgerTable(accounts) {
 // untuk baris yang merupakan hasil turunan dari baris lain (bukan
 // dijumlah langsung dari akun).
 const NERACA_FORMULAS = {
-  totalAsetLancar: (n) => `Kas &amp; Setara Kas (${formatIDR(n.kasSetaraKas)}) + Persediaan (${formatIDR(n.persediaan)}) + Aset Lancar Lainnya (${formatIDR(n.asetLancarLainnya)})`,
+  totalAsetLancar: (n) => `Kas &amp; Setara Kas (${formatIDR(n.kasSetaraKas)}) + Piutang Usaha (${formatIDR(n.piutangUsaha)}) + Persediaan (${formatIDR(n.persediaan)}) + Aset Lancar Lainnya (${formatIDR(n.asetLancarLainnya)})`,
   totalAset: (n) => `Total Aset Lancar (${formatIDR(n.totalAsetLancar)}) + Total Aset Tidak Lancar (${formatIDR(n.totalAsetTidakLancar)})`,
   totalKewajiban: (n) => `Total Kewajiban Lancar (${formatIDR(n.totalKewajibanLancar)}) + Total Kewajiban Jangka Panjang (${formatIDR(n.totalKewajibanJangkaPanjang)})`,
   penyesuaianSaldoAwalLabaRugi: () => `Akun Pendapatan/Beban pada Buku Besar yang diimpor ternyata masih membawa Saldo Awal (semestinya sudah ditutup/dinolkan ke Laba Ditahan oleh software akuntansi asal setiap tutup buku). Karena nilai ini tidak masuk ke Aset/Kewajiban/Ekuitas manapun dan sengaja tidak dihitung sebagai Laba Rugi tahun berjalan, Integrida menutupnya otomatis ke Ekuitas di sini (klik baris ini untuk melihat akun sumbernya) supaya Total Aset = Total Kewajiban + Total Ekuitas persis sesuai Buku Besar yang diimpor.`,
@@ -5370,12 +5410,12 @@ function derivedNeracaGrouped(neraca, contributions, syncFlags) {
     : '';
   return `
     ${neracaGroupHeader('Aset Lancar')}
-    ${row('kasSetaraKas')}${row('persediaan')}${row('asetLancarLainnya')}${row('totalAsetLancar')}
+    ${row('kasSetaraKas')}${row('piutangUsaha')}${row('persediaan')}${row('asetLancarLainnya')}${row('totalAsetLancar')}
     ${neracaGroupHeader('Aset Tidak Lancar')}
     ${row('totalAsetTidakLancar')}
     ${highlight('totalAset')}
     ${neracaGroupHeader('Liabilitas')}
-    ${row('totalKewajibanLancar')}${row('totalKewajibanJangkaPanjang')}${highlight('totalKewajiban')}
+    ${row('hutangUsaha')}${row('totalKewajibanLancar')}${row('totalKewajibanJangkaPanjang')}${highlight('totalKewajiban')}
     ${neracaGroupHeader('Ekuitas')}
     ${row('totalEkuitas')}${row('pendapatanSampaiTahunLalu')}${row('pendapatanPeriodeIni')}${highlight('totalEkuitasTermasukLaba')}
   `;
@@ -5430,6 +5470,14 @@ function paintCompanyDetail(statements) {
   const wireBusinessInfoButton = () => {
     const btn = document.getElementById('edit-business-info');
     if (btn) btn.addEventListener('click', () => openEditBusinessInfoModal(state.companyDetailId));
+
+    const gotoImportBtn = document.getElementById('goto-import-btn');
+    if (gotoImportBtn) {
+      gotoImportBtn.addEventListener('click', () => {
+        state.importCompanyId = state.companyDetailId;
+        setView('import');
+      });
+    }
 
     const codeLink = document.getElementById('edit-company-code');
     if (codeLink) {
@@ -5734,44 +5782,6 @@ function paintCompanyDetail(statements) {
 }
 
 // ---------- Import ----------
-function selectImportCompany(companyId) {
-  const company = state.companies.find(c => c.id === companyId);
-  if (!company) return;
-  state.importCompanyId = companyId;
-  const input = document.getElementById('import-company');
-  if (input) input.value = companyDisplayLabel(company);
-  closeImportCompanyDropdown();
-  resetPreview();
-  loadImportStatus();
-}
-
-function closeImportCompanyDropdown() {
-  const dd = document.getElementById('import-company-dropdown');
-  if (dd) { dd.style.display = 'none'; dd.innerHTML = ''; }
-}
-
-function renderImportCompanyDropdown(query) {
-  const dd = document.getElementById('import-company-dropdown');
-  if (!dd) return;
-  const q = query.trim().toLowerCase();
-  const matches = !q ? state.companies : state.companies.filter(c =>
-    String(c.code || '').toLowerCase().includes(q) ||
-    String(c.name || '').toLowerCase().includes(q)
-  );
-  dd.innerHTML = matches.length === 0
-    ? `<div class="combo-empty">Tidak ada perusahaan yang cocok.</div>`
-    : matches.map(c => `<div class="combo-option" data-id="${c.id}">
-        ${c.code ? `<span class="combo-code">${c.code}</span>` : ''}
-        <span class="combo-name">${c.name}</span>
-      </div>`).join('');
-  dd.querySelectorAll('.combo-option').forEach(opt => {
-    opt.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      selectImportCompany(opt.dataset.id);
-    });
-  });
-  dd.style.display = '';
-}
 
 function renderImport() {
   const root = document.getElementById('view-root');
@@ -5785,16 +5795,20 @@ function renderImport() {
   }
 
   root.innerHTML = `
-    <div class="section-block" style="margin-bottom:16px;">
-      ${companiesTabBarHTML('import')}
+    <div class="section-block" style="margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+      <button class="btn ghost" id="import-back-btn" style="font-size:12px;">&larr; Kembali ke Data Perusahaan</button>
     </div>
     <div class="grid grid-2" style="align-items:stretch;">
       <div class="card">
-        <div class="step-head"><span class="step-badge">1</span><span class="step-title">Pilih Perusahaan Tujuan</span></div>
-        <div class="field combo-wrap" style="margin-top:14px;">
+        <div class="step-head"><span class="step-badge">1</span><span class="step-title">Perusahaan Tujuan</span></div>
+        <div class="field" style="margin-top:14px;">
           <label>Perusahaan</label>
-          <input type="text" id="import-company" placeholder="Ketik kode atau nama perusahaan…" autocomplete="off">
-          <div id="import-company-dropdown" class="combo-dropdown" style="display:none;"></div>
+          ${(() => {
+            const c = state.companies.find(x => x.id === state.importCompanyId);
+            return c
+              ? `<div class="input-static" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--paper-alt,#f5f6f4);font-weight:600;">${escapeHTML(companyDisplayLabel(c))}</div>`
+              : `<div style="font-size:12.5px;color:var(--slate);">Belum ada perusahaan dipilih — buka halaman <strong>detail perusahaan</strong> lalu klik tombol <strong>Impor Data</strong> di sana.</div>`;
+          })()}
         </div>
 
         <div class="step-head" style="margin-top:22px;"><span class="step-badge">2</span><span class="step-title">Unggah File Excel Buku Besar</span></div>
@@ -5823,25 +5837,18 @@ function renderImport() {
 
   updateDropzoneAndTemplate();
   loadImportStatus();
-  bindCompaniesTabBar();
 
-  const companyInput = document.getElementById('import-company');
-  const initialCompany = state.companies.find(c => c.id === state.importCompanyId);
-  if (companyInput && initialCompany) companyInput.value = companyDisplayLabel(initialCompany);
-
-  companyInput.addEventListener('focus', () => renderImportCompanyDropdown(''));
-  companyInput.addEventListener('input', () => renderImportCompanyDropdown(companyInput.value));
-  companyInput.addEventListener('blur', () => {
-    // Delay agar klik pada opsi dropdown (mousedown) sempat diproses sebelum ditutup.
-    setTimeout(() => {
-      closeImportCompanyDropdown();
-      const current = state.companies.find(c => c.id === state.importCompanyId);
-      if (current && companyInput) companyInput.value = companyDisplayLabel(current);
-    }, 120);
-  });
-  companyInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') companyInput.blur();
-  });
+  const backBtn = document.getElementById('import-back-btn');
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      const targetId = state.importCompanyId || state.companyDetailId;
+      if (targetId && state.companies.find(c => c.id === targetId)) {
+        openCompanyDetail(targetId);
+      } else {
+        setView('companies');
+      }
+    });
+  }
 
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('file-input');
