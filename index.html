@@ -8905,6 +8905,18 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
       if (!moveDateInput.value) { toast('Pilih tanggal pengganti untuk "Pindah"', 'error'); return; }
       if (moveDateInput.value.slice(0, 7) !== moveYearMonthKey) { toast('Tanggal "Pindah" harus tetap di bulan yang sama', 'error'); return; }
     }
+    // Kunci tanggal tempat Keterangan (descriptionOverrides) per-kemunculan
+    // disimpan: kalau di save ini pengguna SEKALIGUS memindahkan
+    // kemunculan (wantsMove), catatannya harus disimpan di tanggal TUJUAN
+    // (moveDateInput.value) — bukan occurrenceDate lama — karena begitu
+    // pemindahan berlaku, kemunculan ini akan dirender ulang di tanggal
+    // baru itu (lihat moveOriginForDisplayDate/analysisSlotsForMonth) dan
+    // descriptionOverrides dicari berdasarkan tanggal tampilnya saat itu.
+    // Kalau tetap disimpan di occurrenceDate lama, catatan (bagian setelah
+    // ";" utk Analisis, atau seluruh Keterangan utk pengingat berulang
+    // biasa) jadi "tertinggal" di tanggal lama dan tidak ikut muncul lagi
+    // di tanggal barunya.
+    const descriptionTargetDate = wantsMove ? moveDateInput.value : occurrenceDate;
     try {
       if (isEdit) {
         // Kalau ini kemunculan spesifik pengingat berulang, Keterangan
@@ -8946,9 +8958,9 @@ function openReminderModal(item, defaultDate, occurrenceDate) {
         }
         await DB.updateReminder(item.id, { title, description: baseDescription, date, time, repeat, priority, order, customDays, endDate, shiftSaturday, shiftSunday, repeatUntil: item.repeatUntil || '', analisis, analisisDay, pending: isPending, prompt, promptText, catatanLain, catatanLainText });
         if (isRecurringOccurrence) {
-          await DB.setReminderDescriptionForDate(item.id, occurrenceDate, description);
+          await DB.setReminderDescriptionForDate(item.id, descriptionTargetDate, description);
         } else if (isAnalisisOccurrence) {
-          await DB.setReminderDescriptionForDate(item.id, occurrenceDate, analisisOccurrenceNote);
+          await DB.setReminderDescriptionForDate(item.id, descriptionTargetDate, analisisOccurrenceNote);
         }
         if (isAnalisisOccurrence) {
           // Simpan/batalkan pemindahan bulan ini saja (lihat validasi
