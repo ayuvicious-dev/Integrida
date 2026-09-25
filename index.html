@@ -2982,7 +2982,8 @@ const ICONS = {
   info: '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.7" r="1.15" fill="currentColor"/>',
   download: '<path d="M12 4v11M12 15l-4-4M12 15l4-4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
   calendarX: '<rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M16 3v4M8 3v4M3 10h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M9.2 14.2l5.6 5.6M14.8 14.2l-5.6 5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
-  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17l5-5-5-5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>'
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17l5-5-5-5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>',
+  history: '<path d="M3 12a9 9 0 1 0 3-6.7" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M3 4v5h5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v4.5l3.2 2" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
 };
 
 function icon(name) {
@@ -7617,6 +7618,7 @@ function renderCalendar() {
             <button id="cal-next" title="Bulan berikutnya">${icon('chevronRight')}</button>
           </div>
           <div style="display:flex;align-items:center;gap:10px;">
+            <button class="cal-pending-btn cal-agenda-btn" id="cal-history-btn" title="Lihat riwayat pengingat yang baru ditambahkan">${icon('history')}<span>Riwayat Reminder</span></button>
             <button class="cal-pending-btn cal-agenda-btn" id="cal-agenda-pdf-btn" title="Download jadwal agenda bulan ini sebagai PDF">${icon('download')}<span>Unduh Agenda PDF</span></button>
             <button class="cal-pending-btn cal-analisis-btn" id="cal-analisis-btn">Reminder Analisis<span class="cal-pending-badge" id="cal-analisis-badge" style="display:none;"></span></button>
             <button class="cal-pending-btn" id="cal-pending-btn">Pending Reminder<span class="cal-pending-badge" id="cal-pending-badge" style="display:none;"></span></button>
@@ -7638,6 +7640,7 @@ function renderCalendar() {
   document.getElementById('cal-pending-btn').addEventListener('click', () => openPendingRemindersModal());
   document.getElementById('cal-analisis-btn').addEventListener('click', () => openAnalisisScheduleModal());
   document.getElementById('cal-agenda-pdf-btn').addEventListener('click', () => exportCalendarAgendaPDF());
+  document.getElementById('cal-history-btn').addEventListener('click', () => openReminderHistoryModal());
   document.getElementById('add-reminder-btn').addEventListener('click', () => openReminderModal(null, state.calendarSelectedDate));
 
   // Muat data hari libur online di latar belakang; kalau berhasil,
@@ -8024,6 +8027,55 @@ function reminderPendingTableHTML(items) {
       </table>
     </div>
   `;
+}
+
+// Jumlah maksimum item yang ditampilkan di modal "Riwayat Reminder", biar
+// modal tidak jadi terlalu panjang kalau reminder sudah menumpuk banyak.
+const REMINDER_HISTORY_LIMIT = 30;
+
+function openReminderHistoryModal() {
+  const items = state.reminders.slice()
+    .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0))
+    .slice(0, REMINDER_HISTORY_LIMIT);
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:520px;">
+    <button class="modal-close" id="close-modal" title="Tutup">${icon('close')}</button>
+    <h3>Riwayat Reminder</h3>
+    ${items.length === 0
+      ? `<div class="upgrade-empty">Belum ada pengingat yang ditambahkan.</div>`
+      : `<div class="table-wrap"><table class="reminder-table"><tbody>${items.map(item => reminderRowHTML(item)).join('')}</tbody></table></div>`}
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#close-modal').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+
+  backdrop.querySelectorAll('[data-reminder-check]').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      try {
+        await DB.setReminderDone(cb.dataset.reminderCheck, cb.checked);
+      } catch (err) {
+        toast('Gagal memperbarui status: ' + err.message, 'error');
+      }
+    });
+  });
+  backdrop.querySelectorAll('[data-reminder-edit]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = state.reminders.find(r => r.id === btn.dataset.reminderEdit);
+      if (item) { backdrop.remove(); openReminderModal(item); }
+    });
+  });
+  backdrop.querySelectorAll('[data-reminder-delete]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const item = state.reminders.find(r => r.id === btn.dataset.reminderDelete);
+      if (!item) return;
+      if (!confirm(`Hapus pengingat "${item.title}"?`)) return;
+      try {
+        await DB.deleteReminder(item.id);
+        toast('Pengingat dihapus', 'success');
+      } catch (err) {
+        toast('Gagal menghapus: ' + err.message, 'error');
+      }
+    });
+  });
 }
 
 // ---------- Reminder Analisis (jadwal otomatis berbasis tanggal tetap) ----------
