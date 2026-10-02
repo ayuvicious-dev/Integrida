@@ -361,8 +361,22 @@ input,select{font-family:inherit;}
 .kpi-card{display:flex;flex-direction:column;gap:6px;}
 .kpi-strip-card{padding:14px 18px;}
 .kpi-strip-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
-.kpi-strip{display:grid;grid-template-columns:auto repeat(var(--kpi-cols,8),minmax(104px,1fr));align-items:center;min-width:960px;}
+.kpi-strip{display:grid;grid-template-columns:auto repeat(var(--kpi-cols,9),minmax(104px,1fr));align-items:center;min-width:1070px;}
 .kpi-strip-head{text-align:center;font-size:12.5px;font-weight:500;color:var(--slate);letter-spacing:.3px;padding:0 6px 10px;border-bottom:1px solid var(--border);}
+.kpi-strip-head.is-clickable{cursor:pointer;user-select:none;transition:color .15s;}
+.kpi-strip-head.is-clickable:hover,.kpi-strip-head.is-clickable:focus-visible{color:var(--text);outline:none;text-decoration:underline dotted;text-underline-offset:4px;}
+.kpi-info-block{margin-bottom:14px;}
+.kpi-info-label{font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--slate-light);margin-bottom:5px;}
+.kpi-info-formula{font-family:var(--font-mono);font-size:12.5px;line-height:1.55;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
+.kpi-basis-chip{display:inline-block;font-size:10.5px;font-weight:600;letter-spacing:.3px;padding:2px 8px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);color:var(--slate);margin-right:4px;vertical-align:1px;}
+.kpi-period-list{border:1px solid var(--border);border-radius:8px;max-height:150px;overflow-y:auto;}
+.kpi-period-row{display:flex;justify-content:space-between;gap:12px;padding:7px 10px;font-size:12.5px;border-bottom:1px solid var(--border);}
+.kpi-period-row:last-child{border-bottom:none;}
+.kpi-period-name em{font-style:normal;font-size:10.5px;color:var(--slate-light);margin-left:4px;}
+.kpi-period-val{font-weight:500;white-space:nowrap;}
+.kpi-info-warn{margin-top:8px;font-size:12px;line-height:1.5;color:var(--danger);}
+.kpi-info-text{font-size:13px;line-height:1.6;color:var(--text);}
+.kpi-info-text ul{margin:6px 0 0 18px;padding:0;}
 .kpi-strip-corner,.kpi-strip-level{position:sticky;left:0;z-index:1;background:var(--card);}
 .kpi-strip-corner{border-bottom:1px solid var(--border);align-self:stretch;}
 .kpi-strip-level{font-size:11.5px;color:var(--slate-light);letter-spacing:.2px;white-space:nowrap;padding:12px 14px 12px 0;}
@@ -1880,7 +1894,10 @@ function parseLedgerAccountLabel(raw) {
 // "kas"/"bank"/"cash", kini juga giro, tabungan, deposito, rekening,
 // petty cash, nama bank umum, & dompet digital (lihat CASH_HINT_NAME_RE).
 // Snapshot lama dihitung ulang otomatis agar KPI Cash di Dashboard akurat.
-const DERIVATION_VERSION = 10;
+// v11: EBITDA kini = Laba Bersih + beban bunga pendanaan + pajak + penyusutan
+// + amortisasi (dikenali dari nama akun) dan disimpan sebagai `ebitdaDetail`
+// pada statement. Snapshot lama dihitung ulang otomatis dari Buku Besar.
+const DERIVATION_VERSION = 11;
 
 function classifyLedgerAccount(code, name) {
   const n = normalizeKey(name);
@@ -3445,9 +3462,70 @@ function extractDepresiasiAmortisasi(statement) {
   });
   return total;
 }
+// EBITDA (Earnings Before Interest, Tax, Depreciation, and Amortization)
+// dihitung dari Laba Bersih, lalu ditambah kembali (add-back) empat jenis
+// beban yang dikenali dari NAMA akun beban hasil impor Buku Besar:
+//   Pendanaan (beban bunga pendanaan), Pajak, Penyusutan, Amortisasi.
+// Pemindaian mencakup akun-akun Beban (HPP, Beban Operasional, Beban
+// Lainnya, Pajak Penghasilan). Satu akun hanya dihitung sekali walau
+// namanya memuat lebih dari satu kata kunci.
+// Hasilnya disimpan sebagai bagian `ebitdaDetail` pada statement (rincian
+// akun `contributions` tidak ikut tersimpan di Firestore), jadi Dashboard
+// bisa membacanya langsung.
+const EBITDA_ADDBACK_RULES = [
+  { key: 'penyusutan', re: /penyusutan|depresiasi/i },
+  { key: 'amortisasi', re: /amortisasi/i },
+  { key: 'pajak', re: /pajak/i },
+  { key: 'bungaPendanaan', re: /pendanaan/i }
+];
+function deriveEbitdaDetail(labaRugi, contributions) {
+  const detail = { bungaPendanaan: 0, pajak: 0, penyusutan: 0, amortisasi: 0 };
+  ['hpp', 'bebanOperasional', 'bebanLainnya', 'pajakPenghasilan'].forEach(field => {
+    ((contributions && contributions[field]) || []).forEach(item => {
+      const rule = EBITDA_ADDBACK_RULES.find(r => r.re.test(item.name || ''));
+      if (rule) detail[rule.key] += item.amount || 0;
+    });
+  });
+  const labaBersih = (labaRugi && labaRugi.labaBersih) || 0;
+  detail.labaBersih = labaBersih;
+  detail.ebitda = labaBersih + detail.bungaPendanaan + detail.pajak + detail.penyusutan + detail.amortisasi;
+  return detail;
+}
 function statementEbitda(statement) {
   if (!statement || !statement.labaRugi) return 0;
+  // Snapshot yang sudah dihitung ulang (derivationVersion >= 11) membawa
+  // ebitdaDetail. Sebelum itu (sementara menunggu dihitung ulang otomatis)
+  // dipakai perkiraan lama: Laba Operasional + penyusutan/amortisasi.
+  if (statement.ebitdaDetail && typeof statement.ebitdaDetail.ebitda === 'number') return statement.ebitdaDetail.ebitda;
   return (statement.labaRugi.labaOperasional || 0) + extractDepresiasiAmortisasi(statement);
+}
+
+// Free Cash Flow (FCF) satu statement = Arus Kas Operasi (CFO) - Capex.
+// Dipakai untuk menilai kemampuan perusahaan mendanai pembelian aset tetap
+// (capital expenditure) dari kas operasionalnya sendiri.
+//  - Capex = pengeluaran kas bruto untuk perolehan aset tetap, yaitu sisi
+//    "keluar" pos Perolehan/Penjualan Aset Tetap pada Aktivitas Investasi,
+//    TANPA akun kontra (akumulasi penyusutan) dan tanpa hasil pelepasan
+//    aset (sisi "masuk" tidak mengurangi Capex).
+//  - Arus Kas Metode Langsung di aplikasi ini menghitung mutasi akun Beban
+//    Penyusutan sebagai pengeluaran operasi, padahal lawannya (akumulasi
+//    penyusutan) tercatat di Investasi. Karena penyusutan non-kas, sisi
+//    kontra tsb dikembalikan (add-back) ke CFO supaya FCF tidak
+//    terdistorsi dan tidak ikut terhitung sebagai "Capex".
+const KONTRA_ASET_TETAP_RE = /akumulasi|penyusutan|depresiasi|amortisasi/i;
+function statementFcf(statement) {
+  const ak = statement && statement.arusKas;
+  if (!ak) return { cfo: 0, capex: 0, nonKas: 0, fcf: 0 };
+  const bucket = ((ak.rincian && ak.rincian.investasi) || []).find(b => b.key === 'asetTetap');
+  let capex = 0;
+  let kontra = 0;
+  ((bucket && bucket.items) || []).forEach(it => {
+    if (KONTRA_ASET_TETAP_RE.test(it.keterangan || '')) kontra += (it.debit || 0) - (it.kredit || 0);
+    else capex += it.kredit || 0;
+  });
+  const nonKas = Math.max(0, kontra);
+  const cfo = (ak.totalOperasi || 0) + nonKas;
+  return { cfo, capex, nonKas, fcf: cfo - capex };
 }
 
 function renderDashboard() {
@@ -3492,6 +3570,195 @@ function dashRingHtml({ pct, size = 120, stroke = 12, id, center = '', from = '#
 }
 
 // Nama level kepemilikan yang tampil di bawah judul tiap KPI card.
+// Penjelasan rumus & tujuan tiap metrik pada strip KPI Dashboard — tampil
+// di modal saat judul kolom (Asset, Revenue, dst.) diklik.
+const KPI_METRIC_INFO = {
+  'Asset': {
+    basis: 'neraca',
+    title: 'Asset (Total Aset)',
+    formula: 'Total Aset = Aset Lancar + Aset Tidak Lancar',
+    purpose: 'Mengukur total sumber daya ekonomi yang dikuasai perusahaan. Dipakai untuk melihat skala bisnis dan menjadi dasar rasio seperti ROA dan Debt to Asset.'
+  },
+  'Revenue': {
+    basis: 'labaRugi',
+    title: 'Revenue (Pendapatan)',
+    formula: 'Revenue = Pendapatan usaha inti periode terbaru',
+    purpose: 'Mengukur volume penjualan atau jasa yang berhasil dihasilkan. Menjadi indikator pertumbuhan (top line) dan pembagi untuk margin laba.'
+  },
+  'Net Profit': {
+    basis: 'labaRugi',
+    title: 'Net Profit (Laba Bersih)',
+    formula: 'Laba Bersih = Pendapatan \u2212 HPP \u2212 Beban Operasional \u00b1 Pendapatan/Beban Lainnya \u2212 Pajak',
+    purpose: 'Mengukur laba akhir yang tersisa setelah seluruh biaya, bunga, dan pajak. Menunjukkan profitabilitas riil dan efisiensi pengelolaan biaya (bottom line).'
+  },
+  'Debt': {
+    basis: 'neraca',
+    title: 'Debt (Utang Berbunga / Pendanaan)',
+    formula: 'Debt = Kewajiban Jangka Panjang + Hutang Pendanaan',
+    purpose: 'Mengukur beban pendanaan eksternal (bank, pemegang saham, pihak lain) yang harus dilunasi. Dipakai untuk menilai tingkat leverage dan risiko solvabilitas. Hutang usaha tidak termasuk di sini karena ditampilkan terpisah sebagai AP.'
+  },
+  'AR': {
+    basis: 'neraca',
+    title: 'AR (Accounts Receivable / Piutang Usaha)',
+    formula: 'AR = Saldo akun Aset yang bernama piutang / receivable',
+    purpose: 'Mengukur dana yang masih tertahan pada pelanggan. Kenaikan AR yang lebih cepat dari Revenue menandakan penagihan melambat dan menekan arus kas.'
+  },
+  'AP': {
+    basis: 'neraca',
+    title: 'AP (Accounts Payable / Hutang Usaha)',
+    formula: 'AP = Saldo akun Kewajiban yang bernama hutang usaha / hutang dagang',
+    purpose: 'Mengukur kewajiban jangka pendek kepada pemasok. Dibandingkan dengan AR dan Cash untuk menilai tekanan modal kerja serta kemampuan membayar kewajiban tepat waktu.'
+  },
+  'EBITDA': {
+    basis: 'labaRugi',
+    title: 'EBITDA',
+    fullName: 'Earnings Before Interest, Tax, Depreciation, and Amortization',
+    formula: 'EBITDA = Laba Bersih + Beban Bunga Pendanaan + Beban Pajak + Beban Penyusutan + Beban Amortisasi',
+    purpose: 'Mengukur kinerja operasional murni sebelum bunga, pajak, dan beban non-kas. Berguna untuk membandingkan profitabilitas antar perusahaan dan menilai kapasitas membayar cicilan.',
+    // Catatan sistem (TIDAK ditampilkan di modal): keempat beban dikenali dari
+    // nama akun beban hasil impor Buku Besar yang memuat kata "Pendanaan",
+    // "Pajak", "Penyusutan", atau "Amortisasi", lalu ditambahkan kembali ke
+    // Laba Bersih. Sumber: contributions HPP/Beban Operasional/Beban Lainnya/
+    // Pajak Penghasilan (lihat EBITDA_ADDBACK_RULES & deriveEbitdaDetail).
+    systemNote: 'Add-back dari nama akun beban: Pendanaan, Pajak, Penyusutan, Amortisasi'
+  },
+  'Cash': {
+    basis: 'neraca',
+    title: 'Cash (Kas & Setara Kas)',
+    formula: 'Cash = Saldo akhir akun Kas, Bank, Giro, Tabungan, dan Deposito',
+    purpose: 'Mengukur likuiditas yang langsung tersedia untuk operasional, pembayaran kewajiban, maupun investasi. Menjadi bantalan ketahanan bisnis (cash buffer).'
+  },
+  'FCF': {
+    basis: 'arusKas',
+    title: 'FCF (Free Cash Flow)',
+    formula: 'FCF = Arus Kas Operasi (CFO) \u2212 Capital Expenditure (Capex)',
+    purpose: 'Mengukur kas bebas yang tersisa setelah operasional berjalan dan aset tetap dibeli. Dipakai untuk mengevaluasi kemampuan perusahaan membeli aset tetap (Capex) dari kas operasionalnya sendiri, tanpa menambah utang atau modal.',
+    // Catatan sistem (TIDAK ditampilkan di modal): penyusutan non-kas
+    // dikembalikan ke CFO agar tidak terhitung sebagai pengeluaran (lihat
+    // statementFcf).
+    note: 'Capex = pengeluaran kas bruto untuk perolehan aset tetap (Aktivitas Investasi). FCF positif berarti ada ruang untuk ekspansi; negatif berarti Capex melebihi kas operasi.'
+  }
+};
+
+// Dasar pengukuran (basis) tiap kelompok laporan. Neraca, Laba Rugi, dan
+// Arus Kas diturunkan dari SATU Buku Besar per perusahaan-periode, sehingga
+// "periode terbaru" untuk ketiganya jatuh pada periode yang sama; yang
+// berbeda adalah cara angkanya diukur:
+//  - Neraca    = POSISI (saldo akhir per tanggal akhir periode)
+//  - Laba Rugi = AKTIVITAS tahun berjalan, dari 1 Januari sampai tanggal
+//                akhir periode terbaru (mutasi saldo akhir - saldo awal)
+//  - Arus Kas  = AKTIVITAS kas pada rentang yang sama
+const KPI_BASIS_INFO = {
+  neraca: {
+    name: 'Neraca (Posisi Keuangan)',
+    kind: 'Saldo / posisi',
+    text: 'Posisi saldo pada <b>tanggal akhir</b> periode terbaru. Bukan jumlah selama periode.'
+  },
+  labaRugi: {
+    name: 'Laba Rugi',
+    kind: 'Aktivitas / arus',
+    text: 'Total aktivitas dari <b>1 Januari</b> sampai tanggal akhir periode terbaru (tahun berjalan), dihitung dari mutasi saldo akhir dikurangi saldo awal. Setiap kali periode baru diimpor, tanggal akhirnya bergeser mengikuti periode tersebut.'
+  },
+  arusKas: {
+    name: 'Arus Kas',
+    kind: 'Aktivitas / arus',
+    text: 'Total pergerakan kas dari <b>1 Januari</b> sampai tanggal akhir periode terbaru (tahun berjalan). Sama seperti Laba Rugi, ini aktivitas selama rentang waktu.'
+  }
+};
+
+// Daftar periode terbaru per perusahaan, diisi tiap paintDashboard supaya
+// modal penjelasan bisa menampilkan periode yang SEBENARNYA dipakai.
+let kpiPeriodSnapshot = { latestByCompany: {}, hasSubs: false };
+
+// Tanggal akhir periode sebuah statement (mis. "31 Agustus 2026"), dihitung
+// dari tahun + jenis + indeks periode karena periode selalu berupa bulan
+// penuh. Dipakai pada basis Neraca (posisi saldo per tanggal akhir).
+function kpiPeriodEndLabel(st) {
+  if (!st || !st.year) return '';
+  const idx = st.periodIndex || 1;
+  let month;
+  if (st.periodType === 'tahunan') month = 12;
+  else if (st.periodType === 'semester') month = idx * 6;
+  else if (st.periodType === 'triwulan') month = idx * 3;
+  else month = idx;
+  if (month < 1 || month > 12) return '';
+  const lastDay = new Date(st.year, month, 0).getDate();
+  return `${lastDay} ${cap(BULAN_ID[month - 1])} ${st.year}`;
+}
+
+function kpiPeriodScopeHtml(basisKey) {
+  const b = KPI_BASIS_INFO[basisKey];
+  if (!b) return '';
+  const depthById = ownershipDepthMap();
+  const { latestByCompany, hasSubs } = kpiPeriodSnapshot;
+  const rows = [];
+  state.companies.forEach(c => {
+    const st = latestByCompany[c.id];
+    const depth = depthById[c.id] || 0;
+    if (!st) return;
+    if (hasSubs && depth < 1) return; // induk/holding tidak ikut KPI
+    const level = !hasSubs ? '' : (depth === 1 ? KPI_LEVEL_NAMES.anak : KPI_LEVEL_NAMES.cucu);
+    rows.push({ name: c.name, level, label: st.periodLabel || '–', year: st.year, endLabel: kpiPeriodEndLabel(st) });
+  });
+  const safe = (t) => escapeHTML(String(t));
+  const isNeraca = basisKey === 'neraca';
+  // Neraca: posisi per tanggal akhir. Laba Rugi & Arus Kas: rentang tahun
+  // berjalan, dari 1 Januari sampai tanggal akhir periode terbaru.
+  const spanOf = (r) => isNeraca ? r.endLabel : (r.endLabel ? `1 Januari ${r.year} - ${r.endLabel}` : r.label);
+  rows.forEach(r => { r.span = spanOf(r); });
+  const spans = new Set(rows.map(r => r.span).filter(Boolean));
+  const head = `
+    <div class="kpi-info-block">
+      <div class="kpi-info-label">Basis periode: ${b.name}</div>
+      <div class="kpi-info-text"><span class="kpi-basis-chip">${b.kind}</span> ${b.text}</div>
+    </div>`;
+  const listLabel = isNeraca ? 'Posisi per tanggal' : 'Periode';
+  // Seluruh perusahaan berada di periode yang sama: cukup satu baris.
+  if (rows.length && spans.size === 1) {
+    return head + `
+    <div class="kpi-info-block">
+      <div class="kpi-info-label">${listLabel}</div>
+      <div class="kpi-period-list"><div class="kpi-period-row"><span class="kpi-period-name">Seluruh perusahaan</span><span class="kpi-period-val">${safe([...spans][0])}</span></div></div>
+    </div>`;
+  }
+  // Periode berbeda antar perusahaan: tampilkan per perusahaan agar
+  // perbedaannya tidak tersembunyi.
+  return head + `
+    <div class="kpi-info-block">
+      <div class="kpi-info-label">${listLabel}</div>
+      ${rows.length ? `<div class="kpi-period-list">${rows.map(r => `<div class="kpi-period-row"><span class="kpi-period-name">${safe(r.name)}${r.level ? ` <em>${r.level}</em>` : ''}</span><span class="kpi-period-val">${safe(r.span || r.label)}</span></div>`).join('')}</div>
+      <div class="kpi-info-warn">Periode terbaru antar perusahaan tidak sama; tiap perusahaan memakai periode terbarunya sendiri.</div>` : '<div class="kpi-info-text">Belum ada data periode.</div>'}
+    </div>`;
+}
+
+function openKpiInfoModal(label) {
+  const info = KPI_METRIC_INFO[label];
+  if (!info) return;
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:480px;">
+    <h3 style="margin-bottom:16px;">${info.title}</h3>
+    ${info.fullName ? `<div class="kpi-info-block"><div class="kpi-info-text">${info.fullName}</div></div>` : ''}
+    <div class="kpi-info-block"><div class="kpi-info-label">Rumus</div><div class="kpi-info-formula">${info.formula}</div></div>
+    <div class="kpi-info-block"><div class="kpi-info-label">Tujuan</div><div class="kpi-info-text">${info.purpose}</div></div>
+    ${info.note ? `<div class="kpi-info-block"><div class="kpi-info-label">Catatan</div><div class="kpi-info-text">${info.note}</div></div>` : ''}
+    ${kpiPeriodScopeHtml(info.basis)}
+    <div class="modal-actions"><button class="btn primary" id="close-kpi-info">Tutup</button></div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  backdrop.querySelector('#close-kpi-info').addEventListener('click', close);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+}
+
+function bindKpiStripInfo(root) {
+  root.querySelectorAll('.kpi-strip-head.is-clickable').forEach(head => {
+    const open = () => openKpiInfoModal(head.dataset.kpi);
+    head.addEventListener('click', open);
+    head.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+  });
+}
+
 const KPI_LEVEL_NAMES = { anak: 'Subsidiary', cucu: 'Sub-Subsidiary' };
 
 // Satu strip KPI (satu deret): kedelapan metrik disusun sebagai kolom
@@ -3509,7 +3776,7 @@ function kpiStripHtml(metrics) {
         <div class="kpi-strip-scroll">
           <div class="kpi-strip" style="--kpi-cols:${metrics.length};">
             <div class="kpi-strip-corner"></div>
-            ${metrics.map(m => `<div class="kpi-strip-head">${m.label}</div>`).join('')}
+            ${metrics.map(m => `<div class="kpi-strip-head is-clickable" role="button" tabindex="0" data-kpi="${m.label}" title="Klik untuk melihat rumus &amp; tujuan">${m.label}</div>`).join('')}
             <div class="kpi-strip-level row-first">${KPI_LEVEL_NAMES.anak}</div>
             ${metrics.map(m => cell(m.anak, m.signColor, 'row-first')).join('')}
             <div class="kpi-strip-level row-last">${KPI_LEVEL_NAMES.cucu}</div>
@@ -3555,6 +3822,7 @@ async function healOutdatedSnapshots(allStatements) {
           labaRugi: derived.labaRugi,
           arusKas,
           perubahanModal,
+          ebitdaDetail: deriveEbitdaDetail(derived.labaRugi, derived.contributions),
           bukuBesarCount: s.bukuBesarCount,
           derivationVersion: DERIVATION_VERSION
         });
@@ -3608,6 +3876,7 @@ function paintDashboard(allStatements) {
     });
     return Object.values(map).sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex).slice(-8);
   };
+  kpiPeriodSnapshot = { latestByCompany, hasSubs };
   const trendAnak = buildTrend(d => hasSubs ? d === 1 : true);
   const trendCucu = hasSubs ? buildTrend(d => d >= 2) : [];
 
@@ -3630,6 +3899,7 @@ function paintDashboard(allStatements) {
   const { totalAnak: labaAnak, totalCucu: labaCucu } = computeByOwnershipLevel(latestByCompany, s => s.labaRugi.labaBersih);
   const { totalAnak: ebitdaAnak, totalCucu: ebitdaCucu } = computeByOwnershipLevel(latestByCompany, s => statementEbitda(s));
   const { totalAnak: cashAnak, totalCucu: cashCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.kasSetaraKas);
+  const { totalAnak: fcfAnak, totalCucu: fcfCucu } = computeByOwnershipLevel(latestByCompany, s => statementFcf(s).fcf);
   const { totalAnak: debtAnak, totalCucu: debtCucu } = computeByOwnershipLevel(latestByCompany, s => (s.neraca.totalKewajibanJangkaPanjang || 0) + (s.neraca.hutangPendanaan || 0));
   const { totalAnak: arAnak, totalCucu: arCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.piutangUsaha);
   const { totalAnak: apAnak, totalCucu: apCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.hutangUsaha);
@@ -3701,7 +3971,8 @@ function paintDashboard(allStatements) {
       { label: 'AR', anak: arAnak, cucu: arCucu },
       { label: 'AP', anak: apAnak, cucu: apCucu },
       { label: 'EBITDA', anak: ebitdaAnak, cucu: ebitdaCucu, signColor: true },
-      { label: 'Cash', anak: cashAnak, cucu: cashCucu }
+      { label: 'Cash', anak: cashAnak, cucu: cashCucu },
+      { label: 'FCF', anak: fcfAnak, cucu: fcfCucu, signColor: true }
     ])}
     </div>
 
@@ -3847,6 +4118,7 @@ function paintDashboard(allStatements) {
   // Pencarian perusahaan pada tabel ringkasan (filter sisi klien). Nilai
   // pencarian disimpan di state supaya tidak hilang saat data realtime
   // memicu render ulang.
+  bindKpiStripInfo(root);
   const searchInput = document.getElementById('dash-search-input');
   if (searchInput) {
     const applyFilter = () => {
@@ -5995,6 +6267,7 @@ function paintCompanyDetail(statements) {
           labaRugi: labaRugiBase,
           arusKas: arusKasLive,
           perubahanModal: perubahanModalLive,
+          ebitdaDetail: deriveEbitdaDetail(labaRugiBase, bbContribs),
           bukuBesarCount: selected.bukuBesarCount,
           derivationVersion: DERIVATION_VERSION
         }).catch((err) => console.error('Gagal memperbarui otomatis snapshot Neraca/Laba Rugi/Arus Kas/Perubahan Modal:', err));
@@ -6366,6 +6639,7 @@ async function confirmImport() {
       labaRugi: pendingImport.data.labaRugi,
       arusKas: pendingImport.data.arusKas,
       perubahanModal: pendingImport.data.perubahanModal,
+      ebitdaDetail: deriveEbitdaDetail(pendingImport.data.labaRugi, pendingImport.data.contributions),
       bukuBesarCount: accounts.length,
       derivationVersion: DERIVATION_VERSION
     });
