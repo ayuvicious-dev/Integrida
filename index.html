@@ -273,7 +273,60 @@ input,select{font-family:inherit;}
 .topbar-cal-btn svg{width:16px;height:16px;flex-shrink:0;}
 .topbar-cal-btn.active{background:rgba(47,111,228,0.14);border-color:transparent;color:var(--teal);}
 [data-theme="dark"] .topbar-cal-btn.active{background:rgba(47,111,228,0.24);color:#7fb0ff;}
+/* Tombol Kelola Kartu Dashboard (hide/unhide utk Reviewer) di topbar,
+   tepat di sebelah kiri tombol Kalender. Hanya muncul di view Dashboard. */
+.topbar-cardvis-btn{
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  width:34px;height:34px;padding:0;border-radius:50%;
+  border:1px solid var(--border);background:var(--surface-2);color:var(--slate);
+  cursor:pointer;
+}
+.topbar-cardvis-btn:hover{background:var(--border);color:var(--text);}
+.topbar-cardvis-btn svg{width:16px;height:16px;flex-shrink:0;}
+.topbar-cardvis-btn.is-on{background:rgba(47,111,228,0.14);border-color:transparent;color:var(--teal);}
+[data-theme="dark"] .topbar-cardvis-btn.is-on{background:rgba(47,111,228,0.24);color:#7fb0ff;}
 @media(max-width:480px){ .topbar-actions{gap:8px;} }
+/* Hide/Unhide kartu Dashboard (fitur pra-launch) */
+.dash-card-off{display:none !important;}
+.dash-manage [data-card-key]{position:relative;}
+.dash-manage-banner{margin:0 0 18px;padding:10px 14px;border-radius:12px;font-size:12.5px;line-height:1.5;color:var(--slate);background:rgba(47,111,228,0.08);border:1px dashed var(--teal);}
+.dash-manage-banner b{color:var(--text);}
+.dash-card-ctl{
+  position:absolute;top:-11px;right:14px;z-index:5;
+  display:inline-flex;align-items:center;gap:6px;
+  padding:4px 10px 4px 8px;border-radius:999px;cursor:pointer;
+  font-size:11px;font-weight:600;font-family:inherit;line-height:1.2;
+  border:1px solid var(--border);background:var(--card);color:var(--slate);
+  box-shadow:0 4px 12px -4px rgba(22,33,58,.25);
+}
+.dash-card-ctl:hover{color:var(--text);border-color:var(--teal);}
+.dash-card-ctl svg{width:13px;height:13px;flex-shrink:0;}
+.topbar-cardvis-btn{position:relative;}
+.cardvis-panel{
+  position:fixed;z-index:60;width:320px;max-width:calc(100vw - 24px);max-height:70vh;overflow:auto;
+  background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;
+  box-shadow:0 18px 40px -16px rgba(22,33,58,.45);
+}
+.cardvis-panel h4{margin:0 0 4px;font-family:var(--font-display);font-size:14px;font-weight:700;}
+.cardvis-panel .cvp-sub{font-size:11.5px;color:var(--slate);line-height:1.45;margin-bottom:10px;}
+.cvp-mode{
+  width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:9px 12px;border-radius:12px;border:1px solid var(--border);background:var(--surface-2);
+  color:var(--text);font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer;
+}
+.cvp-mode.is-on{background:rgba(47,111,228,0.12);border-color:var(--teal);color:var(--teal);}
+.cvp-mode .cvp-state{font-size:11px;font-weight:700;}
+.cvp-section{margin:14px 0 6px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--slate);}
+.cvp-empty{font-size:12px;color:var(--slate-light);padding:6px 2px;}
+.cvp-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--border);}
+.cvp-row:first-of-type{border-top:none;}
+.cvp-row-name{font-size:12.5px;min-width:0;overflow-wrap:anywhere;}
+.cvp-show{
+  flex-shrink:0;display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--teal);background:transparent;color:var(--teal);font-size:11.5px;font-weight:600;font-family:inherit;
+}
+.cvp-show:hover{background:rgba(47,111,228,0.12);}
+.cvp-show svg{width:13px;height:13px;}
 .logout-btn{margin-top:10px;width:100%;background:transparent;border:1px solid var(--sidebar-border);color:var(--sidebar-text);padding:7px;border-radius:7px;font-size:12.5px;cursor:pointer;}
 .logout-btn:hover{background:var(--sidebar-hover-bg);}
 
@@ -1320,6 +1373,33 @@ const DB = {
 
   async updateTeamUserRole(uid, role) {
     await db.collection('teamUsers').doc(uid).update({ role: role === 'maker' ? 'maker' : 'reviewer' });
+  },
+
+  // ---- Hide/Unhide kartu Dashboard (fitur pra-launch) ----
+  // dashboardConfig/{ownerUid}  { ownerUid, hiddenCards: ['kpi', ...], updatedBy, updatedAt }
+  // Dokumen berid = UID pemilik data, jadi akun utama, Maker, dan semua
+  // Reviewer di bawahnya membaca konfigurasi yang sama. Kartu yang
+  // tercantum di hiddenCards disembunyikan HANYA utk Reviewer.
+  async getDashboardHiddenCards(ownerUid) {
+    const doc = await db.collection('dashboardConfig').doc(ownerUid).get();
+    const d = doc.exists ? doc.data() : null;
+    return (d && Array.isArray(d.hiddenCards)) ? d.hiddenCards : [];
+  },
+
+  watchDashboardHiddenCards(ownerUid, onData, onError) {
+    return db.collection('dashboardConfig').doc(ownerUid).onSnapshot((doc) => {
+      const d = doc.exists ? doc.data() : null;
+      onData((d && Array.isArray(d.hiddenCards)) ? d.hiddenCards : []);
+    }, (err) => { if (onError) onError(err); else console.error('watchDashboardHiddenCards error', err); });
+  },
+
+  async setDashboardHiddenCards(ownerUid, hiddenCards) {
+    await db.collection('dashboardConfig').doc(ownerUid).set({
+      ownerUid,
+      hiddenCards,
+      updatedBy: (auth.currentUser && auth.currentUser.uid) || null,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
   },
 
   async updateCompanyCode(companyId, code) {
@@ -3037,6 +3117,9 @@ const state = {
   dataOwnerUid: null,    // UID pemilik data yang sedang dipakai (== user.uid utk akun utama; == ownerUid dari teamUsers utk akun User terbatas)
   isSubUser: false,      // true jika akun yang login adalah "User" tambahan berakses terbatas (lihat teamUsers)
   subUserRole: null,     // kategori akun User: 'reviewer' (akses terbatas) atau 'maker' (akses penuh kecuali Manajemen User) — null utk akun utama/pemilik
+  dashHiddenCards: [],    // key kartu Dashboard yang disembunyikan dari Reviewer (dashboardConfig/{ownerUid}.hiddenCards)
+  dashManage: false,      // mode Kelola Kartu (hanya akun non-Reviewer, hanya di view Dashboard)
+  unsubDashConfig: null,
   teamUsers: [],          // cache daftar User tambahan milik akun ini (utk menu Setting > Manajemen User)
   companies: [],
   view: 'dashboard',
@@ -3205,6 +3288,8 @@ const ICONS = {
   download: '<path d="M12 4v11M12 15l-4-4M12 15l4-4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
   calendarX: '<rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M16 3v4M8 3v4M3 10h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M9.2 14.2l5.6 5.6M14.8 14.2l-5.6 5.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17l5-5-5-5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12H9" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>',
+  eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7" fill="none"/>',
+  eyeOff: '<path d="M2 12s3.6-7 10-7c2 0 3.8.7 5.3 1.7M22 12s-3.6 7-10 7c-2 0-3.8-.7-5.3-1.7" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M4 4l16 16" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/>',
   history: '<path d="M3 12a9 9 0 1 0 3-6.7" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M3 4v5h5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v4.5l3.2 2" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
 };
 
@@ -3503,7 +3588,7 @@ function renderShell() {
           <div>
             <div class="name">Integrida</div>
             <div class="tag">Konsolidasi Keuangan</div>
-            <div class="tag" style="opacity:.55;margin-top:2px;">Build v32</div>
+            <div class="tag" style="opacity:.55;margin-top:2px;">Build v36</div>
           </div>
         </div>
         <div class="sidebar-section" id="nav-list"></div>
@@ -3519,6 +3604,7 @@ function renderShell() {
             <button class="theme-toggle-topbar" id="topbar-logout-btn" title="Keluar">${icon('logout')}</button>
             <button class="theme-toggle-topbar" id="theme-toggle-btn"></button>
             <div class="sync-badge" id="sync-badge"></div>
+            ${isReviewer() ? '' : `<button class="topbar-cardvis-btn${state.dashManage ? ' is-on' : ''}" id="topbar-cardvis-btn" title="Kartu Dashboard — sembunyikan/tampilkan (berlaku utk semua akun)" aria-label="Kartu Dashboard yang disembunyikan" aria-haspopup="true" aria-expanded="false" style="display:${state.view === 'dashboard' ? '' : 'none'};">${icon('eye')}</button>`}
             ${isReviewer() ? '' : `<button class="topbar-cal-btn" id="topbar-calendar-btn" data-view="calendar" title="Kalender" aria-label="Kalender">${icon('calendar')}</button>`}
           </div>
         </div>
@@ -3554,6 +3640,185 @@ function renderShell() {
 
   const calBtn = document.getElementById('topbar-calendar-btn');
   if (calBtn) calBtn.addEventListener('click', () => setView('calendar'));
+
+  const cardVisBtn = document.getElementById('topbar-cardvis-btn');
+  if (cardVisBtn) cardVisBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (document.getElementById('cardvis-panel')) closeCardVisPanel(); else openCardVisPanel();
+  });
+  paintCardVisBtn();
+}
+
+// ---------- Hide / Unhide Kartu Dashboard (fitur pra-launch) ----------
+// Akun non-Reviewer (pemilik & Maker) bisa menyembunyikan kartu tertentu:
+// aktifkan "Mode Sembunyikan" dari tombol mata di topbar, lalu klik
+// "Sembunyikan" pada kartu. Kartu yang disembunyikan HILANG dari Dashboard
+// SEMUA akun (pemilik, Maker, Reviewer) dan berpindah ke daftar di panel
+// tombol mata topbar — dari situ pemilik/Maker bisa menampilkannya lagi.
+// Daftar kartu tersimpan di Firestore (dashboardConfig/{ownerUid}) sehingga
+// berlaku lintas perangkat & realtime; localStorage hanya cadangan offline.
+function dashCacheKey(ownerUid) { return 'integrida_dash_hidden_' + ownerUid; }
+function readDashCache(ownerUid) {
+  try {
+    const raw = localStorage.getItem(dashCacheKey(ownerUid));
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) { return []; }
+}
+function writeDashCache(ownerUid, list) {
+  try { localStorage.setItem(dashCacheKey(ownerUid), JSON.stringify(list)); } catch (e) { /* abaikan */ }
+}
+async function loadDashConfig(ownerUid) {
+  let list = null;
+  try { list = await DB.getDashboardHiddenCards(ownerUid); writeDashCache(ownerUid, list); }
+  catch (err) { console.error('Gagal memuat konfigurasi kartu Dashboard:', err); list = readDashCache(ownerUid); }
+  state.dashHiddenCards = list || [];
+}
+function stopDashConfigListener() {
+  if (state.unsubDashConfig) { state.unsubDashConfig(); state.unsubDashConfig = null; }
+}
+function startDashConfigListener(ownerUid) {
+  stopDashConfigListener();
+  state.unsubDashConfig = DB.watchDashboardHiddenCards(ownerUid, (list) => {
+    state.dashHiddenCards = list;
+    writeDashCache(ownerUid, list);
+    if (state.view === 'dashboard') applyDashCardVisibility();
+    paintCardVisBtn();
+    renderCardVisPanel();
+  }, (err) => console.error('Listener konfigurasi kartu Dashboard error:', err));
+}
+function paintCardVisBtn() {
+  const btn = document.getElementById('topbar-cardvis-btn');
+  if (!btn) return;
+  const n = (state.dashHiddenCards || []).length;
+  btn.classList.toggle('is-on', !!state.dashManage);
+  btn.innerHTML = icon(state.dashManage ? 'eyeOff' : 'eye');
+  btn.title = n ? `Kartu Dashboard — ${n} kartu disembunyikan` : 'Kartu Dashboard — sembunyikan/tampilkan (berlaku utk semua akun)';
+  btn.setAttribute('aria-expanded', document.getElementById('cardvis-panel') ? 'true' : 'false');
+}
+
+// Nama kartu utk daftar di panel: dibaca dari atribut data-card-label pada
+// kartu yang sedang dirender; kalau kartu belum dirender, pakai key-nya.
+function dashCardLabel(key) {
+  const node = document.querySelector('[data-card-key="' + key + '"][data-card-label]');
+  return node ? node.getAttribute('data-card-label') : key;
+}
+function closeCardVisPanel() {
+  const panel = document.getElementById('cardvis-panel');
+  if (panel) panel.remove();
+  document.removeEventListener('click', onCardVisOutsideClick, true);
+  document.removeEventListener('keydown', onCardVisEsc, true);
+  paintCardVisBtn();
+}
+function onCardVisOutsideClick(e) {
+  const panel = document.getElementById('cardvis-panel');
+  const btn = document.getElementById('topbar-cardvis-btn');
+  if (panel && !panel.contains(e.target) && !(btn && btn.contains(e.target))) closeCardVisPanel();
+}
+function onCardVisEsc(e) { if (e.key === 'Escape') closeCardVisPanel(); }
+function renderCardVisPanel() {
+  const panel = document.getElementById('cardvis-panel');
+  if (!panel) return;
+  const hidden = state.dashHiddenCards || [];
+  panel.innerHTML = `
+    <h4>Kartu Dashboard</h4>
+    <div class="cvp-sub">Kartu yang disembunyikan hilang dari Dashboard semua akun (pemilik, Maker, dan Reviewer) sampai Anda menampilkannya lagi di sini.</div>
+    <button type="button" class="cvp-mode${state.dashManage ? ' is-on' : ''}" id="cvp-mode-btn">
+      <span>Mode Sembunyikan Kartu</span><span class="cvp-state">${state.dashManage ? 'AKTIF' : 'NONAKTIF'}</span>
+    </button>
+    <div class="cvp-section">Kartu disembunyikan (${hidden.length})</div>
+    ${hidden.length ? hidden.map(k => `
+      <div class="cvp-row">
+        <div class="cvp-row-name">${escapeHTML(dashCardLabel(k))}</div>
+        <button type="button" class="cvp-show" data-unhide-card="${escapeHTML(k)}">${icon('eye')}<span>Tampilkan</span></button>
+      </div>`).join('') : '<div class="cvp-empty">Belum ada kartu yang disembunyikan.</div>'}
+  `;
+  panel.querySelector('#cvp-mode-btn').addEventListener('click', () => {
+    state.dashManage = !state.dashManage;
+    paintCardVisBtn();
+    applyDashCardVisibility();
+    renderCardVisPanel();
+  });
+  panel.querySelectorAll('[data-unhide-card]').forEach(b => {
+    b.addEventListener('click', () => toggleDashCard(b.getAttribute('data-unhide-card')));
+  });
+}
+function openCardVisPanel() {
+  if (isReviewer() || document.getElementById('cardvis-panel')) return;
+  const btn = document.getElementById('topbar-cardvis-btn');
+  if (!btn) return;
+  const panel = document.createElement('div');
+  panel.id = 'cardvis-panel';
+  panel.className = 'cardvis-panel';
+  document.body.appendChild(panel);
+  const r = btn.getBoundingClientRect();
+  panel.style.top = (r.bottom + 8) + 'px';
+  const w = Math.min(320, window.innerWidth - 24);
+  panel.style.left = Math.max(12, Math.min(r.right - w, window.innerWidth - w - 12)) + 'px';
+  renderCardVisPanel();
+  document.addEventListener('click', onCardVisOutsideClick, true);
+  document.addEventListener('keydown', onCardVisEsc, true);
+  paintCardVisBtn();
+}
+async function toggleDashCard(key) {
+  if (isReviewer()) return;
+  const ownerUid = state.dataOwnerUid;
+  const prev = state.dashHiddenCards || [];
+  const next = prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key];
+  const label = dashCardLabel(key);
+  state.dashHiddenCards = next;
+  writeDashCache(ownerUid, next);
+  applyDashCardVisibility();
+  paintCardVisBtn();
+  renderCardVisPanel();
+  if (next.includes(key)) toast('Kartu "' + label + '" disembunyikan. Tampilkan lagi lewat ikon mata di topbar.');
+  try {
+    await DB.setDashboardHiddenCards(ownerUid, next);
+  } catch (err) {
+    state.dashHiddenCards = prev;
+    writeDashCache(ownerUid, prev);
+    applyDashCardVisibility();
+    paintCardVisBtn();
+    renderCardVisPanel();
+    toast('Gagal menyimpan pengaturan kartu: ' + err.message, 'error');
+  }
+}
+function applyDashCardVisibility(rootArg) {
+  const root = rootArg || document.getElementById('view-root');
+  if (!root || state.view !== 'dashboard') return;
+  const hidden = new Set(state.dashHiddenCards || []);
+  const reviewer = isReviewer();
+  const manage = !reviewer && !!state.dashManage;
+
+  root.classList.toggle('dash-manage', manage);
+  let banner = root.querySelector(':scope > .dash-manage-banner');
+  if (manage && root.querySelector('[data-card-key]')) {
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.className = 'dash-manage-banner';
+      banner.innerHTML = '<b>Mode Sembunyikan Kartu aktif.</b> Klik <b>Sembunyikan</b> pada kartu yang belum siap rilis. Kartu itu akan hilang dari Dashboard semua akun dan bisa ditampilkan lagi lewat ikon mata di topbar.';
+      root.insertBefore(banner, root.firstChild);
+    }
+  } else if (banner) {
+    banner.remove();
+  }
+
+  root.querySelectorAll('[data-card-key]').forEach(card => {
+    const key = card.dataset.cardKey;
+    const isHidden = hidden.has(key);
+    card.classList.toggle('dash-card-off', isHidden);
+    let ctl = card.querySelector(':scope > .dash-card-ctl');
+    if (!manage || isHidden) { if (ctl) ctl.remove(); return; }
+    if (!ctl) {
+      ctl = document.createElement('button');
+      ctl.type = 'button';
+      ctl.className = 'dash-card-ctl';
+      ctl.addEventListener('click', (e) => { e.stopPropagation(); toggleDashCard(card.dataset.cardKey); });
+      card.appendChild(ctl);
+    }
+    ctl.innerHTML = icon('eyeOff') + '<span>Sembunyikan</span>';
+    ctl.title = 'Sembunyikan kartu ini dari Dashboard semua akun';
+  });
 }
 
 function setView(viewId) {
@@ -3563,6 +3828,10 @@ function setView(viewId) {
   if (isReviewer() && !RESTRICTED_NAV_IDS.includes(viewId)) viewId = 'dashboard';
   teardownActiveDataListener();
   state.view = viewId;
+  // Tombol Kelola Kartu hanya relevan di Dashboard; mode kelola dimatikan saat pindah menu.
+  if (viewId !== 'dashboard') { state.dashManage = false; closeCardVisPanel(); }
+  const cardVisBtn = document.getElementById('topbar-cardvis-btn');
+  if (cardVisBtn) cardVisBtn.style.display = viewId === 'dashboard' ? '' : 'none';
   document.querySelectorAll('.nav-item, .bottom-nav-item, .topbar-cal-btn').forEach(n => n.classList.toggle('active', n.dataset.view === viewId));
   const titles = {
     dashboard: 'Dashboard',
@@ -4885,7 +5154,7 @@ function paintDashboard(allStatements) {
   const retCardsHtml = retDefs.map(c => {
     const sp = retSparkHtml(c.k, c.series, c.color);
     return `
-      <div class="bento-card span-4 ret-card">
+      <div class="bento-card span-4 ret-card" data-card-key="ret-${c.k}" data-card-label="${c.k} — ${c.name}">
         <div class="ret-head"><div class="ret-title is-clickable" role="button" tabindex="0" data-ret-info="${c.k}" title="Klik untuk rumus &amp; interpretasi">${c.k}</div><div class="ret-sub">${c.name}</div></div>
         <div class="ret-value" style="color:${(c.v || 0) < 0 ? 'var(--danger)' : 'inherit'};">${fmtPctDash(c.v)}</div>
         ${sp.chip ? `<div class="ret-chip-wrap">${sp.chip}</div>` : ''}
@@ -4926,7 +5195,7 @@ function paintDashboard(allStatements) {
       </div>`;
 
   root.innerHTML = `
-    <div class="section-block">${kpiStripHtml([
+    <div class="section-block" data-card-key="kpi" data-card-label="Ringkasan KPI (Asset, Revenue, Net Profit, dst.)">${kpiStripHtml([
       { label: 'Asset', anak: asetAnak, cucu: asetCucu },
       { label: 'Revenue', anak: revenueAnak, cucu: revenueCucu },
       { label: 'Net Profit', anak: labaAnak, cucu: labaCucu, signColor: true },
@@ -4939,7 +5208,7 @@ function paintDashboard(allStatements) {
     ])}
     </div>
 
-    ${hasSubs ? `<div class="dash-hero-pair">
+    ${hasSubs ? `<div class="dash-hero-pair" data-card-key="hero" data-card-label="Konsolidasi Aset, Pendapatan &amp; Laba Bersih">
       <div class="dash-hero-panel-head">
         <div class="dash-hero-panel-title">Konsolidasi Aset, Pendapatan, &amp; Laba Bersih</div>
         <div class="dash-hero-legend">
@@ -4951,12 +5220,12 @@ function paintDashboard(allStatements) {
       ${heroCardHtml({ title: 'Subsidiary', sub: `Konsolidasi ${anakCount} perusahaan, per periode`, pendapatan: revenueAnak, laba: labaAnak, canvasId: 'dash-hero-chart-anak', hasData: trendAnak.length > 0, pane: true, levelKey: 'anak' })}
       <div class="dash-hero-divider"></div>
       ${heroCardHtml({ title: 'Sub-Subsidiary', sub: `Konsolidasi ${cucuCount} perusahaan, per periode`, pendapatan: revenueCucu, laba: labaCucu, canvasId: 'dash-hero-chart-cucu', hasData: trendCucu.length > 0, pane: true, levelKey: 'cucu' })}
-    </div>` : `<div class="section-block">
+    </div>` : `<div class="section-block" data-card-key="hero" data-card-label="Konsolidasi Aset, Pendapatan &amp; Laba Bersih">
       ${heroCardHtml({ title: 'Tren Aset &amp; Laba Bersih', sub: `Konsolidasi ${state.companies.length} perusahaan, per periode`, pendapatan: sumPendapatan, laba: sumLabaBersih, canvasId: 'dash-hero-chart-anak', hasData: trendAnak.length > 0 })}
     </div>`}
 
     <div class="dash-bento">
-      <div class="bento-card span-12 profit-card">
+      <div class="bento-card span-12 profit-card" data-card-key="profitabilitas" data-card-label="Rasio Profitabilitas">
         <div class="bento-head profit-head"><div class="bento-title">Rasio Profitabilitas</div>${pcTrend.length ? `<div class="profit-compare-legend profit-head-legend">
           <span class="dash-hero-legend-item"><span class="dot dot-gross"></span>Gross Profit</span>
           <span class="dash-hero-legend-item"><span class="dot dot-op"></span>Operational Profit</span>
@@ -5002,7 +5271,7 @@ function paintDashboard(allStatements) {
 
       ${retCardsHtml}
 
-      <div class="bento-card span-12 liq-card profit-card">
+      <div class="bento-card span-12 liq-card profit-card" data-card-key="likuiditas" data-card-label="Rasio Likuiditas">
         <div class="bento-head profit-head"><div class="bento-title">Rasio Likuiditas</div></div>
         <div class="liq-merged-body">
         <div class="liq-left">
@@ -5024,7 +5293,7 @@ function paintDashboard(allStatements) {
         </div>
       </div>
 
-      <div class="bento-card span-6">
+      <div class="bento-card span-6" data-card-key="return-aset" data-card-label="Return Aset">
         <div class="bento-head"><div class="bento-title">Return Aset</div><span class="bento-pill">${hasSubs ? 'Konsolidasi' : 'Semua Perusahaan'}</span></div>
         <div class="gauge-body">
           ${dashRingHtml({
@@ -5035,7 +5304,7 @@ function paintDashboard(allStatements) {
         </div>
       </div>
 
-      <div class="bento-card span-6">
+      <div class="bento-card span-6" data-card-key="struktur-pendanaan" data-card-label="Struktur Pendanaan">
         <div class="bento-head"><div class="bento-title">Struktur Pendanaan</div><span class="bento-pill">Terhadap Aset</span></div>
         <div class="mini-rings">
           <div class="mini-ring">
@@ -5051,7 +5320,7 @@ function paintDashboard(allStatements) {
         </div>
       </div>
 
-      <div class="bento-card span-6">
+      <div class="bento-card span-6" data-card-key="komposisi-aset" data-card-label="Komposisi Total Aset">
         <div class="bento-head"><div class="bento-title">Komposisi Total Aset</div></div>
         <div class="dash-donut-wrap">
           <div class="dash-donut-canvas">${compTop.length ? '<canvas id="dash-donut"></canvas>' : ''}</div>
@@ -5067,22 +5336,22 @@ function paintDashboard(allStatements) {
         </div>
       </div>
 
-      <div class="bento-card span-6">
+      <div class="bento-card span-6" data-card-key="arus-kas" data-card-label="Arus Kas per Perusahaan">
         <div class="bento-head"><div class="bento-title">Arus Kas per Perusahaan</div><span class="bento-pill">Periode terbaru</span></div>
         <div class="bento-chart">${hasCashFlow ? '<canvas id="chart-arus-kas"></canvas>' : emptyBento}</div>
       </div>
 
-      <div class="bento-card span-6">
+      <div class="bento-card span-6" data-card-key="neraca-per-perusahaan" data-card-label="Aset, Kewajiban &amp; Ekuitas per Perusahaan">
         <div class="bento-head"><div class="bento-title">Aset, Kewajiban &amp; Ekuitas per Perusahaan</div><span class="bento-pill">Periode terbaru</span></div>
         <div class="bento-chart">${latestList.length ? '<canvas id="chart-neraca-grouped"></canvas>' : emptyBento}</div>
       </div>
 
-      <div class="bento-card span-6">
+      <div class="bento-card span-6" data-card-key="laba-per-perusahaan" data-card-label="Laba Bersih per Perusahaan">
         <div class="bento-head"><div class="bento-title">Laba Bersih per Perusahaan</div></div>
         <div class="bento-chart">${latestList.length ? '<canvas id="chart-laba"></canvas>' : emptyBento}</div>
       </div>
 
-      <div class="bento-card span-12">
+      <div class="bento-card span-12" data-card-key="struktur-permodalan" data-card-label="Struktur Permodalan">
         <div class="bento-head"><div class="bento-title">Struktur Permodalan</div><span class="bento-pill">${formatIDRKPI(cAset)} total pasiva</span></div>
         ${capTotal > 0 ? `
           <div class="cap-bar">${capSegments.map(x => Math.max(0, x.value) > 0 ? `<span title="${x.name}: ${formatIDR(x.value)}" style="width:${(Math.max(0, x.value) / capTotal * 100).toFixed(2)}%;background:${x.color};"></span>` : '').join('')}</div>
@@ -5094,7 +5363,7 @@ function paintDashboard(allStatements) {
           </div>` : emptyBento}
       </div>
 
-      <div class="bento-card span-12">
+      <div class="bento-card span-12" data-card-key="ringkasan-perusahaan" data-card-label="Ringkasan Perusahaan">
         <div class="bento-head">
           <div class="bento-title">Ringkasan Perusahaan</div>
           <div class="dash-search">
@@ -5126,6 +5395,11 @@ function paintDashboard(allStatements) {
       </div>
     </div>
   `;
+
+  // Terapkan hide/unhide kartu (fitur pra-launch) segera setelah template
+  // dirender, sebelum kode grafik, supaya kartu yang disembunyikan tidak
+  // sempat terlihat oleh Reviewer.
+  applyDashCardVisibility(root);
 
   if (trendAnak.length) renderHeroChart('dash-hero-chart-anak', trendAnak.map(t => t.label), trendAnak.map(t => t.aset), trendAnak.map(t => t.laba), { legend: !hasSubs, pendData: trendAnak.map(t => t.pend), counts: trendAnak.map(t => t.n) });
   if (trendCucu.length) renderHeroChart('dash-hero-chart-cucu', trendCucu.map(t => t.label), trendCucu.map(t => t.aset), trendCucu.map(t => t.laba), { legend: false, pendData: trendCucu.map(t => t.pend), counts: trendCucu.map(t => t.n) });
@@ -9700,48 +9974,87 @@ function reminderPendingTableHTML(items) {
 const REMINDER_HISTORY_LIMIT = 30;
 
 function openReminderHistoryModal() {
-  const items = state.reminders.slice()
-    .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0))
-    .slice(0, REMINDER_HISTORY_LIMIT);
+  // Riwayat Reminder + pencarian. Tanpa kata kunci: tampil REMINDER_HISTORY_LIMIT
+  // item terbaru. Dengan kata kunci: pencarian mencakup SELURUH pengingat
+  // (bukan hanya 30 terbaru), cocok di Judul maupun Keterangan/Catatan.
+  const deletedIds = new Set();
+  let query = '';
   const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:520px;">
     <button class="modal-close" id="close-modal" title="Tutup">${icon('close')}</button>
     <h3>Riwayat Reminder</h3>
-    ${items.length === 0
-      ? `<div class="upgrade-empty">Belum ada pengingat yang ditambahkan.</div>`
-      : `<div class="table-wrap"><table class="reminder-table"><tbody>${items.map(item => reminderRowHTML(item)).join('')}</tbody></table></div>`}
+    <div class="dash-search" style="width:100%;margin:0 0 12px;box-sizing:border-box;">
+      <input type="text" id="history-search-input" placeholder="Cari judul atau catatan…" autocomplete="off" aria-label="Cari judul atau catatan pengingat">
+      <span class="dash-search-btn">${icon('search')}</span>
+    </div>
+    <div id="history-count" style="font-size:11.5px;color:var(--slate);margin:0 2px 8px;display:none;"></div>
+    <div id="history-list"></div>
   </div></div>`);
   document.body.appendChild(backdrop);
   backdrop.querySelector('#close-modal').addEventListener('click', () => backdrop.remove());
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
 
-  backdrop.querySelectorAll('[data-reminder-check]').forEach(cb => {
-    cb.addEventListener('change', async () => {
-      try {
-        await DB.setReminderDone(cb.dataset.reminderCheck, cb.checked);
-      } catch (err) {
-        toast('Gagal memperbarui status: ' + err.message, 'error');
-      }
+  const listEl = backdrop.querySelector('#history-list');
+  const countEl = backdrop.querySelector('#history-count');
+  const searchInput = backdrop.querySelector('#history-search-input');
+
+  const matches = (item, q) => {
+    const hay = normalizeKey((item.title || '') + ' ' + (item.description || ''));
+    return q.split(' ').every(word => hay.includes(word));
+  };
+
+  const renderList = () => {
+    const q = normalizeKey(query);
+    let items = state.reminders.filter(r => !deletedIds.has(r.id))
+      .sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+    const total = items.length;
+    if (q) items = items.filter(r => matches(r, q));
+    else items = items.slice(0, REMINDER_HISTORY_LIMIT);
+
+    countEl.style.display = q ? '' : 'none';
+    if (q) countEl.textContent = items.length + ' dari ' + total + ' pengingat cocok dengan "' + query.trim() + '"';
+
+    if (items.length === 0) {
+      listEl.innerHTML = q
+        ? `<div class="upgrade-empty">Tidak ada pengingat yang cocok dengan "${escapeHTML(query.trim())}".</div>`
+        : `<div class="upgrade-empty">Belum ada pengingat yang ditambahkan.</div>`;
+      return;
+    }
+    listEl.innerHTML = `<div class="table-wrap"><table class="reminder-table"><tbody>${items.map(item => reminderRowHTML(item)).join('')}</tbody></table></div>`;
+
+    listEl.querySelectorAll('[data-reminder-check]').forEach(cb => {
+      cb.addEventListener('change', async () => {
+        try {
+          await DB.setReminderDone(cb.dataset.reminderCheck, cb.checked);
+        } catch (err) {
+          toast('Gagal memperbarui status: ' + err.message, 'error');
+        }
+      });
     });
-  });
-  backdrop.querySelectorAll('[data-reminder-edit]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const item = state.reminders.find(r => r.id === btn.dataset.reminderEdit);
-      if (item) { backdrop.remove(); openReminderModal(item); }
+    listEl.querySelectorAll('[data-reminder-edit]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = state.reminders.find(r => r.id === btn.dataset.reminderEdit);
+        if (item) { backdrop.remove(); openReminderModal(item); }
+      });
     });
-  });
-  backdrop.querySelectorAll('[data-reminder-delete]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const item = state.reminders.find(r => r.id === btn.dataset.reminderDelete);
-      if (!item) return;
-      if (!confirm(`Hapus pengingat "${item.title}"?`)) return;
-      try {
-        await DB.deleteReminder(item.id);
-        toast('Pengingat dihapus', 'success');
-      } catch (err) {
-        toast('Gagal menghapus: ' + err.message, 'error');
-      }
+    listEl.querySelectorAll('[data-reminder-delete]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const item = state.reminders.find(r => r.id === btn.dataset.reminderDelete);
+        if (!item) return;
+        if (!confirm(`Hapus pengingat "${item.title}"?`)) return;
+        try {
+          await DB.deleteReminder(item.id);
+          deletedIds.add(item.id);
+          renderList();
+          toast('Pengingat dihapus', 'success');
+        } catch (err) {
+          toast('Gagal menghapus: ' + err.message, 'error');
+        }
+      });
     });
-  });
+  };
+
+  searchInput.addEventListener('input', () => { query = searchInput.value; renderList(); });
+  renderList();
 }
 
 // ---------- Reminder Analisis (jadwal otomatis berbasis tanggal tetap) ----------
@@ -11105,6 +11418,7 @@ function renderDonutChart(canvasId, labels, data, palette) {
 // ---------- Bootstrap ----------
 auth.onAuthStateChanged(async (user) => {
   if (state.unsubCompanies) { state.unsubCompanies(); state.unsubCompanies = null; }
+  stopDashConfigListener();
   teardownActiveDataListener();
   Sync.reset();
 
@@ -11120,6 +11434,11 @@ auth.onAuthStateChanged(async (user) => {
     state.isSubUser = !!teamDoc;
     state.subUserRole = teamDoc ? (teamDoc.role === 'maker' ? 'maker' : 'reviewer') : null;
     state.dataOwnerUid = teamDoc ? teamDoc.ownerUid : user.uid;
+    // Muat konfigurasi hide/unhide kartu Dashboard SEBELUM Dashboard
+    // pertama dirender, supaya Reviewer tidak sempat melihat kartu pra-launch.
+    state.dashManage = false;
+    await loadDashConfig(state.dataOwnerUid);
+    startDashConfigListener(state.dataOwnerUid);
     renderShell();
     // Listener realtime: daftar perusahaan otomatis ter-update begitu ada
     // perubahan — baik dari tab/perangkat ini maupun dari perangkat lain
@@ -11138,6 +11457,8 @@ auth.onAuthStateChanged(async (user) => {
     state.isSubUser = false;
     state.subUserRole = null;
     state.dataOwnerUid = null;
+    state.dashHiddenCards = [];
+    state.dashManage = false;
     renderAuthScreen('login');
   }
 });
