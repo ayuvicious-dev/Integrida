@@ -388,6 +388,15 @@ input,select{font-family:inherit;}
 .kpi-strip-level.row-total,.kpi-strip-cell.row-total{border-top:1px solid var(--border);}
 .kpi-strip-level.row-total{font-weight:600;color:var(--slate);}
 .kpi-strip-cell.row-total{font-weight:500;}
+.kpi-strip-cell.is-drill{cursor:pointer;transition:background .15s;border-radius:6px;}
+.kpi-strip-cell.is-drill:hover,.kpi-strip-cell.is-drill:focus-visible{background:var(--surface-2);outline:none;text-decoration:underline dotted;text-underline-offset:4px;}
+.kpi-drill-list{border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto;}
+.kpi-drill-row{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:9px 12px;font-size:13px;border-bottom:1px solid var(--border);}
+.kpi-drill-row:last-child{border-bottom:none;}
+.kpi-drill-name em{font-style:normal;font-size:10.5px;color:var(--slate-light);margin-left:6px;}
+.kpi-drill-val{font-family:var(--font-display);font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.kpi-drill-total{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin-top:10px;padding:11px 12px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border);font-size:13px;font-weight:600;}
+.kpi-drill-total .kpi-drill-val{font-weight:700;font-size:15px;}
 .kpi-label{font-size:12px;color:var(--slate);letter-spacing:.2px;}
 .kpi-value{font-family:var(--font-display);font-size:25px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums;overflow-wrap:break-word;word-break:break-word;}
 .kpi-delta{font-size:12.5px;font-family:var(--font-display);font-weight:600;}
@@ -416,6 +425,10 @@ tbody tr:hover{background:var(--surface-2);}
 .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border);}
 .btn.ghost:hover{background:var(--surface-2);}
 .btn.danger{background:var(--danger);}
+.btn.icon-only{padding:0;width:34px;height:34px;justify-content:center;flex-shrink:0;}
+.btn.icon-only svg{width:16px;height:16px;}
+.row-actions{display:inline-flex;align-items:center;justify-content:flex-end;gap:8px;}
+.btn.icon-only:disabled{opacity:.5;cursor:wait;}
 .btn:disabled{opacity:.5;cursor:not-allowed;}
 
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
@@ -784,9 +797,28 @@ tbody tr:hover{background:var(--surface-2);}
 .dash-hero-legend-item{display:inline-flex;align-items:center;gap:6px;}
 .dash-hero-legend .dot{width:9px;height:9px;border-radius:50%;display:inline-block;box-sizing:border-box;}
 .dash-hero-legend .dot-aset{background:linear-gradient(180deg,#5B93FF,#16213A);}
+.dash-hero-legend .dot-pend{background:var(--card);border:2px solid #2E9E6B;}
 .dash-hero-legend .dot-laba{background:var(--card);border:2px solid #C08A3E;}
 .dash-hero-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:6px;}
 .dash-hero-title{font-family:var(--font-display);font-weight:700;font-size:16.5px;}
+.dash-hero-title.is-clickable{cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:6px;}
+.dash-hero-title.is-clickable:hover,.dash-hero-title.is-clickable:focus-visible{outline:none;text-decoration:underline dotted;text-underline-offset:4px;}
+.dash-hero-title-hint{display:inline-flex;opacity:.45;}
+.dash-hero-title-hint svg{width:14px;height:14px;}
+.dash-hero-title.is-clickable:hover .dash-hero-title-hint{opacity:.9;}
+.hero-sum-list{margin:0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--text);}
+.hero-sum-list li{margin-bottom:5px;}
+.hero-sum-note{color:var(--slate-light);font-size:12px;}
+.hero-sum-trans{border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px;}
+.hero-sum-trans-title{font-size:12px;font-weight:600;letter-spacing:.3px;color:var(--slate);margin-bottom:6px;}
+.hero-sum-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px;}
+.hero-sum-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.hero-sum-table th,.hero-sum-table td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top;}
+.hero-sum-table tr:last-child td{border-bottom:none;}
+.hero-sum-table th.num,.hero-sum-table td.num{text-align:right;white-space:nowrap;}
+.hero-sum-pct{font-weight:600;color:var(--slate);}
+.hero-sum-bar{height:4px;border-radius:2px;background:var(--surface-2);margin-top:3px;overflow:hidden;}
+.hero-sum-bar span{display:block;height:100%;background:#2F6FE4;}
 .dash-hero-sub{font-size:12.5px;color:var(--slate);margin-top:2px;}
 .dash-hero-stats{display:flex;gap:26px;flex-wrap:wrap;}
 .dash-hero-stat-label{font-size:12px;color:var(--slate);}
@@ -3757,9 +3789,63 @@ function bindKpiStripInfo(root) {
     head.addEventListener('click', open);
     head.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
   });
+  root.querySelectorAll('.kpi-strip-cell.is-drill').forEach(c => {
+    const open = () => openKpiDrillModal(c.dataset.kpiDrill, c.dataset.kpiLevel);
+    c.addEventListener('click', open);
+    c.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+  });
 }
 
 const KPI_LEVEL_NAMES = { anak: 'Subsidiary', cucu: 'Sub-Subsidiary' };
+
+// Sumber kebenaran tunggal rumus nilai per perusahaan untuk tiap metrik strip
+// KPI. Dipakai oleh angka agregat di tabel DAN popup rincian per perusahaan
+// (drill-down), sehingga jumlah di popup selalu identik dengan angka di tabel.
+const KPI_VALUE_FNS = {
+  'Asset': s => s.neraca.totalAset,
+  'Revenue': s => s.labaRugi.pendapatan,
+  'Net Profit': s => s.labaRugi.labaBersih,
+  'Debt': s => (s.neraca.totalKewajibanJangkaPanjang || 0) + (s.neraca.hutangPendanaan || 0),
+  'AR': s => s.neraca.piutangUsaha,
+  'AP': s => s.neraca.hutangUsaha,
+  'EBITDA': s => statementEbitda(s),
+  'Cash': s => s.neraca.kasSetaraKas,
+  'FCF': s => statementFcf(s).fcf
+};
+
+// Popup rincian: daftar perusahaan (pada level yang diklik) beserta nilainya,
+// ditutup baris Jumlah di bawahnya.
+function openKpiDrillModal(metricLabel, levelKey) {
+  const fn = KPI_VALUE_FNS[metricLabel];
+  if (!fn) return;
+  const depthById = ownershipDepthMap();
+  const { latestByCompany } = kpiPeriodSnapshot;
+  const inLevel = (d) => levelKey === 'anak' ? d === 1 : levelKey === 'cucu' ? d >= 2 : d >= 1;
+  const rows = [];
+  state.companies.forEach(c => {
+    const st = latestByCompany[c.id];
+    const depth = depthById[c.id] || 0;
+    if (!st || !inLevel(depth)) return;
+    rows.push({ name: c.name, level: levelKey === 'total' ? (depth === 1 ? KPI_LEVEL_NAMES.anak : KPI_LEVEL_NAMES.cucu) : '', value: fn(st) || 0, period: st.periodLabel || '' });
+  });
+  rows.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  const total = rows.reduce((a, r) => a + r.value, 0);
+  const levelTitle = levelKey === 'total' ? 'Total (Subsidiary + Sub-Subsidiary)' : KPI_LEVEL_NAMES[levelKey];
+  const valHtml = (v) => `<span class="kpi-drill-val" style="${v < 0 ? 'color:var(--danger);' : ''}">${formatIDR(v)}</span>`;
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:480px;">
+    <h3 style="margin-bottom:4px;">Rincian ${escapeHTML(metricLabel)}</h3>
+    <div class="kpi-info-text" style="margin-bottom:16px;color:var(--slate-light);">${escapeHTML(levelTitle)}</div>
+    ${rows.length ? `<div class="kpi-drill-list">${rows.map(r => `<div class="kpi-drill-row"><span class="kpi-drill-name">${escapeHTML(r.name)}${r.level ? `<em>${r.level}</em>` : ''}</span>${valHtml(r.value)}</div>`).join('')}</div>
+    <div class="kpi-drill-total"><span>Jumlah</span>${valHtml(total)}</div>` : '<div class="kpi-info-text">Belum ada perusahaan pada level ini.</div>'}
+    <div class="modal-actions"><button class="btn primary" id="close-kpi-drill">Tutup</button></div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  backdrop.querySelector('#close-kpi-drill').addEventListener('click', close);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+}
 
 // Satu strip KPI (satu deret): kedelapan metrik disusun sebagai kolom
 // dalam SATU card — judul metrik di baris atas (mis. "Asset"), lalu dua
@@ -3770,7 +3856,7 @@ const KPI_LEVEL_NAMES = { anak: 'Subsidiary', cucu: 'Sub-Subsidiary' };
 // metrics = [{ label, anak, cucu, signColor }]
 // signColor = true -> nilai negatif berwarna merah (Net Profit, EBITDA).
 function kpiStripHtml(metrics) {
-  const cell = (v, signColor, rowCls) => `<div class="kpi-strip-cell ${rowCls}"${signColor ? ` style="color:${v >= 0 ? 'inherit' : 'var(--danger)'};"` : ''} title="${formatIDR(v)}">${formatIDRKPIHtml(v)}</div>`;
+  const cell = (v, signColor, rowCls, metricLabel, levelKey) => `<div class="kpi-strip-cell is-drill ${rowCls}" role="button" tabindex="0" data-kpi-drill="${metricLabel}" data-kpi-level="${levelKey}"${signColor ? ` style="color:${v >= 0 ? 'inherit' : 'var(--danger)'};"` : ''} title="${formatIDR(v)} — klik untuk melihat rincian per perusahaan">${formatIDRKPIHtml(v)}</div>`;
   return `
       <div class="card kpi-strip-card">
         <div class="kpi-strip-scroll">
@@ -3778,11 +3864,11 @@ function kpiStripHtml(metrics) {
             <div class="kpi-strip-corner"></div>
             ${metrics.map(m => `<div class="kpi-strip-head is-clickable" role="button" tabindex="0" data-kpi="${m.label}" title="Klik untuk melihat rumus &amp; tujuan">${m.label}</div>`).join('')}
             <div class="kpi-strip-level row-first">${KPI_LEVEL_NAMES.anak}</div>
-            ${metrics.map(m => cell(m.anak, m.signColor, 'row-first')).join('')}
+            ${metrics.map(m => cell(m.anak, m.signColor, 'row-first', m.label, 'anak')).join('')}
             <div class="kpi-strip-level row-last">${KPI_LEVEL_NAMES.cucu}</div>
-            ${metrics.map(m => cell(m.cucu, m.signColor, 'row-last')).join('')}
+            ${metrics.map(m => cell(m.cucu, m.signColor, 'row-last', m.label, 'cucu')).join('')}
             <div class="kpi-strip-level row-total">Total</div>
-            ${metrics.map(m => cell((m.anak || 0) + (m.cucu || 0), m.signColor, 'row-total')).join('')}
+            ${metrics.map(m => cell((m.anak || 0) + (m.cucu || 0), m.signColor, 'row-total', m.label, 'total')).join('')}
           </div>
         </div>
       </div>`;
@@ -3838,6 +3924,160 @@ async function healOutdatedSnapshots(allStatements) {
   if (fixed > 0) toast(`${fixed} periode dihitung ulang dari Buku Besar masing-masing perusahaan`, 'success');
 }
 
+// ---------- Tren per level + kesimpulan grafik (klik judul panel) ----------
+// Kunci periode WAJIB menyertakan jenis periode: Januari 2024 (bulanan,
+// indeks 1), Triwulan 1 dan "2024" (tahunan, indeks 1) berbagi indeks yang
+// sama, sehingga bila hanya tahun+indeks yang dipakai nilainya tertumpuk.
+let heroTrendSnapshot = { allStatements: [], depthById: {}, hasSubs: false };
+
+function statementPeriodEndMonth(s) {
+  const idx = s.periodIndex || 1;
+  if (s.periodType === 'tahunan') return 12;
+  if (s.periodType === 'semester') return idx * 6;
+  if (s.periodType === 'triwulan') return idx * 3;
+  return idx;
+}
+
+function buildLevelTrend(allStatements, depthById, includeDepth) {
+  const rank = { bulanan: 0, triwulan: 1, semester: 2, tahunan: 3 };
+  const map = {};
+  allStatements.forEach(s => {
+    if (!includeDepth(depthById[s.companyId] || 0)) return;
+    const key = `${s.year}-${s.periodType || ''}-${String(s.periodIndex).padStart(3, '0')}`;
+    if (!map[key]) map[key] = { label: s.periodLabel, year: s.year, periodType: s.periodType, endMonth: statementPeriodEndMonth(s), typeRank: rank[s.periodType] ?? 0, aset: 0, laba: 0, pend: 0, n: 0, stmts: [] };
+    map[key].aset += (s.neraca.totalAset || 0);
+    map[key].laba += (s.labaRugi.labaBersih || 0);
+    map[key].pend += (s.labaRugi.pendapatan || 0);
+    map[key].n += 1;
+    map[key].stmts.push(s);
+  });
+  return Object.values(map).sort((a, b) => a.year - b.year || a.endMonth - b.endMonth || a.typeRank - b.typeRank).slice(-8);
+}
+
+function openHeroSummaryModal(levelKey) {
+  const { allStatements, depthById, hasSubs } = heroTrendSnapshot;
+  const include = levelKey === 'cucu' ? (d => d >= 2) : (d => hasSubs ? d === 1 : true);
+  const levelName = levelKey === 'cucu' ? 'Sub-Subsidiary' : (hasSubs ? 'Subsidiary' : 'Seluruh Perusahaan');
+  const trend = buildLevelTrend(allStatements, depthById, include);
+  const levelCompanies = state.companies.filter(c => include(depthById[c.id] || 0));
+  const esc = (t) => escapeHTML(String(t));
+  const fmt = formatIDRKPI;
+  const sumField = (pt, fn) => pt.stmts.reduce((a, st) => a + (fn(st) || 0), 0);
+  const pctChange = (cur, prev) => prev ? ((cur - prev) / Math.abs(prev) * 100) : null;
+  const pctTxt = (v) => v === null ? '' : ` (${v >= 0 ? '+' : ''}${v.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%)`;
+  const dirTxt = (d) => d >= 0 ? 'naik' : 'turun';
+  const ytdNote = (pt) => (pt.periodType && pt.periodType !== 'tahunan')
+    ? `<li class="hero-sum-note">${esc(pt.label)} adalah akumulasi 1 Januari s.d. akhir periode (bukan setahun penuh), sedangkan Total Aset adalah posisi di akhir periode. Karena itu perbandingan Pendapatan &amp; Laba dengan periode sebelumnya belum setara (panjang periodenya berbeda).</li>` : '';
+
+  let body = '';
+  if (!trend.length) {
+    body = '<div class="kpi-info-text">Belum ada data periode untuk dianalisis.</div>';
+  } else {
+    const last = trend[trend.length - 1];
+    const prev = trend.length > 1 ? trend[trend.length - 2] : null;
+    const peak = (key) => trend.reduce((m, t) => (t[key] > m[key] ? t : m), trend[0]);
+
+    // ---- 1. Kesimpulan ringkas ----
+    const marginLast = last.pend ? last.laba / last.pend * 100 : null;
+    const turnover = last.aset ? last.pend / last.aset : null;
+    const concl = [];
+    concl.push(`Total Aset tertinggi pada <b>${esc(peak('aset').label)}</b> (${fmt(peak('aset').aset)}); posisi terbaru ${esc(last.label)} sebesar ${fmt(last.aset)}.`);
+    const lastPartial = !!(last.periodType && last.periodType !== 'tahunan');
+    concl.push(`Pendapatan tertinggi pada <b>${esc(peak('pend').label)}</b> (${fmt(peak('pend').pend)}); ${prev ? (lastPartial && prev.periodType === 'tahunan' ? `${esc(last.label)} baru akumulasi ${last.endMonth} bulan (${fmt(last.pend)}) sedangkan ${esc(prev.label)} setahun penuh (${fmt(prev.pend)}), jadi belum setara untuk dibandingkan.` : `${esc(last.label)} ${dirTxt(last.pend - prev.pend)} ${fmt(Math.abs(last.pend - prev.pend))}${pctTxt(pctChange(last.pend, prev.pend))} dibanding ${esc(prev.label)}.`) : `periode terbaru ${fmt(last.pend)}.`}`);
+    concl.push(`Laba bersih tertinggi pada <b>${esc(peak('laba').label)}</b> (${fmt(peak('laba').laba)}); marjin laba bersih terbaru ${marginLast === null ? '–' : marginLast.toLocaleString('id-ID', { maximumFractionDigits: 1 }) + '%'}.`);
+    if (turnover !== null && turnover > 1) {
+      concl.push(`Pendapatan ${turnover.toLocaleString('id-ID', { maximumFractionDigits: 2 })}x Total Aset pada ${esc(last.label)}. Ini wajar: pendapatan adalah arus selama periode, sedangkan aset adalah posisi di satu tanggal (rasio ini disebut asset turnover).`);
+    }
+    body += `<div class="kpi-info-block"><div class="kpi-info-label">Kesimpulan</div><ul class="hero-sum-list">${concl.map(t => `<li>${t}</li>`).join('')}</ul></div>`;
+
+    // ---- 2. Kontribusi per perusahaan (periode terbaru pada grafik) ----
+    const shareCell = (v, total) => {
+      const pct = total ? v / total * 100 : null;
+      const w = pct === null ? 0 : Math.max(0, Math.min(100, pct));
+      return `<td class="num"><div>${esc(fmt(v))}</div><div class="hero-sum-pct">${pct === null ? '–' : pct.toLocaleString('id-ID', { maximumFractionDigits: 1 }) + '%'}</div><div class="hero-sum-bar"><span style="width:${w}%"></span></div></td>`;
+    };
+    const rows = last.stmts.map(st => ({
+      name: (state.companies.find(c => c.id === st.companyId) || {}).name || '?',
+      aset: st.neraca.totalAset || 0, pend: st.labaRugi.pendapatan || 0, laba: st.labaRugi.labaBersih || 0
+    })).sort((a, b) => b.aset - a.aset);
+    const missing = levelCompanies.filter(c => !last.stmts.some(st => st.companyId === c.id)).map(c => c.name);
+    body += `<div class="kpi-info-block"><div class="kpi-info-label">Kontribusi perusahaan — ${esc(last.label)}</div>
+      <div class="hero-sum-table-wrap"><table class="hero-sum-table">
+        <thead><tr><th>Perusahaan</th><th class="num">Total Aset</th><th class="num">Pendapatan</th><th class="num">Laba Bersih</th></tr></thead>
+        <tbody>${rows.map(r => `<tr><td>${esc(r.name)}</td>${shareCell(r.aset, last.aset)}${shareCell(r.pend, last.pend)}${shareCell(r.laba, last.laba)}</tr>`).join('')}</tbody>
+      </table></div>
+      ${rows.length === 1 ? `<div class="kpi-info-text" style="margin-top:8px;">Seluruh angka ${esc(levelName)} pada grafik ini berasal dari satu perusahaan (kontribusi 100%).</div>` : ''}
+      ${missing.length ? `<div class="kpi-info-warn" style="color:var(--slate);">Belum ada data periode ini: ${esc(missing.join(', '))} (${missing.length} dari ${levelCompanies.length} perusahaan).</div>` : ''}
+    </div>`;
+
+    // ---- 3. Penyebab fluktuasi antar periode ----
+    if (trend.length < 2) {
+      body += '<div class="kpi-info-block"><div class="kpi-info-label">Penyebab fluktuasi</div><div class="kpi-info-text">Baru ada satu periode, belum ada fluktuasi yang bisa dianalisis.</div></div>';
+    } else {
+      const asetParts = [
+        ['Kas & Setara Kas', st => st.neraca.kasSetaraKas], ['Piutang Usaha', st => st.neraca.piutangUsaha],
+        ['Persediaan', st => st.neraca.persediaan], ['Aset Lancar Lainnya', st => st.neraca.asetLancarLainnya],
+        ['Aset Tidak Lancar', st => st.neraca.totalAsetTidakLancar]
+      ];
+      const blocks = [];
+      for (let i = trend.length - 1; i >= 1; i--) {
+        const a = trend[i - 1], b = trend[i];
+        const items = [];
+        // Aset
+        const dAset = b.aset - a.aset;
+        const drivers = asetParts.map(([name, fn]) => ({ name, d: sumField(b, fn) - sumField(a, fn) }))
+          .filter(x => Math.abs(x.d) > 0).sort((x, y) => Math.abs(y.d) - Math.abs(x.d)).slice(0, 2);
+        const dKew = sumField(b, st => st.neraca.totalKewajiban) - sumField(a, st => st.neraca.totalKewajiban);
+        const dEkuitas = dAset - dKew;
+        items.push(`<b>Total Aset ${dirTxt(dAset)} ${fmt(Math.abs(dAset))}${pctTxt(pctChange(b.aset, a.aset))}</b>${drivers.length ? ', terutama dari ' + drivers.map(x => `${x.name} ${dirTxt(x.d)} ${fmt(Math.abs(x.d))}`).join(' dan ') : ''}. Dari sisi pendanaan: kewajiban ${dirTxt(dKew)} ${fmt(Math.abs(dKew))}, ekuitas (termasuk laba ditahan) ${dirTxt(dEkuitas)} ${fmt(Math.abs(dEkuitas))}.`);
+        // Pendapatan
+        const dPend = b.pend - a.pend;
+        let pendTxt = `<b>Pendapatan ${dirTxt(dPend)} ${fmt(Math.abs(dPend))}${pctTxt(pctChange(b.pend, a.pend))}</b>`;
+        if (a.stmts.length > 1 || b.stmts.length > 1) {
+          const cd = {};
+          b.stmts.forEach(st => { cd[st.companyId] = (cd[st.companyId] || 0) + (st.labaRugi.pendapatan || 0); });
+          a.stmts.forEach(st => { cd[st.companyId] = (cd[st.companyId] || 0) - (st.labaRugi.pendapatan || 0); });
+          const top = Object.entries(cd).sort((x, y) => Math.abs(y[1]) - Math.abs(x[1]))[0];
+          if (top && Math.abs(top[1]) > 0) pendTxt += `, penggerak utama: ${esc((state.companies.find(c => c.id === top[0]) || {}).name || '?')} (${top[1] >= 0 ? '+' : '-'}${fmt(Math.abs(top[1]))})`;
+        }
+        items.push(pendTxt + '.');
+        // Laba
+        const dLaba = b.laba - a.laba;
+        const g = (st, k) => (st.labaRugi[k] || 0);
+        const dHpp = sumField(b, st => g(st, 'hpp')) - sumField(a, st => g(st, 'hpp'));
+        const dBeban = sumField(b, st => g(st, 'bebanOperasional')) - sumField(a, st => g(st, 'bebanOperasional'));
+        const dLain = sumField(b, st => g(st, 'pendapatanLainnya') - g(st, 'bebanLainnya') - g(st, 'pajakPenghasilan')) - sumField(a, st => g(st, 'pendapatanLainnya') - g(st, 'bebanLainnya') - g(st, 'pajakPenghasilan'));
+        const lImpacts = [
+          { name: 'pendapatan', d: dPend, impact: dPend },
+          { name: 'HPP', d: dHpp, impact: -dHpp },
+          { name: 'beban operasional', d: dBeban, impact: -dBeban },
+          { name: 'pos lainnya (pendapatan/beban lain & pajak)', d: dLain, impact: dLain }
+        ].filter(x => Math.abs(x.impact) > 0).sort((x, y) => Math.abs(y.impact) - Math.abs(x.impact)).slice(0, 2);
+        const mA = a.pend ? a.laba / a.pend * 100 : null, mB = b.pend ? b.laba / b.pend * 100 : null;
+        const mTxt = (m) => m === null ? '–' : m.toLocaleString('id-ID', { maximumFractionDigits: 1 }) + '%';
+        items.push(`<b>Laba bersih ${dirTxt(dLaba)} ${fmt(Math.abs(dLaba))}${pctTxt(pctChange(b.laba, a.laba))}</b> (marjin ${mTxt(mA)} → ${mTxt(mB)})${lImpacts.length ? ', terutama karena ' + lImpacts.map(x => `${x.name} ${dirTxt(x.d)} ${fmt(Math.abs(x.d))} (${x.impact >= 0 ? 'menambah' : 'menekan'} laba)`).join(' dan ') : ''}.`);
+        if (a.n !== b.n) items.push(`<span class="hero-sum-note">Jumlah perusahaan yang punya data berubah dari ${a.n} menjadi ${b.n}, sehingga perubahan angka juga dipengaruhi cakupan perusahaan.</span>`);
+        const yt = ytdNote(b);
+        blocks.push(`<div class="hero-sum-trans"><div class="hero-sum-trans-title">${esc(a.label)} → ${esc(b.label)}</div><ul class="hero-sum-list">${items.map(t => `<li>${t}</li>`).join('')}${yt}</ul></div>`);
+      }
+      body += `<div class="kpi-info-block"><div class="kpi-info-label">Penyebab fluktuasi</div>${blocks.join('')}</div>`;
+    }
+  }
+
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:620px;">
+    <h3 style="margin-bottom:4px;">Kesimpulan Grafik — ${esc(levelName)}</h3>
+    <div class="kpi-info-text" style="margin-bottom:16px;color:var(--slate-light);">${trend.length ? `${esc(trend[0].label)} s.d. ${esc(trend[trend.length - 1].label)}, ${trend[trend.length - 1].n} dari ${levelCompanies.length} perusahaan punya data pada periode terbaru` : ''}</div>
+    ${body}
+    <div class="modal-actions"><button class="btn primary" id="close-hero-sum">Tutup</button></div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  backdrop.querySelector('#close-hero-sum').addEventListener('click', close);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+}
+
 function paintDashboard(allStatements) {
   const root = document.getElementById('view-root');
   healOutdatedSnapshots(allStatements);
@@ -3865,17 +4105,8 @@ function paintDashboard(allStatements) {
   const hasSubs = state.companies.some(c => depthOf(c) >= 1);
   const anakCount = state.companies.filter(c => depthOf(c) === 1).length;
   const cucuCount = state.companies.filter(c => depthOf(c) >= 2).length;
-  const buildTrend = (includeDepth) => {
-    const map = {};
-    allStatements.forEach(s => {
-      if (!includeDepth(depthById[s.companyId] || 0)) return;
-      const key = `${s.year}-${String(s.periodIndex).padStart(3, '0')}`;
-      if (!map[key]) map[key] = { label: s.periodLabel, year: s.year, periodIndex: s.periodIndex, aset: 0, laba: 0 };
-      map[key].aset += (s.neraca.totalAset || 0);
-      map[key].laba += (s.labaRugi.labaBersih || 0);
-    });
-    return Object.values(map).sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex).slice(-8);
-  };
+  heroTrendSnapshot = { allStatements, depthById, hasSubs };
+  const buildTrend = (includeDepth) => buildLevelTrend(allStatements, depthById, includeDepth);
   kpiPeriodSnapshot = { latestByCompany, hasSubs };
   const trendAnak = buildTrend(d => hasSubs ? d === 1 : true);
   const trendCucu = hasSubs ? buildTrend(d => d >= 2) : [];
@@ -3894,15 +4125,15 @@ function paintDashboard(allStatements) {
 
   const labels = latestList.map(s => state.companies.find(c => c.id === s.companyId)?.name || '?');
 
-  const { totalAnak: revenueAnak, totalCucu: revenueCucu } = computeByOwnershipLevel(latestByCompany, s => s.labaRugi.pendapatan);
-  const { totalAnak: asetAnak, totalCucu: asetCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.totalAset);
-  const { totalAnak: labaAnak, totalCucu: labaCucu } = computeByOwnershipLevel(latestByCompany, s => s.labaRugi.labaBersih);
-  const { totalAnak: ebitdaAnak, totalCucu: ebitdaCucu } = computeByOwnershipLevel(latestByCompany, s => statementEbitda(s));
-  const { totalAnak: cashAnak, totalCucu: cashCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.kasSetaraKas);
-  const { totalAnak: fcfAnak, totalCucu: fcfCucu } = computeByOwnershipLevel(latestByCompany, s => statementFcf(s).fcf);
-  const { totalAnak: debtAnak, totalCucu: debtCucu } = computeByOwnershipLevel(latestByCompany, s => (s.neraca.totalKewajibanJangkaPanjang || 0) + (s.neraca.hutangPendanaan || 0));
-  const { totalAnak: arAnak, totalCucu: arCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.piutangUsaha);
-  const { totalAnak: apAnak, totalCucu: apCucu } = computeByOwnershipLevel(latestByCompany, s => s.neraca.hutangUsaha);
+  const { totalAnak: revenueAnak, totalCucu: revenueCucu } = computeByOwnershipLevel(latestByCompany, KPI_VALUE_FNS['Revenue']);
+  const { totalAnak: asetAnak, totalCucu: asetCucu } = computeByOwnershipLevel(latestByCompany, KPI_VALUE_FNS['Asset']);
+  const { totalAnak: labaAnak, totalCucu: labaCucu } = computeByOwnershipLevel(latestByCompany, KPI_VALUE_FNS['Net Profit']);
+  const { totalAnak: ebitdaAnak, totalCucu: ebitdaCucu } = computeByOwnershipLevel(latestByCompany, KPI_VALUE_FNS['EBITDA']);
+  const { totalAnak: cashAnak, totalCucu: cashCucu } = computeByOwnershipLevel(latestByCompany, KPI_VALUE_FNS['Cash']);
+  const { totalAnak: fcfAnak, totalCucu: fcfCucu } = computeByOwnershipLevel(latestByCompany, KPI_VALUE_FNS['FCF']);
+  const { totalAnak: debtAnak, totalCucu: debtCucu } = computeByOwnershipLevel(latestByCompany, KPI_VALUE_FNS['Debt']);
+  const { totalAnak: arAnak, totalCucu: arCucu } = computeByOwnershipLevel(latestByCompany, KPI_VALUE_FNS['AR']);
+  const { totalAnak: apAnak, totalCucu: apCucu } = computeByOwnershipLevel(latestByCompany, KPI_VALUE_FNS['AP']);
 
   // ---- Angka konsolidasi untuk widget bento (cakupan sama dengan KPI card:
   // Subsidiary + Sub-Subsidiary; tanpa struktur induk-anak = semua perusahaan) ----
@@ -3939,11 +4170,11 @@ function paintDashboard(allStatements) {
 
   // Kartu grafik tren (satu per level). Angka header tiap kartu = sisi KPI
   // card yang bersesuaian (Pendapatan & Laba Bersih level itu).
-  const heroCardHtml = ({ title, sub, pendapatan, laba, canvasId, hasData, pane }) => `
+  const heroCardHtml = ({ title, sub, pendapatan, laba, canvasId, hasData, pane, levelKey }) => `
       <div class="${pane ? 'dash-hero-pane' : 'dash-hero'}">
         <div class="dash-hero-head">
           <div>
-            <div class="dash-hero-title">${title}</div>
+            <div class="dash-hero-title is-clickable" role="button" tabindex="0" data-hero-level="${levelKey || 'anak'}" title="Klik untuk melihat kesimpulan grafik">${title}<span class="dash-hero-title-hint">${icon('info')}</span></div>
             <div class="dash-hero-sub">${sub}</div>
           </div>
           <div class="dash-hero-stats">
@@ -3981,12 +4212,13 @@ function paintDashboard(allStatements) {
         <div class="dash-hero-panel-title">Konsolidasi Aset &amp; Laba Bersih</div>
         <div class="dash-hero-legend">
           <span class="dash-hero-legend-item"><span class="dot dot-aset"></span>Total Aset</span>
+          <span class="dash-hero-legend-item"><span class="dot dot-pend"></span>Pendapatan</span>
           <span class="dash-hero-legend-item"><span class="dot dot-laba"></span>Laba Bersih</span>
         </div>
       </div>
-      ${heroCardHtml({ title: 'Subsidiary', sub: `Konsolidasi ${anakCount} perusahaan, per periode`, pendapatan: revenueAnak, laba: labaAnak, canvasId: 'dash-hero-chart-anak', hasData: trendAnak.length > 0, pane: true })}
+      ${heroCardHtml({ title: 'Subsidiary', sub: `Konsolidasi ${anakCount} perusahaan, per periode`, pendapatan: revenueAnak, laba: labaAnak, canvasId: 'dash-hero-chart-anak', hasData: trendAnak.length > 0, pane: true, levelKey: 'anak' })}
       <div class="dash-hero-divider"></div>
-      ${heroCardHtml({ title: 'Sub-Subsidiary', sub: `Konsolidasi ${cucuCount} perusahaan, per periode`, pendapatan: revenueCucu, laba: labaCucu, canvasId: 'dash-hero-chart-cucu', hasData: trendCucu.length > 0, pane: true })}
+      ${heroCardHtml({ title: 'Sub-Subsidiary', sub: `Konsolidasi ${cucuCount} perusahaan, per periode`, pendapatan: revenueCucu, laba: labaCucu, canvasId: 'dash-hero-chart-cucu', hasData: trendCucu.length > 0, pane: true, levelKey: 'cucu' })}
     </div>` : `<div class="section-block">
       ${heroCardHtml({ title: 'Tren Aset &amp; Laba Bersih', sub: `Konsolidasi ${state.companies.length} perusahaan, per periode`, pendapatan: sumPendapatan, laba: sumLabaBersih, canvasId: 'dash-hero-chart-anak', hasData: trendAnak.length > 0 })}
     </div>`}
@@ -4100,8 +4332,8 @@ function paintDashboard(allStatements) {
     </div>
   `;
 
-  if (trendAnak.length) renderHeroChart('dash-hero-chart-anak', trendAnak.map(t => t.label), trendAnak.map(t => t.aset), trendAnak.map(t => t.laba), { legend: !hasSubs });
-  if (trendCucu.length) renderHeroChart('dash-hero-chart-cucu', trendCucu.map(t => t.label), trendCucu.map(t => t.aset), trendCucu.map(t => t.laba), { legend: false });
+  if (trendAnak.length) renderHeroChart('dash-hero-chart-anak', trendAnak.map(t => t.label), trendAnak.map(t => t.aset), trendAnak.map(t => t.laba), { legend: !hasSubs, pendData: trendAnak.map(t => t.pend), counts: trendAnak.map(t => t.n) });
+  if (trendCucu.length) renderHeroChart('dash-hero-chart-cucu', trendCucu.map(t => t.label), trendCucu.map(t => t.aset), trendCucu.map(t => t.laba), { legend: false, pendData: trendCucu.map(t => t.pend), counts: trendCucu.map(t => t.n) });
   renderMiniBarChart('chart-laba', labels, latestList.map(s => s.labaRugi.labaBersih || 0), '#C08A3E');
   const groupedColors = isDarkDash ? ['#2F6FE4', '#5B93FF', '#C3DAFF'] : ['#16213A', '#2F6FE4', '#8FB6FF'];
   if (latestList.length) renderBarsChart('chart-neraca-grouped', labels, [
@@ -4119,6 +4351,11 @@ function paintDashboard(allStatements) {
   // pencarian disimpan di state supaya tidak hilang saat data realtime
   // memicu render ulang.
   bindKpiStripInfo(root);
+  root.querySelectorAll('.dash-hero-title.is-clickable').forEach(t => {
+    const open = () => openHeroSummaryModal(t.dataset.heroLevel);
+    t.addEventListener('click', open);
+    t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+  });
   const searchInput = document.getElementById('dash-search-input');
   if (searchInput) {
     const applyFilter = () => {
@@ -6353,7 +6590,7 @@ function paintCompanyDetail(statements) {
               <td>${hasSectionData(s.perubahanModal) ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${s.bukuBesarCount > 0 ? '<span style="color:var(--teal);font-weight:600;">✓ Ada</span>' : '<span style="color:var(--slate-light);">– Belum</span>'}</td>
               <td>${syncProgressCellHtml(statementSyncProgress(s, statements, state.companyDetailId))}</td>
-              <td style="text-align:right;"><button class="btn danger" data-del-statement="${s.id}" data-label="${s.periodLabel}">Hapus</button></td>
+              <td style="text-align:right;"><div class="row-actions"><button class="btn ghost icon-only" data-dl-statement="${s.id}" data-label="${s.periodLabel}" title="Unduh hasil impor periode ini (Excel)" aria-label="Unduh hasil impor ${s.periodLabel}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M5 21h14"/></svg></button><button class="btn danger" data-del-statement="${s.id}" data-label="${s.periodLabel}">Hapus</button></div></td>
             </tr>`).join('')}
           </tbody>
         </table>
@@ -6406,6 +6643,21 @@ function paintCompanyDetail(statements) {
     });
   });
 
+  document.querySelectorAll('[data-dl-statement]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const st = statements.find(x => x.id === btn.dataset.dlStatement);
+      if (!st) return;
+      btn.disabled = true;
+      try {
+        await downloadStatementExcel(state.companyDetailId, st);
+      } catch (err) {
+        toast('Gagal mengunduh hasil impor: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
   document.querySelectorAll('[data-del-statement]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const statementId = btn.dataset.delStatement;
@@ -6421,6 +6673,72 @@ function paintCompanyDetail(statements) {
       }
     });
   });
+}
+
+// Mengunduh hasil impor satu periode sebagai file Excel (.xlsx): sheet
+// Ringkasan, Neraca, Laba Rugi, Arus Kas, Perubahan Modal, dan Buku Besar
+// (daftar akun + transaksi), persis seperti data yang tersimpan di aplikasi.
+async function downloadStatementExcel(companyId, st) {
+  if (typeof XLSX === 'undefined') throw new Error('Pustaka Excel belum termuat, coba muat ulang halaman.');
+  const company = state.companies.find(c => c.id === companyId);
+  const companyName = company ? company.name : 'Perusahaan';
+
+  // Buku Besar: pakai cache sesi bila ada, selain itu ambil dari Firestore.
+  let accounts = ledgerCache[ledgerCacheKey(companyId, st.id)];
+  if (!Array.isArray(accounts) && st.bukuBesarCount > 0) {
+    accounts = await DB.getLedgerAccounts(companyId, st.id);
+    if (Array.isArray(accounts) && accounts.length) ledgerCache[ledgerCacheKey(companyId, st.id)] = accounts;
+  }
+  accounts = Array.isArray(accounts) ? accounts : [];
+
+  const isVal = (v) => typeof v === 'number' || typeof v === 'string';
+  const kvRows = (obj, labels, order) => sortEntriesByOrder(Object.entries(obj || {}), order)
+    .filter(([, v]) => isVal(v))
+    .map(([k, v]) => [(labels && labels[k]) || humanizeKey(k), v]);
+  const addSheet = (wb, name, rows, widths) => {
+    const ws = XLSX.utils.aoa_to_sheet(rows.length ? rows : [['Tidak ada data']]);
+    ws['!cols'] = (widths || [46, 22]).map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  };
+
+  const wb = XLSX.utils.book_new();
+  addSheet(wb, 'Ringkasan', [
+    ['Perusahaan', companyName],
+    ['Periode', st.periodLabel || ''],
+    ['Jenis Periode', st.periodType || ''],
+    ['Tahun', st.year || ''],
+    ['Jumlah Akun Buku Besar', accounts.length],
+    ['Diunduh dari', 'Integrida']
+  ], [28, 40]);
+
+  addSheet(wb, 'Neraca', [['Pos', 'Nilai (Rp)'], ...kvRows(st.neraca, NERACA_LABELS)]);
+  addSheet(wb, 'Laba Rugi', [['Pos', 'Nilai (Rp)'], ...kvRows(st.labaRugi, LABA_RUGI_LABELS, LABA_RUGI_ORDER)]);
+
+  const ak = st.arusKas || {};
+  const akRows = [['Pos', 'Kas Masuk (Rp)', 'Kas Keluar (Rp)', 'Bersih (Rp)']];
+  const akTop = [['Kas Awal', ak.kasAwal], ['Total Aktivitas Operasi', ak.totalOperasi], ['Total Aktivitas Investasi', ak.totalInvestasi], ['Total Aktivitas Pendanaan', ak.totalPendanaan], ['Kenaikan (Penurunan) Kas Bersih', ak.kenaikanKasBersih], ['Kas Akhir', ak.kasAkhir]];
+  akTop.forEach(([l, v]) => { if (isVal(v)) akRows.push([l, '', '', v]); });
+  ['operasi', 'investasi', 'pendanaan'].forEach(act => {
+    const list = (ak.rincian && ak.rincian[act]) || [];
+    if (!list.length) return;
+    akRows.push([]);
+    akRows.push([ARUS_KAS_ACTIVITY_LABELS[act] || act]);
+    list.forEach(b => akRows.push([b.label || humanizeKey(b.key), b.masuk || 0, b.keluar || 0, (b.masuk || 0) - (b.keluar || 0)]));
+  });
+  addSheet(wb, 'Arus Kas', akRows.length > 1 ? akRows : [], [46, 20, 20, 20]);
+
+  addSheet(wb, 'Perubahan Modal', [['Pos', 'Nilai (Rp)'], ...kvRows(st.perubahanModal)]);
+
+  const bbRows = [['Kode Akun', 'Nama Akun', 'Saldo Awal', 'Tanggal', 'Keterangan', 'Debit', 'Kredit', 'Saldo Akhir']];
+  accounts.forEach(a => {
+    bbRows.push([a.code || '', a.name || '', a.saldoAwal || 0, '', '', '', '', a.saldoAkhir || 0]);
+    (a.transaksi || []).forEach(t => bbRows.push(['', '', '', t.tanggal || '', t.keterangan || '', t.debit || 0, t.kredit || 0, '']));
+  });
+  addSheet(wb, 'Buku Besar', accounts.length ? bbRows : [], [12, 38, 18, 14, 48, 18, 18, 18]);
+
+  const safe = (t) => String(t || '').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_');
+  XLSX.writeFile(wb, `Integrida_${safe(companyName)}_${safe(st.periodLabel)}.xlsx`);
+  toast(`Hasil impor periode "${st.periodLabel}" diunduh`, 'success');
 }
 
 // ---------- Import ----------
@@ -6992,10 +7310,229 @@ function renderSettings() {
       <button class="btn primary" id="add-team-user-btn" style="margin-top:12px;">+ Tambah User</button>
     </div>`;
 
-  root.innerHTML = fontCardHTML + (canManageTeam ? teamManagementCardHTML : '') + aboutCardHTML;
+  const backupCardHTML = `
+    <div class="card" style="width:100%;margin-top:16px;">
+      <div class="section-title">Backup</div>
+      <p style="font-size:13px;color:var(--slate);line-height:1.6;margin:0 0 12px 0;">
+        Simpan seluruh data (perusahaan, laporan keuangan &amp; Buku Besar, pengingat, dan hari libur kalender) ke satu file JSON,
+        atau pulihkan dari file backup. Restore <strong>menimpa</strong> data ber-ID sama dan menambahkan yang belum ada;
+        data lain yang tidak ada di file backup tidak dihapus.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn primary" id="backup-json-btn">${icon('download')} Backup JSON</button>
+        <button class="btn ghost" id="restore-json-btn">${icon('upload')} Restore JSON</button>
+        <input type="file" id="restore-json-input" accept=".json,application/json" style="display:none;">
+      </div>
+      <div id="backup-status" style="margin-top:10px;font-size:12.5px;color:var(--slate);min-height:18px;"></div>
+    </div>`;
+
+  root.innerHTML = fontCardHTML + (canManageTeam ? teamManagementCardHTML : '') + backupCardHTML + aboutCardHTML;
 
   wireSettingsFontPills();
+  wireBackupSection();
   if (canManageTeam) wireTeamUserSection();
+}
+
+// ---------- Backup & Restore (JSON) ----------
+// Cakupan: companies (+ statements + ledgerChunks), reminders, dayOff milik
+// pemilik data aktif. Tidak mencakup akun login/User tambahan (terikat ke
+// Firebase Auth). Timestamp Firestore diubah ke {"__ts": ms} supaya aman
+// dalam JSON dan dikembalikan lagi saat restore.
+const BACKUP_FORMAT = 'integrida-backup';
+const BACKUP_VERSION = 1;
+
+function backupEncode(v) {
+  if (v === null || v === undefined) return v;
+  if (v instanceof firebase.firestore.Timestamp) return { __ts: v.toMillis() };
+  if (Array.isArray(v)) return v.map(backupEncode);
+  if (typeof v === 'object') {
+    const out = {};
+    Object.keys(v).forEach(k => { out[k] = backupEncode(v[k]); });
+    return out;
+  }
+  return v;
+}
+
+function backupDecode(v) {
+  if (v === null || v === undefined) return v;
+  if (Array.isArray(v)) return v.map(backupDecode);
+  if (typeof v === 'object') {
+    const keys = Object.keys(v);
+    if (keys.length === 1 && keys[0] === '__ts' && typeof v.__ts === 'number') return firebase.firestore.Timestamp.fromMillis(v.__ts);
+    const out = {};
+    keys.forEach(k => { out[k] = backupDecode(v[k]); });
+    return out;
+  }
+  return v;
+}
+
+async function buildBackupObject(onProgress) {
+  const ownerUid = state.dataOwnerUid;
+  const say = (t) => { if (onProgress) onProgress(t); };
+  const companies = [];
+  say('Membaca data perusahaan…');
+  const cSnap = await db.collection('companies').where('ownerUid', '==', ownerUid).get();
+  let i = 0;
+  for (const cDoc of cSnap.docs) {
+    i++;
+    const data = cDoc.data();
+    say(`Membaca perusahaan ${i}/${cSnap.size}: ${data.name || cDoc.id}…`);
+    const sSnap = await cDoc.ref.collection('statements').get();
+    const statements = [];
+    for (const sDoc of sSnap.docs) {
+      const chSnap = await sDoc.ref.collection('ledgerChunks').get();
+      statements.push({
+        id: sDoc.id,
+        data: backupEncode(sDoc.data()),
+        ledgerChunks: chSnap.docs.map(c => ({ id: c.id, data: backupEncode(c.data()) }))
+      });
+    }
+    companies.push({ id: cDoc.id, data: backupEncode(data), statements });
+  }
+  say('Membaca pengingat & hari libur…');
+  const rSnap = await db.collection('reminders').where('ownerUid', '==', ownerUid).get();
+  const dSnap = await db.collection('dayOff').where('ownerUid', '==', ownerUid).get();
+  return {
+    format: BACKUP_FORMAT,
+    version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    companies,
+    reminders: rSnap.docs.map(d => ({ id: d.id, data: backupEncode(d.data()) })),
+    dayOff: dSnap.docs.map(d => ({ id: d.id, data: backupEncode(d.data()) }))
+  };
+}
+
+function backupCounts(b) {
+  const statements = b.companies.reduce((a, c) => a + (c.statements || []).length, 0);
+  return { companies: b.companies.length, statements, reminders: (b.reminders || []).length, dayOff: (b.dayOff || []).length };
+}
+
+async function runBackupDownload(setStatus) {
+  const backup = await buildBackupObject(setStatus);
+  const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  a.href = url;
+  a.download = `integrida-backup-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  const c = backupCounts(backup);
+  return `Backup selesai: ${c.companies} perusahaan, ${c.statements} periode laporan, ${c.reminders} pengingat, ${c.dayOff} hari libur.`;
+}
+
+// Menulis daftar {ref, data} dalam beberapa batch (maks. 200 operasi / ~4 MB
+// per batch). Tiap fase di-commit tuntas sebelum fase berikutnya karena
+// Firestore Rules untuk statements memeriksa dokumen perusahaannya.
+async function backupCommitWrites(writes, onTick) {
+  let batch = db.batch();
+  let ops = 0, bytes = 0, done = 0;
+  const flush = async () => {
+    if (!ops) return;
+    await batch.commit();
+    batch = db.batch();
+    ops = 0; bytes = 0;
+  };
+  for (const w of writes) {
+    const size = JSON.stringify(w.data).length;
+    if (ops >= 200 || (ops > 0 && bytes + size > 4000000)) await flush();
+    batch.set(w.ref, w.data);
+    ops++; bytes += size; done++;
+    if (onTick && done % 50 === 0) onTick(done, writes.length);
+  }
+  await flush();
+}
+
+async function runRestore(backup, setStatus) {
+  const ownerUid = state.dataOwnerUid;
+  const companyWrites = [], statementWrites = [], chunkWrites = [], otherWrites = [];
+  backup.companies.forEach(c => {
+    const cRef = db.collection('companies').doc(c.id);
+    companyWrites.push({ ref: cRef, data: { ...backupDecode(c.data), ownerUid } });
+    (c.statements || []).forEach(st => {
+      const sRef = cRef.collection('statements').doc(st.id);
+      statementWrites.push({ ref: sRef, data: backupDecode(st.data) });
+      (st.ledgerChunks || []).forEach(ch => {
+        chunkWrites.push({ ref: sRef.collection('ledgerChunks').doc(ch.id), data: backupDecode(ch.data) });
+      });
+    });
+  });
+  (backup.reminders || []).forEach(r => {
+    otherWrites.push({ ref: db.collection('reminders').doc(r.id), data: { ...backupDecode(r.data), ownerUid } });
+  });
+  (backup.dayOff || []).forEach(d => {
+    const date = d.data && d.data.date;
+    if (!date) return;
+    otherWrites.push({ ref: db.collection('dayOff').doc(`${ownerUid}_${date}`), data: { ownerUid, date } });
+  });
+  const phases = [
+    ['perusahaan', companyWrites], ['periode laporan', statementWrites],
+    ['Buku Besar', chunkWrites], ['pengingat & hari libur', otherWrites]
+  ];
+  for (const [label, list] of phases) {
+    if (!list.length) continue;
+    setStatus(`Memulihkan ${label} (${list.length})…`);
+    await backupCommitWrites(list, (done, total) => setStatus(`Memulihkan ${label}: ${done}/${total}…`));
+  }
+}
+
+function wireBackupSection() {
+  const backupBtn = document.getElementById('backup-json-btn');
+  const restoreBtn = document.getElementById('restore-json-btn');
+  const fileInput = document.getElementById('restore-json-input');
+  const statusEl = document.getElementById('backup-status');
+  if (!backupBtn || !restoreBtn || !fileInput) return;
+  const setStatus = (t, isErr) => { if (statusEl) { statusEl.textContent = t; statusEl.style.color = isErr ? 'var(--danger)' : 'var(--slate)'; } };
+  const setBusy = (busy) => { backupBtn.disabled = busy; restoreBtn.disabled = busy; };
+
+  backupBtn.addEventListener('click', async () => {
+    setBusy(true);
+    try {
+      const msg = await runBackupDownload(setStatus);
+      setStatus(msg);
+      toast('Backup JSON berhasil diunduh', 'success');
+    } catch (err) {
+      setStatus('Backup gagal: ' + err.message, true);
+      toast('Backup gagal: ' + err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  restoreBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files && fileInput.files[0];
+    fileInput.value = '';
+    if (!file) return;
+    setBusy(true);
+    try {
+      let backup;
+      try { backup = JSON.parse(await file.text()); }
+      catch (e) { throw new Error('File bukan JSON yang valid.'); }
+      if (!backup || backup.format !== BACKUP_FORMAT || !Array.isArray(backup.companies)) {
+        throw new Error('File ini bukan backup Integrida.');
+      }
+      if (backup.version > BACKUP_VERSION) throw new Error('Versi backup lebih baru dari aplikasi ini.');
+      const c = backupCounts(backup);
+      const when = backup.exportedAt ? new Date(backup.exportedAt).toLocaleString('id-ID') : '-';
+      if (!confirm(`Restore dari backup (${when})?\n\n${c.companies} perusahaan, ${c.statements} periode laporan, ${c.reminders} pengingat, ${c.dayOff} hari libur.\n\nData ber-ID sama akan ditimpa dengan isi backup. Data lain yang tidak ada di backup tidak dihapus.`)) {
+        setStatus('Restore dibatalkan.');
+        return;
+      }
+      await runRestore(backup, setStatus);
+      setStatus(`Restore selesai: ${c.companies} perusahaan, ${c.statements} periode laporan, ${c.reminders} pengingat, ${c.dayOff} hari libur.`);
+      toast('Restore selesai', 'success');
+      try { state.companies = await DB.getCompanies(state.dataOwnerUid); } catch (e) { /* diperbarui otomatis oleh listener */ }
+    } catch (err) {
+      setStatus('Restore gagal: ' + err.message, true);
+      toast('Restore gagal: ' + err.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  });
 }
 
 function wireSettingsFontPills() {
@@ -9387,6 +9924,21 @@ function renderHeroChart(canvasId, labels, asetData, labaData, opts = {}) {
         },
         {
           type: 'line',
+          label: 'Pendapatan',
+          data: opts.pendData || [],
+          borderColor: '#2E9E6B',
+          backgroundColor: '#2E9E6B',
+          borderWidth: 2.5,
+          tension: 0.35,
+          pointRadius: 4,
+          pointHoverRadius: 5,
+          pointBackgroundColor: isDark ? '#161D2E' : '#FFFFFF',
+          pointBorderColor: '#2E9E6B',
+          pointBorderWidth: 2,
+          order: 1
+        },
+        {
+          type: 'line',
           label: 'Laba Bersih',
           data: labaData,
           borderColor: '#C08A3E',
@@ -9398,7 +9950,6 @@ function renderHeroChart(canvasId, labels, asetData, labaData, opts = {}) {
           pointBackgroundColor: isDark ? '#161D2E' : '#FFFFFF',
           pointBorderColor: '#C08A3E',
           pointBorderWidth: 2,
-          yAxisID: 'y1',
           order: 1
         }
       ]
@@ -9414,14 +9965,14 @@ function renderHeroChart(canvasId, labels, asetData, labaData, opts = {}) {
         },
         tooltip: {
           callbacks: {
-            label: (item) => `${item.dataset.label}: ${formatIDR(item.raw)}`
+            label: (item) => `${item.dataset.label}: ${formatIDR(item.raw)}`,
+            afterBody: (items) => (opts.counts && items.length && opts.counts[items[0].dataIndex]) ? `Perusahaan terhitung: ${opts.counts[items[0].dataIndex]}` : ''
           }
         }
       },
       scales: {
         x: { grid: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 11.5 } } },
-        y: { grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 11 }, callback: v => formatIDRShort(v) } },
-        y1: { position: 'right', grid: { display: false }, border: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 11 }, callback: v => formatIDRShort(v) } }
+        y: { grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 11 }, callback: v => formatIDRShort(v) } }
       }
     }
   });
