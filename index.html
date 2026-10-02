@@ -866,17 +866,85 @@ tbody tr:hover{background:var(--surface-2);}
   box-shadow:0 14px 34px -20px rgba(47,111,228,.30),0 2px 8px rgba(22,33,58,.04);
 }
 [data-theme="dark"] .bento-card{box-shadow:0 14px 34px -20px rgba(0,0,0,.65);}
-.span-3{grid-column:span 3;}.span-4{grid-column:span 4;}.span-6{grid-column:span 6;}.span-12{grid-column:span 12;}
+.span-3{grid-column:span 3;}.span-4{grid-column:span 4;}.span-6{grid-column:span 6;}.span-8{grid-column:span 8;}.span-12{grid-column:span 12;}
 @media(max-width:1100px){.span-3{grid-column:span 6;}}
-@media(max-width:900px){.span-6,.span-4{grid-column:span 12;}}
+@media(max-width:900px){.span-6,.span-4,.span-8{grid-column:span 12;}}
+.liq-card{display:flex;flex-direction:column;}
+.liq-card .gauge-body{flex:1;justify-content:center;}
+.liq-card .ratio-tile,.liq-card .liq-mini{text-align:center;}
+/* ---------- Pop-up rasio likuiditas (lq-*) ---------- */
+.lq-hero{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+.lq-value{font-family:var(--font-display);font-size:36px;font-weight:700;line-height:1.1;letter-spacing:-.01em;color:var(--text);font-variant-numeric:tabular-nums;}
+.lq-badge{display:inline-flex;align-items:center;gap:7px;padding:5px 13px;border-radius:100px;font-size:12.5px;font-weight:600;}
+.lq-badge i{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block;}
+.lq-badge.t-up{background:rgba(47,158,110,.14);color:var(--success);}
+.lq-badge.t-up2{background:rgba(47,111,228,.14);color:#2F6FE4;}
+.lq-badge.t-mid{background:rgba(224,179,106,.22);color:#9A6B16;}
+.lq-badge.t-down{background:rgba(226,105,93,.14);color:var(--danger);}
+[data-theme="dark"] .lq-badge.t-mid{color:#E0B36A;}
+.lq-scale-wrap{position:relative;margin-top:4px;}
+.lq-scale{display:flex;gap:3px;height:10px;}
+.lq-scale span{flex:1;opacity:.9;}
+.lq-scale span:first-child{border-radius:6px 0 0 6px;}
+.lq-scale span:last-child{border-radius:0 6px 6px 0;}
+.lq-scale .t-down{background:var(--danger);}
+.lq-scale .t-mid{background:#E0B36A;}
+.lq-scale .t-up{background:var(--success);}
+.lq-scale .t-up2{background:#2F6FE4;}
+.lq-marker{position:absolute;top:-3px;width:16px;height:16px;border-radius:50%;background:var(--card);border:3px solid var(--text);transform:translateX(-50%);box-shadow:0 1px 4px rgba(0,0,0,.25);}
+.lq-zone-labels{display:flex;gap:3px;margin-top:6px;margin-bottom:4px;}
+.lq-zone-labels>div{flex:1;text-align:center;font-size:11px;line-height:1.35;color:var(--slate-light);min-width:0;}
+.lq-zone-labels b{display:block;font-weight:600;color:var(--text);font-size:11.5px;}
+.lq-section-label{font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--slate-light);margin:18px 0 8px;}
+.lq-eq{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap;}
+.lq-eq-box{flex:1 1 110px;border:1px solid var(--border);border-radius:10px;padding:9px 12px;background:var(--surface-2);min-width:0;}
+.lq-eq-box span{display:block;font-size:11px;color:var(--slate-light);margin-bottom:2px;}
+.lq-eq-box b{font-size:14px;color:var(--text);overflow-wrap:anywhere;}
+.lq-eq-res{border-color:#2F6FE4;}
+.lq-op{display:flex;align-items:center;font-size:18px;font-weight:600;color:var(--slate-light);}
+.lq-plain{margin-top:10px;font-size:13.5px;line-height:1.55;color:var(--text);}
+.lq-callout{margin-top:16px;padding:12px 14px;border-radius:10px;border-left:4px solid var(--slate-light);background:var(--surface-2);font-size:13px;line-height:1.6;color:var(--text);}
+.lq-callout-title{font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--slate-light);margin-bottom:4px;}
+.lq-callout.t-up{border-left-color:var(--success);}
+.lq-callout.t-up2{border-left-color:#2F6FE4;}
+.lq-callout.t-mid{border-left-color:#E0B36A;}
+.lq-callout.t-down{border-left-color:var(--danger);}
+.lq-info-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.lq-info-card{border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:var(--surface-2);min-width:0;}
+.lq-info-head{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--text);margin-bottom:8px;}
+.lq-info-ico{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(47,111,228,.12);color:#2F6FE4;flex:none;}
+.lq-info-text{font-size:12.5px;line-height:1.6;color:var(--slate);}
+@media(max-width:520px){.lq-info-cards{grid-template-columns:1fr;}}
+.lq-about{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0;font-size:12.5px;line-height:1.55;}
+.lq-about dt{color:var(--slate-light);font-weight:600;}
+.lq-about dd{margin:0;color:var(--text);}
+@media(max-width:520px){.lq-value{font-size:30px;}.lq-op{display:none;}.lq-about{grid-template-columns:1fr;gap:2px;}.lq-about dd{margin-bottom:8px;}}
+.liq-compare-wrap{position:relative;height:340px;}
+.liq-title-info{display:inline-flex;align-items:center;gap:8px;}
+.liq-info-btn{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--slate-light);background:transparent;color:var(--slate-light);font-family:var(--font-display);font-size:11px;font-weight:700;font-style:italic;line-height:1;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;transition:color .15s,border-color .15s,background .15s;}
+.liq-info-btn:hover,.liq-info-btn:focus-visible{color:#2F6FE4;border-color:#2F6FE4;background:rgba(47,111,228,.1);outline:none;}
+.liq-compare-note{font-size:11px;line-height:1.5;color:var(--slate-light);margin-top:8px;}
 @media(max-width:600px){.span-3{grid-column:span 12;}.bento-card{padding:16px;border-radius:18px;}}
 .bento-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
 .bento-title{font-family:var(--font-display);font-weight:700;font-size:14px;color:var(--text);}
 .bento-pill{font-size:11px;font-weight:600;padding:3px 10px;border-radius:100px;background:var(--teal-light);color:var(--teal);white-space:nowrap;}
 .bento-chart{position:relative;height:230px;}
-.profit-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) minmax(0,2fr);gap:16px;}
-.profit-row .bento-head{flex-direction:column;align-items:flex-start;gap:6px;}
-.profit-compare-chart{height:165px;}
+.profit-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;}
+.profit-head .bento-title{grid-column:2;text-align:center;font-size:17px;}
+.profit-head .bento-pill{grid-column:3;justify-self:end;}
+@media(max-width:900px){.profit-head{grid-template-columns:1fr;justify-items:center;gap:6px;}.profit-head .bento-title{grid-column:1;font-size:16px;}.profit-head .bento-pill{grid-column:1;justify-self:center;}}
+.profit-card{padding:18px 24px 14px;}
+.profit-body{display:grid;grid-template-columns:minmax(0,1fr) 1px minmax(0,1fr);column-gap:24px;align-items:center;}
+.profit-left{display:flex;flex-direction:column;min-width:0;align-self:stretch;}
+.profit-pane-title{font-family:var(--font-display);font-weight:700;font-size:16.5px;text-align:left;}
+.profit-left .profit-rings{flex:1;align-content:center;margin-top:8px;}
+.profit-rings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;min-width:0;}
+.profit-divider{background:var(--border);align-self:stretch;}
+.profit-ring-col{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:12px;min-width:0;}
+.profit-ring-label{font-family:var(--font-display);font-size:13.5px;font-weight:600;color:var(--text);text-align:center;}
+.profit-chart-col{min-width:0;padding:4px 0;}
+.profit-sub{font-size:12.5px;font-weight:600;color:var(--text);margin-bottom:8px;}
+.profit-compare-chart{height:215px;}
 .profit-compare-bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 12px;margin-bottom:6px;}
 .profit-compare-legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:11.5px;font-weight:600;color:var(--slate);}
 .pc-modes{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
@@ -892,8 +960,9 @@ tbody tr:hover{background:var(--surface-2);}
 [data-theme="dark"] .profit-compare-legend .dot-gross{background:linear-gradient(180deg,#8FB6FF,#5B93FF);}
 [data-theme="dark"] .profit-compare-legend .dot-op{border-color:#8FB6FF;}
 [data-theme="dark"] .profit-compare-legend .dot-net{border-color:#E4EEFF;}
-@media(max-width:1100px){.profit-row{grid-template-columns:repeat(3,minmax(0,1fr));}.profit-row>.bento-card:last-child{grid-column:1 / -1;}}
-@media(max-width:600px){.profit-row{grid-template-columns:minmax(0,1fr);}}
+@media(max-width:1200px){.profit-body{grid-template-columns:minmax(0,1fr);row-gap:16px;}.profit-divider{height:1px;width:auto;align-self:auto;}}
+@media(max-width:900px){.profit-card{padding:16px 16px 12px;}.profit-pane-title{font-size:15px;}}
+@media(max-width:600px){.profit-rings{grid-template-columns:minmax(0,1fr);gap:16px;}}
 .bento-empty{display:flex;align-items:center;justify-content:center;height:100%;min-height:80px;color:var(--slate-light);font-size:13px;}
 .ring-wrap{position:relative;flex-shrink:0;}
 .ring-wrap svg{display:block;}
@@ -923,6 +992,10 @@ tbody tr:hover{background:var(--surface-2);}
 .liq-mini-cap{font-size:10px;line-height:1.3;color:var(--slate-light);margin-top:3px;}
 .liq-mini-verdict{font-size:10.5px;font-weight:600;margin-top:5px;}
 .liq-mini-verdict.liq-neutral{color:var(--slate-light);font-weight:500;}
+.liq-mini.is-clickable{cursor:pointer;transition:border-color .15s;}
+.liq-mini.is-clickable:hover{border-color:#2F6FE4;}
+.liq-mini.is-clickable:focus-visible{outline:2px solid #2F6FE4;outline-offset:2px;}
+.liq-info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;}
 @media(max-width:600px){.liq-mini-grid{grid-template-columns:minmax(0,1fr);}}
 .ratio-tile.is-clickable{cursor:pointer;}
 .ratio-tile.is-clickable:hover{border-color:#2F6FE4;}
@@ -4345,65 +4418,249 @@ function openNpmPctInfo(kind, labaName = 'Laba Bersih') {
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
 }
 
-// ---------- Penjelasan & kesimpulan Current Ratio (klik chip Current Ratio) ----------
+// ---------- Pop-up penjelasan rasio likuiditas (Current, Quick, Cash, Cash Turnover, Operating Cash Flow) ----------
+// Satu template bersama: angka & status di atas, skala posisi, asal angka, kesimpulan, lalu penjelasan rasio.
 let crDetailSnapshot = { hasSubs: false, asetLancar: 0, kewLancar: 0, ratio: null, count: 0 };
+let liqDetailSnapshot = { count: 0, hasSubs: false };
 
-function openCurrentRatioModal() {
-  const { hasSubs, asetLancar, kewLancar, ratio, count } = crDetailSnapshot;
-  const esc = (t) => escapeHTML(String(t));
-  const fmt = formatIDRKPI;
-  const modalKerja = asetLancar - kewLancar;
-  const up = (t) => `<span class="fl-up">●</span> ${t}`;
-  const warn = (t) => `<span class="fl-down">●</span> ${t}`;
-  const mid = (t) => `<span class="fl-flat">●</span> ${t}`;
-
-  let status, detail, extra = '';
-  if (!count) {
-    status = mid('<b>Belum ada data</b>');
-    detail = 'Belum ada laporan neraca yang bisa dianalisis.';
-  } else if (ratio === null) {
-    status = mid('<b>Tidak dapat dihitung</b>');
-    detail = 'Tidak ada kewajiban lancar pada periode terbaru, sehingga rasio tidak bisa dihitung. Pastikan akun kewajiban lancar sudah ada di Buku Besar yang diimpor.';
-  } else if (ratio < 1) {
-    status = warn('<b>Likuiditas ketat</b>');
-    detail = `Aset lancar (${fmt(asetLancar)}) tidak cukup menutup kewajiban lancar (${fmt(kewLancar)}), kekurangannya sekitar ${fmt(Math.abs(modalKerja))}. Perusahaan berisiko kesulitan melunasi kewajiban jangka pendek tanpa tambahan dana, penagihan piutang, atau pendanaan baru.`;
-  } else if (ratio < 1.5) {
-    status = mid('<b>Cukup, namun margin pengaman tipis</b>');
-    detail = `Aset lancar masih menutup kewajiban lancar dengan kelebihan ${fmt(modalKerja)}. Kondisi aman untuk saat ini, tetapi penurunan kas atau piutang yang tertagih bisa cepat menekan likuiditas.`;
-  } else if (ratio <= 3) {
-    status = up('<b>Sehat</b>');
-    detail = `Aset lancar menutup kewajiban lancar ${ratio.toLocaleString('id-ID', { maximumFractionDigits: 2 })} kali, dengan kelebihan ${fmt(modalKerja)}. Kemampuan membayar kewajiban jangka pendek tergolong baik.`;
-  } else {
-    status = up('<b>Sangat likuid</b>');
-    detail = `Aset lancar jauh melampaui kewajiban lancar (kelebihan ${fmt(modalKerja)}). Likuiditas sangat aman, tetapi kas atau piutang yang terlalu besar bisa berarti dana belum dimanfaatkan secara produktif (misalnya untuk ekspansi, investasi, atau pelunasan utang berbunga).`;
-    if (ratio > 10) extra = 'Angka setinggi ini biasanya terjadi karena kewajiban lancar sangat kecil. Pastikan data hutang usaha, hutang pendanaan, dan kewajiban lancar lainnya sudah lengkap diimpor.';
+function lqScalePos(v, zones) {
+  if (v === null || v === undefined || !isFinite(v)) return null;
+  const n = zones.length;
+  if (v <= zones[0].lo) return 0;
+  if (v >= zones[n - 1].hi) return 100;
+  for (let i = 0; i < n; i++) {
+    const z = zones[i];
+    if (v < z.hi || i === n - 1) {
+      const f = Math.min(1, Math.max(0, (v - z.lo) / (z.hi - z.lo)));
+      return (i + f) / n * 100;
+    }
   }
+  return 100;
+}
 
-  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:560px;">
-    <h3 style="margin-bottom:4px;">Current Ratio</h3>
-    <div class="kpi-info-text" style="margin-bottom:16px;color:var(--slate-light);">${hasSubs ? 'Konsolidasi Subsidiary &amp; Sub-Subsidiary' : 'Semua perusahaan'}</div>
-    <div class="npm-sum">
-      <div class="npm-sum-box"><span>Aset Lancar</span><b>${esc(fmt(asetLancar))}</b></div>
-      <div class="npm-sum-box"><span>Kewajiban Lancar</span><b>${esc(fmt(kewLancar))}</b></div>
-      <div class="npm-sum-box"><span>Current Ratio</span><b>${esc(fmtXDash(ratio))}</b></div>
-      <div class="npm-sum-box"><span>Modal Kerja Bersih</span><b>${esc(fmt(modalKerja))}</b></div>
+function showLiquidityModal(cfg) {
+  const esc = (t) => escapeHTML(String(t));
+  const pos = cfg.hasValue ? lqScalePos(cfg.marker, cfg.zones) : null;
+  const markerLeft = pos === null ? null : Math.min(97, Math.max(3, pos));
+  const eq = cfg.eq;
+
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal lq-modal" style="width:560px;">
+    <h3 style="margin-bottom:2px;">${cfg.title}</h3>
+    <div class="kpi-info-text" style="margin-bottom:16px;color:var(--slate-light);">${cfg.hasSubs ? 'Konsolidasi Subsidiary &amp; Sub-Subsidiary' : 'Semua perusahaan'}</div>
+
+    <div class="lq-hero">
+      <div class="lq-value">${esc(cfg.valueText)}</div>
+      <span class="lq-badge t-${cfg.tone}"><i></i>${cfg.label}</span>
     </div>
-    <div class="kpi-info-block"><div class="kpi-info-label">Penjelasan</div>
-      <div class="kpi-info-text">Current Ratio mengukur kemampuan melunasi kewajiban jangka pendek (jatuh tempo dalam 1 tahun) menggunakan aset lancar seperti kas, piutang, dan persediaan.</div>
-      <div class="kpi-info-text" style="margin-top:6px;"><b>Rumus:</b> Aset Lancar &divide; Kewajiban Lancar. Acuan umum 1,5x s.d. 3x (berbeda tiap industri).</div>
+
+    <div class="lq-scale-wrap">
+      <div class="lq-scale">${cfg.zones.map(z => `<span class="t-${z.tone}"></span>`).join('')}</div>
+      ${markerLeft === null ? '' : `<div class="lq-marker" style="left:${markerLeft.toFixed(1)}%;"></div>`}
     </div>
-    <div class="kpi-info-block"><div class="kpi-info-label">Kesimpulan</div>
-      <div class="kpi-info-text" style="margin-bottom:4px;">${status}</div>
-      <div class="kpi-info-text">${detail}</div>
-      ${extra ? `<div class="kpi-info-warn">${extra}</div>` : ''}
+    <div class="lq-zone-labels">${cfg.zones.map(z => `<div><b>${z.name}</b><span>${z.range}</span></div>`).join('')}</div>
+
+    <div class="lq-section-label">Rumus</div>
+    <div class="lq-eq">
+      <div class="lq-eq-box"><span>${esc(eq.a[0])}</span><b>${esc(eq.a[1])}</b></div>
+      <div class="lq-op">&divide;</div>
+      <div class="lq-eq-box"><span>${esc(eq.b[0])}</span><b>${esc(eq.b[1])}</b></div>
+      <div class="lq-op">=</div>
+      <div class="lq-eq-box lq-eq-res"><span>Hasil</span><b>${esc(cfg.valueText)}</b></div>
     </div>
-    <div class="modal-actions"><button class="btn primary" id="close-cr-detail">Tutup</button></div>
+    ${cfg.sentence ? `<div class="lq-plain">${cfg.sentence}</div>` : ''}
+
+    <div class="lq-callout t-${cfg.tone}">
+      <div class="lq-callout-title">Kesimpulan</div>
+      <div>${cfg.detail}</div>
+    </div>
+
+    <div class="lq-section-label">Tentang rasio ini</div>
+    <div class="lq-info-cards">
+      <div class="lq-info-card">
+        <div class="lq-info-head"><span class="lq-info-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/></svg></span>Fokus Analisis</div>
+        <div class="lq-info-text">${cfg.fokus}</div>
+      </div>
+      <div class="lq-info-card">
+        <div class="lq-info-head"><span class="lq-info-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-5"/><circle cx="12" cy="18" r="1" fill="currentColor"/></svg></span>Kriteria Penilaian</div>
+        <div class="lq-info-text">${cfg.interpretasi}</div>
+      </div>
+    </div>
+
+    <div class="modal-actions"><button class="btn primary" id="close-liq-detail">Tutup</button></div>
   </div></div>`);
   document.body.appendChild(backdrop);
   const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
-  backdrop.querySelector('#close-cr-detail').addEventListener('click', close);
+  backdrop.querySelector('#close-liq-detail').addEventListener('click', close);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+}
+
+function openCurrentRatioModal() {
+  const { hasSubs, asetLancar, kewLancar, ratio, count } = crDetailSnapshot;
+  const fmt = formatIDRKPI;
+  const idr2 = (n) => n.toLocaleString('id-ID', { maximumFractionDigits: 2 });
+  const modalKerja = asetLancar - kewLancar;
+  const hasValue = !!count && ratio !== null && ratio !== undefined && isFinite(ratio);
+
+  let tone = 'mid', label, detail, sentence = '';
+  if (!count) {
+    label = 'Belum ada data';
+    detail = 'Belum ada laporan neraca yang bisa dianalisis.';
+  } else if (!hasValue) {
+    label = 'Tidak dapat dihitung';
+    detail = 'Tidak ada kewajiban lancar pada periode terbaru, sehingga rasio tidak bisa dihitung. Pastikan akun kewajiban lancar sudah ada di Buku Besar yang diimpor.';
+  } else {
+    sentence = `Setiap Rp1 kewajiban lancar dijamin sekitar <b>Rp${idr2(ratio)}</b> aset lancar.`;
+    if (ratio < 1) {
+      tone = 'down'; label = 'Likuiditas ketat';
+      detail = `Aset lancar (${fmt(asetLancar)}) tidak cukup menutup kewajiban lancar (${fmt(kewLancar)}), kekurangannya sekitar ${fmt(Math.abs(modalKerja))}. Perusahaan berisiko kesulitan melunasi kewajiban jangka pendek tanpa tambahan dana, penagihan piutang, atau pendanaan baru.`;
+    } else if (ratio < 1.5) {
+      tone = 'mid'; label = 'Cukup, margin tipis';
+      detail = `Aset lancar masih menutup kewajiban lancar dengan kelebihan ${fmt(modalKerja)}. Aman untuk saat ini, tetapi penurunan kas atau piutang yang tertagih bisa cepat menekan likuiditas.`;
+    } else if (ratio <= 3) {
+      tone = 'up'; label = 'Sehat';
+      detail = `Aset lancar menutup kewajiban lancar ${idr2(ratio)} kali, dengan kelebihan ${fmt(modalKerja)}. Kemampuan membayar kewajiban jangka pendek tergolong baik.`;
+    } else {
+      tone = 'up2'; label = 'Sangat likuid';
+      detail = `Aset lancar jauh melampaui kewajiban lancar (kelebihan ${fmt(modalKerja)}). Likuiditas sangat aman, tetapi kas atau piutang yang terlalu besar bisa berarti dana belum dimanfaatkan secara produktif (misalnya untuk ekspansi, investasi, atau pelunasan utang berbunga).`;
+    }
+  }
+
+  showLiquidityModal({
+    title: 'Current Ratio (Rasio Lancar)', hasSubs, hasValue, marker: ratio, tone, label, detail, sentence,
+    valueText: fmtXDash(hasValue ? ratio : null),
+    zones: [
+      { lo: 0, hi: 1, tone: 'down', name: 'Ketat', range: '&lt; 1x' },
+      { lo: 1, hi: 1.5, tone: 'mid', name: 'Cukup', range: '1 – 1,5x' },
+      { lo: 1.5, hi: 3, tone: 'up', name: 'Sehat', range: '1,5 – 3x' },
+      { lo: 3, hi: 6, tone: 'up2', name: 'Sangat likuid', range: '&gt; 3x' }
+    ],
+    eq: { a: ['Aset Lancar', fmt(asetLancar || 0)], b: ['Kewajiban Lancar', fmt(kewLancar || 0)] },
+    fokus: 'Kemampuan menutup kewajiban jangka pendek (jatuh tempo &lt; 1 tahun) dengan seluruh aset lancar: kas, piutang, dan persediaan.',
+    formula: 'Aset Lancar &divide; Kewajiban Lancar',
+    interpretasi: 'Ideal &ge; 1; semakin tinggi semakin aman, tetapi terlalu tinggi bisa berarti aset tidak produktif. Acuan umum 1,5x s.d. 3x (berbeda tiap industri).'
+  });
+}
+
+function openLiquidityRatioModal(key) {
+  const d = liqDetailSnapshot;
+  const fmt = formatIDRKPI;
+  const idr2 = (n) => n.toLocaleString('id-ID', { maximumFractionDigits: 2 });
+  const val = d[key === 'turnover' ? 'turnover' : key];
+  const hasValue = !!d.count && val !== null && val !== undefined && isFinite(val);
+  const noKew = 'Tidak ada kewajiban lancar pada periode terbaru, sehingga rasio tidak bisa dihitung.';
+  let tone = 'mid', label = '', detail = '', sentence = '';
+  let cfg;
+
+  if (key === 'quick') {
+    const liquid = (d.asetLancar || 0) - (d.persediaan || 0);
+    cfg = {
+      title: 'Quick Ratio (Rasio Cepat / Acid-Test)',
+      zones: [
+        { lo: 0, hi: 1, tone: 'down', name: 'Waspada', range: '&lt; 1x' },
+        { lo: 1, hi: 3, tone: 'up', name: 'Aman', range: '&ge; 1x' }
+      ],
+      eq: { a: ['Aset Lancar − Persediaan', fmt(liquid)], b: ['Kewajiban Lancar', fmt(d.kewLancar || 0)] },
+      fokus: 'Likuiditas tanpa persediaan, karena persediaan butuh waktu untuk dijual.',
+      formula: '(Aset Lancar &minus; Persediaan) &divide; Kewajiban Lancar',
+      interpretasi: 'Lebih konservatif dari Current Ratio; ideal sekitar 1x atau lebih.'
+    };
+    if (hasValue) {
+      sentence = `Setiap Rp1 kewajiban lancar dijamin sekitar <b>Rp${idr2(val)}</b> aset lancar di luar persediaan.`;
+      if (val < 1) { tone = 'down'; label = 'Waspada'; detail = `Aset lancar di luar persediaan (${fmt(liquid)}) belum cukup menutup kewajiban lancar (${fmt(d.kewLancar)}). Perusahaan masih bergantung pada penjualan persediaan atau pendanaan tambahan untuk melunasi kewajiban jangka pendek.`; }
+      else { tone = 'up'; label = 'Aman'; detail = `Aset lancar di luar persediaan (${fmt(liquid)}) menutup kewajiban lancar ${idr2(val)} kali, sehingga kewajiban jangka pendek tetap terlindungi tanpa harus menjual persediaan.`; }
+    }
+  } else if (key === 'cash') {
+    cfg = {
+      title: 'Cash Ratio (Rasio Kas)',
+      zones: [
+        { lo: 0, hi: 0.2, tone: 'down', name: 'Rendah', range: '&lt; 0,2x' },
+        { lo: 0.2, hi: 1, tone: 'up', name: 'Aman', range: '0,2 – 1x' },
+        { lo: 1, hi: 2, tone: 'up2', name: 'Sangat kuat', range: '&gt; 1x' }
+      ],
+      eq: { a: ['Kas & Setara Kas', fmt(d.kas || 0)], b: ['Kewajiban Lancar', fmt(d.kewLancar || 0)] },
+      fokus: 'Kemampuan membayar kewajiban jangka pendek hanya dengan kas dan setara kas.',
+      formula: '(Kas + Setara Kas) &divide; Kewajiban Lancar',
+      interpretasi: 'Paling ketat; jarang tinggi karena perusahaan biasanya mengalokasikan kas ke investasi/operasional. Di atas 0,2x sudah tergolong aman.'
+    };
+    if (hasValue) {
+      sentence = `Setiap Rp1 kewajiban lancar dijamin sekitar <b>Rp${idr2(val)}</b> kas dan setara kas.`;
+      if (val < 0.2) { tone = 'down'; label = 'Rendah'; detail = `Kas dan setara kas (${fmt(d.kas)}) hanya menutup ${idr2(val)} kali kewajiban lancar. Untuk rasio ini angka rendah wajar, tetapi perusahaan perlu memastikan piutang tertagih tepat waktu agar kewajiban jangka pendek tetap terbayar.`; }
+      else if (val <= 1) { tone = 'up'; label = 'Aman'; detail = `Kas dan setara kas (${fmt(d.kas)}) menutup ${idr2(val)} kali kewajiban lancar, memberi bantalan kas yang cukup tanpa bergantung pada piutang atau persediaan.`; }
+      else { tone = 'up2'; label = 'Sangat kuat'; detail = `Kas dan setara kas (${fmt(d.kas)}) sudah melampaui seluruh kewajiban lancar. Posisi sangat aman, tetapi kas yang terlalu besar bisa berarti dana belum dimanfaatkan secara produktif.`; }
+    }
+  } else if (key === 'turnover') {
+    cfg = {
+      title: 'Cash Turnover Ratio (Rasio Perputaran Kas)',
+      zones: [
+        { lo: 0, hi: 1, tone: 'down', name: 'Idle', range: '&lt; 1x' },
+        { lo: 1, hi: 3, tone: 'up', name: 'Produktif', range: '&ge; 1x' }
+      ],
+      eq: { a: ['Pendapatan', fmt(d.pendapatan || 0)], b: ['Kas & Setara Kas', fmt(d.kas || 0)] },
+      fokus: 'Efisiensi penggunaan kas dalam menghasilkan penjualan.',
+      formula: 'Penjualan Bersih (Pendapatan) &divide; Kas &amp; Setara Kas',
+      interpretasi: 'Tinggi &rarr; kas digunakan produktif; rendah &rarr; kas idle. Tidak ada batas baku; 1x dipakai sebagai acuan indikatif, jadi bandingkan juga dengan periode sejenis atau rata-rata industri.'
+    };
+    if (hasValue) {
+      sentence = `Setiap Rp1 kas dan setara kas berputar menjadi sekitar <b>Rp${idr2(val)}</b> pendapatan.`;
+      if (val < 1) { tone = 'down'; label = 'Idle'; detail = `Setiap Rp1 kas dan setara kas hanya menghasilkan sekitar Rp${idr2(val)} pendapatan pada periode ini, artinya kas cenderung menganggur.`; }
+      else { tone = 'up'; label = 'Produktif'; detail = `Setiap Rp1 kas dan setara kas berputar menghasilkan sekitar Rp${idr2(val)} pendapatan pada periode ini, artinya kas digunakan secara produktif.`; }
+    }
+  } else {
+    cfg = {
+      title: 'Operating Cash Flow Ratio',
+      zones: [
+        { lo: -1, hi: 0, tone: 'down', name: 'Negatif', range: '&lt; 0x' },
+        { lo: 0, hi: 1, tone: 'down', name: 'Waspada', range: '0 – 1x' },
+        { lo: 1, hi: 2, tone: 'up', name: 'Aman', range: '&ge; 1x' }
+      ],
+      eq: { a: ['Arus Kas Operasi', fmt(d.opsCF || 0)], b: ['Kewajiban Lancar', fmt(d.kewLancar || 0)] },
+      fokus: 'Kemampuan arus kas operasional menutup kewajiban jangka pendek.',
+      formula: 'Arus Kas Operasi &divide; Kewajiban Lancar',
+      interpretasi: 'Lebih realistis karena berbasis arus kas aktual, bukan hanya saldo aset. Ideal &ge; 1x.'
+    };
+    if (d.count && !d.hasOpsCF) {
+      label = 'Belum ada data arus kas';
+      detail = 'Arus kas operasi belum tersedia pada periode terbaru. Pastikan Buku Besar periode tersebut sudah diimpor.';
+    } else if (hasValue) {
+      if (val < 0) { sentence = 'Aktivitas operasional sedang <b>menyerap kas</b>, bukan menghasilkannya.'; tone = 'down'; label = 'Arus kas operasi negatif'; detail = `Aktivitas operasional menyerap kas sebesar ${fmt(Math.abs(d.opsCF))}. Kewajiban jangka pendek harus dibiayai dari saldo kas atau pendanaan, bukan dari operasional.`; }
+      else {
+        sentence = `Setiap Rp1 kewajiban lancar ditutup sekitar <b>Rp${idr2(val)}</b> arus kas operasi.`;
+        if (val < 1) { tone = 'down'; label = 'Waspada'; detail = `Arus kas operasi (${fmt(d.opsCF)}) baru menutup ${idr2(val)} kali kewajiban lancar. Operasional belum cukup membiayai kewajiban jangka pendek secara mandiri.`; }
+        else { tone = 'up'; label = 'Aman'; detail = `Arus kas operasi (${fmt(d.opsCF)}) menutup kewajiban lancar ${idr2(val)} kali, artinya operasional sendiri mampu membiayai kewajiban jangka pendek.`; }
+      }
+    }
+  }
+
+  if (!d.count) { tone = 'mid'; label = 'Belum ada data'; detail = 'Belum ada laporan neraca yang bisa dianalisis.'; sentence = ''; }
+  else if (!hasValue && !label) {
+    label = 'Tidak dapat dihitung';
+    detail = key === 'turnover' ? 'Kas dan setara kas bernilai nol pada periode terbaru, sehingga rasio tidak bisa dihitung.' : noKew;
+  }
+
+  showLiquidityModal({
+    ...cfg, hasSubs: d.hasSubs, hasValue, marker: val, tone, label, detail, sentence,
+    valueText: fmtXDash(hasValue ? val : null)
+  });
+}
+
+function openLiqChartInfoModal() {
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:480px;">
+    <h3 style="margin-bottom:14px;">Cara membaca grafik</h3>
+    <div class="kpi-info-block"><div class="kpi-info-label">Skala logaritmik</div>
+      <div class="kpi-info-text">Skala logaritmik dipakai agar rasio kecil (mis. Cash Turnover) dan rasio besar tetap terbaca dalam satu grafik.</div></div>
+    <div class="kpi-info-block"><div class="kpi-info-label">Angka di ujung batang</div>
+      <div class="kpi-info-text">Angka di ujung batang adalah nilai sebenarnya, bukan nilai pada skala logaritmik.</div></div>
+    <div class="kpi-info-block"><div class="kpi-info-label">Garis putus-putus</div>
+      <div class="kpi-info-text">Garis putus-putus menandai acuan sehat: Current Ratio, Quick Ratio, Cash Turnover &amp; OCF &ge; 1x, Cash Ratio &ge; 0,2x.</div></div>
+    <div class="modal-actions"><button class="btn primary" id="close-liq-chart-info">Tutup</button></div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  backdrop.querySelector('#close-liq-chart-info').addEventListener('click', close);
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
 }
 
@@ -4502,12 +4759,14 @@ function paintDashboard(allStatements) {
   const cashRatioDash = cKewLancar ? cKas / cKewLancar : null;
   const cashTurnoverDash = cKas ? cPendapatan / cKas : null;
   const ocfRatioDash = (cKewLancar && hasOpsCF) ? cOpsCF / cKewLancar : null;
+  liqDetailSnapshot = { count: scopeList.length, hasSubs, asetLancar: cAsetLancar, kewLancar: cKewLancar, persediaan: cPersediaan, kas: cKas, pendapatan: cPendapatan, opsCF: cOpsCF, hasOpsCF,
+    quick: quickRatioDash, cash: cashRatioDash, turnover: cashTurnoverDash, ocf: ocfRatioDash };
   const liqVerdict = (ok, yes, no) => `<span class="${ok ? 'fl-up' : 'fl-down'}">${ok ? yes : no}</span>`;
   const liqTilesHtml = `<div class="liq-mini-grid">
-    <div class="liq-mini"><div class="ratio-tile-label" title="Quick Ratio">Quick Ratio</div><div class="liq-mini-value">${fmtXDash(quickRatioDash)}</div><div class="liq-mini-cap">(Aset Lancar &minus; Persediaan) &divide; Kewajiban Lancar</div><div class="liq-mini-verdict">${quickRatioDash === null ? '–' : liqVerdict(quickRatioDash >= 1, 'Aman (≥ 1x)', 'Waspada (&lt; 1x)')}</div></div>
-    <div class="liq-mini"><div class="ratio-tile-label" title="Cash Ratio">Cash Ratio</div><div class="liq-mini-value">${fmtXDash(cashRatioDash)}</div><div class="liq-mini-cap">Kas &amp; Setara Kas &divide; Kewajiban Lancar</div><div class="liq-mini-verdict">${cashRatioDash === null ? '–' : liqVerdict(cashRatioDash >= 0.2, 'Aman (≥ 0,2x)', 'Rendah (&lt; 0,2x)')}</div></div>
-    <div class="liq-mini"><div class="ratio-tile-label" title="Cash Turnover Ratio">Cash Turnover Ratio</div><div class="liq-mini-value">${fmtXDash(cashTurnoverDash)}</div><div class="liq-mini-cap">Pendapatan &divide; Kas &amp; Setara Kas</div><div class="liq-mini-verdict liq-neutral">${cashTurnoverDash === null ? '–' : 'Makin tinggi, kas makin produktif'}</div></div>
-    <div class="liq-mini"><div class="ratio-tile-label" title="Operating Cash Flow Ratio">Operating Cash Flow Ratio</div><div class="liq-mini-value">${fmtXDash(ocfRatioDash)}</div><div class="liq-mini-cap">Arus Kas Operasi &divide; Kewajiban Lancar</div><div class="liq-mini-verdict">${ocfRatioDash === null ? '–' : liqVerdict(ocfRatioDash >= 1, 'Aman (≥ 1x)', 'Waspada (&lt; 1x)')}</div></div>
+    <div class="liq-mini is-clickable" data-liq-detail="quick" role="button" tabindex="0" title="Klik untuk penjelasan &amp; kesimpulan"><div class="ratio-tile-label" title="Quick Ratio">Quick Ratio</div><div class="liq-mini-value">${fmtXDash(quickRatioDash)}</div><div class="liq-mini-verdict">${quickRatioDash === null ? '–' : liqVerdict(quickRatioDash >= 1, 'Aman (≥ 1x)', 'Waspada (&lt; 1x)')}</div></div>
+    <div class="liq-mini is-clickable" data-liq-detail="cash" role="button" tabindex="0" title="Klik untuk penjelasan &amp; kesimpulan"><div class="ratio-tile-label" title="Cash Ratio">Cash Ratio</div><div class="liq-mini-value">${fmtXDash(cashRatioDash)}</div><div class="liq-mini-verdict">${cashRatioDash === null ? '–' : liqVerdict(cashRatioDash >= 0.2, 'Aman (≥ 0,2x)', 'Rendah (&lt; 0,2x)')}</div></div>
+    <div class="liq-mini is-clickable" data-liq-detail="turnover" role="button" tabindex="0" title="Klik untuk penjelasan &amp; kesimpulan"><div class="ratio-tile-label" title="Cash Turnover Ratio">Cash Turnover Ratio</div><div class="liq-mini-value">${fmtXDash(cashTurnoverDash)}</div><div class="liq-mini-verdict">${cashTurnoverDash === null ? '–' : liqVerdict(cashTurnoverDash >= 1, 'Produktif (≥ 1x)', 'Idle (&lt; 1x)')}</div></div>
+    <div class="liq-mini is-clickable" data-liq-detail="ocf" role="button" tabindex="0" title="Klik untuk penjelasan &amp; kesimpulan"><div class="ratio-tile-label" title="Operating Cash Flow Ratio">Operating Cash Flow Ratio</div><div class="liq-mini-value">${fmtXDash(ocfRatioDash)}</div><div class="liq-mini-verdict">${ocfRatioDash === null ? '–' : liqVerdict(ocfRatioDash >= 1, 'Aman (≥ 1x)', 'Waspada (&lt; 1x)')}</div></div>
   </div>`;
 
   // ---- Kartu Net, Operational & Gross Profit Margin ----
@@ -4590,64 +4849,69 @@ function paintDashboard(allStatements) {
     </div>`}
 
     <div class="dash-bento">
-      <div class="span-12 profit-row">
-      <div class="bento-card">
-        <div class="bento-head"><div class="bento-title">Net Profit Margin</div><span class="bento-pill">${hasSubs ? 'Konsolidasi' : 'Semua Perusahaan'}</span></div>
-        <div class="gauge-body">
+      <div class="bento-card span-12 profit-card">
+        <div class="bento-head profit-head"><div class="bento-title">Rasio Profitabilitas</div></div>
+        <div class="profit-body">
+        <div class="profit-left">
+        <div class="profit-pane-title">Profit Margin</div>
+        <div class="profit-rings">
+        <div class="profit-ring-col">
+          <div class="profit-ring-label">Net Profit Margin</div>
           <div class="npm-ring-click" data-npm-detail role="button" tabindex="0" title="Klik untuk rincian per perusahaan" aria-label="Rincian Net Profit Margin per perusahaan">${dashRingHtml({
             pct: npm, size: 150, stroke: 12, id: 'npm',
-            center: `<div class="ring-value" style="color:${(npm || 0) < 0 ? 'var(--danger)' : 'inherit'};">${fmtPctDash(npm)}</div><div class="ring-caption">Net Profit Margin</div>`
+            center: `<div class="ring-value" style="color:${(npm || 0) < 0 ? 'var(--danger)' : 'inherit'};">${fmtPctDash(npm)}</div>`
           })}</div>
         </div>
-      </div>
-
-      <div class="bento-card">
-        <div class="bento-head"><div class="bento-title">Operational Profit Margin</div><span class="bento-pill">${hasSubs ? 'Konsolidasi' : 'Semua Perusahaan'}</span></div>
-        <div class="gauge-body">
+        <div class="profit-ring-col">
+          <div class="profit-ring-label">Operational Profit Margin</div>
           <div class="npm-ring-click" data-opm-detail role="button" tabindex="0" title="Klik untuk rincian per perusahaan" aria-label="Rincian Operational Profit Margin per perusahaan">${dashRingHtml({
             pct: opm, size: 150, stroke: 12, id: 'opm',
-            center: `<div class="ring-value" style="color:${(opm || 0) < 0 ? 'var(--danger)' : 'inherit'};">${fmtPctDash(opm)}</div><div class="ring-caption">Operational Profit Margin</div>`
+            center: `<div class="ring-value" style="color:${(opm || 0) < 0 ? 'var(--danger)' : 'inherit'};">${fmtPctDash(opm)}</div>`
           })}</div>
         </div>
-      </div>
-
-      <div class="bento-card">
-        <div class="bento-head"><div class="bento-title">Gross Profit Margin</div><span class="bento-pill">${hasSubs ? 'Konsolidasi' : 'Semua Perusahaan'}</span></div>
-        <div class="gauge-body">
+        <div class="profit-ring-col">
+          <div class="profit-ring-label">Gross Profit Margin</div>
           <div class="npm-ring-click" data-gpm-detail role="button" tabindex="0" title="Klik untuk rincian per perusahaan" aria-label="Rincian Gross Profit Margin per perusahaan">${dashRingHtml({
             pct: gpm, size: 150, stroke: 12, id: 'gpm',
-            center: `<div class="ring-value" style="color:${(gpm || 0) < 0 ? 'var(--danger)' : 'inherit'};">${fmtPctDash(gpm)}</div><div class="ring-caption">Gross Profit Margin</div>`
+            center: `<div class="ring-value" style="color:${(gpm || 0) < 0 ? 'var(--danger)' : 'inherit'};">${fmtPctDash(gpm)}</div>`
           })}</div>
+        </div>
+        </div>
+        </div>
+        <div class="profit-divider"></div>
+        <div class="profit-chart-col">
+          <div class="profit-sub">Perbandingan Gross, Operational &amp; Net Profit</div>
+          ${pcTrend.length ? `<div class="profit-compare-bar">
+            <div class="profit-compare-legend">
+              <span class="dash-hero-legend-item"><span class="dot dot-gross"></span>Gross Profit</span>
+              <span class="dash-hero-legend-item"><span class="dot dot-op"></span>Operational Profit</span>
+              <span class="dash-hero-legend-item"><span class="dot dot-net"></span>Net Profit</span>
+            </div>
+            <div class="pc-modes" role="group" aria-label="Model grafik">${PROFIT_COMPARE_MODES.map(m => `<button type="button" class="pc-mode${m.key === profitCompareMode ? ' active' : ''}" data-pc-mode="${m.key}" aria-pressed="${m.key === profitCompareMode}">${m.label}</button>`).join('')}</div>
+          </div>` : ''}
+          <div class="bento-chart profit-compare-chart">${pcTrend.length ? '<canvas id="chart-profit-compare"></canvas>' : emptyBento}</div>
+        </div>
         </div>
       </div>
 
-      <div class="bento-card">
-        <div class="bento-head"><div class="bento-title">Perbandingan Gross, Operational &amp; Net Profit</div></div>
-        ${pcTrend.length ? `<div class="profit-compare-bar">
-          <div class="profit-compare-legend">
-            <span class="dash-hero-legend-item"><span class="dot dot-gross"></span>Gross Profit</span>
-            <span class="dash-hero-legend-item"><span class="dot dot-op"></span>Operational Profit</span>
-            <span class="dash-hero-legend-item"><span class="dot dot-net"></span>Net Profit</span>
-          </div>
-          <div class="pc-modes" role="group" aria-label="Model grafik">${PROFIT_COMPARE_MODES.map(m => `<button type="button" class="pc-mode${m.key === profitCompareMode ? ' active' : ''}" data-pc-mode="${m.key}" aria-pressed="${m.key === profitCompareMode}">${m.label}</button>`).join('')}</div>
-        </div>` : ''}
-        <div class="bento-chart profit-compare-chart">${pcTrend.length ? '<canvas id="chart-profit-compare"></canvas>' : emptyBento}</div>
-      </div>
-      </div>
-
-      <div class="bento-card span-4">
-        <div class="bento-head"><div class="bento-title">Likuiditas</div><span class="bento-pill">${hasSubs ? 'Konsolidasi' : 'Semua Perusahaan'}</span></div>
+      <div class="bento-card span-4 liq-card">
+        <div class="bento-head"><div class="bento-title">Rasio Likuiditas</div><span class="bento-pill">${hasSubs ? 'Konsolidasi' : 'Semua Perusahaan'}</span></div>
         <div class="gauge-body">
           <div class="ratio-tile is-clickable" style="width:100%;" data-cr-detail role="button" tabindex="0" title="Klik untuk penjelasan &amp; kesimpulan">
             <div class="ratio-tile-label">Current Ratio</div>
             <div class="ratio-tile-value">${fmtXDash(currentRatio)}</div>
-            <div class="ratio-tile-cap">Aset Lancar &divide; Kewajiban Lancar</div>
+            <div class="liq-mini-verdict" style="font-size:11.5px;">${currentRatio === null ? '–' : (currentRatio < 1 ? '<span class="fl-down">Waspada (&lt; 1x)</span>' : currentRatio < 1.5 ? '<span class="fl-flat">Cukup (1 – 1,5x)</span>' : currentRatio <= 3 ? '<span class="fl-up">Sehat (1,5 – 3x)</span>' : '<span class="fl-up">Sangat likuid (&gt; 3x)</span>')}</div>
           </div>
           ${liqTilesHtml}
         </div>
       </div>
 
-      <div class="bento-card span-4">
+      <div class="bento-card span-8">
+        <div class="bento-head"><div class="bento-title liq-title-info">Perbandingan Rasio Likuiditas<button type="button" class="liq-info-btn" data-liq-chart-info aria-label="Cara membaca grafik" title="Cara membaca grafik">i</button></div><span class="bento-pill">${hasSubs ? 'Konsolidasi' : 'Semua Perusahaan'}</span></div>
+        <div class="liq-compare-wrap">${liqDetailSnapshot.count ? '<canvas id="chart-liq-compare"></canvas>' : emptyBento}</div>
+      </div>
+
+      <div class="bento-card span-6">
         <div class="bento-head"><div class="bento-title">Return Aset</div><span class="bento-pill">${hasSubs ? 'Konsolidasi' : 'Semua Perusahaan'}</span></div>
         <div class="gauge-body">
           ${dashRingHtml({
@@ -4658,7 +4922,7 @@ function paintDashboard(allStatements) {
         </div>
       </div>
 
-      <div class="bento-card span-4">
+      <div class="bento-card span-6">
         <div class="bento-head"><div class="bento-title">Struktur Pendanaan</div><span class="bento-pill">Terhadap Aset</span></div>
         <div class="mini-rings">
           <div class="mini-ring">
@@ -4770,10 +5034,23 @@ function paintDashboard(allStatements) {
   // Pencarian perusahaan pada tabel ringkasan (filter sisi klien). Nilai
   // pencarian disimpan di state supaya tidak hilang saat data realtime
   // memicu render ulang.
+  if (liqDetailSnapshot.count) renderLiquidityCompareChart('chart-liq-compare', [
+    { label: 'Current Ratio', value: currentRatio, bench: 1, color: '#2F6FE4' },
+    { label: 'Quick Ratio', value: quickRatioDash, bench: 1, color: '#5B93FF' },
+    { label: 'Cash Ratio', value: cashRatioDash, bench: 0.2, color: '#8FB6FF' },
+    { label: 'Cash Turnover', value: cashTurnoverDash, bench: 1, color: '#C08A3E' },
+    { label: 'Operating Cash Flow', value: ocfRatioDash, bench: 1, color: '#12306B' }
+  ]);
   bindKpiStripInfo(root);
   root.querySelectorAll('[data-cr-detail]').forEach(t => {
     t.addEventListener('click', openCurrentRatioModal);
     t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCurrentRatioModal(); } });
+  });
+  root.querySelectorAll('[data-liq-chart-info]').forEach(b => b.addEventListener('click', openLiqChartInfoModal));
+  root.querySelectorAll('[data-liq-detail]').forEach(t => {
+    const open = () => openLiquidityRatioModal(t.getAttribute('data-liq-detail'));
+    t.addEventListener('click', open);
+    t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
   });
   root.querySelectorAll('[data-npm-detail]').forEach(t => {
     t.addEventListener('click', openNpmDetailModal);
@@ -10590,6 +10867,97 @@ function renderMiniBarChart(canvasId, labels, data, color) {
         y: { grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: "system-ui, 'Segoe UI', Roboto, sans-serif", size: 10 }, callback: v => formatIDRShort(v) } }
       }
     }
+  });
+}
+
+// Grafik perbandingan rasio likuiditas (batang horizontal, skala logaritmik simetris
+// karena rentang nilai antar rasio bisa sangat jauh: 1,6x s.d. ratusan x).
+function renderLiquidityCompareChart(canvasId, items) {
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const txt = isDark ? '#C9D3E8' : '#16213A';
+  const grid = isDark ? 'rgba(255,255,255,.08)' : 'rgba(22,33,58,.08)';
+  const tf = (v) => v === null || v === undefined || !isFinite(v) ? 0 : Math.sign(v) * Math.log10(1 + Math.abs(v));
+  const fmtVal = (v) => v === null || v === undefined || !isFinite(v) ? '–' : v.toLocaleString('id-ID', { maximumFractionDigits: 2 }) + 'x';
+  const colors = items.map(it => {
+    if (it.value === null || it.value === undefined || !isFinite(it.value)) return '#9AA5B8';
+    if (it.bench !== null && it.value < it.bench) return '#E2695D';
+    return it.color;
+  });
+  const data = items.map(it => tf(it.value));
+  const maxAbs = Math.max(1, ...data.map(Math.abs));
+  const lim = Math.ceil(maxAbs * 1.25 * 2) / 2;
+  const hasNeg = data.some(v => v < 0);
+
+  const overlay = {
+    id: 'liqOverlay',
+    afterDatasetsDraw(chart) {
+      const { ctx: c, scales: { x }, getDatasetMeta } = chart;
+      const meta = chart.getDatasetMeta(0);
+      c.save();
+      meta.data.forEach((bar, i) => {
+        const it = items[i];
+        // garis acuan sehat
+        if (it.bench !== null) {
+          const bx = x.getPixelForValue(tf(it.bench));
+          c.strokeStyle = isDark ? '#E4EEFF' : '#16213A';
+          c.lineWidth = 1.5;
+          c.setLineDash([4, 3]);
+          c.beginPath();
+          c.moveTo(bx, bar.y - bar.height / 2 - 3);
+          c.lineTo(bx, bar.y + bar.height / 2 + 3);
+          c.stroke();
+          c.setLineDash([]);
+        }
+        // nilai sebenarnya di ujung batang
+        const v = it.value;
+        const neg = v !== null && v !== undefined && v < 0;
+        c.fillStyle = txt;
+        c.font = '600 12px ' + (getComputedStyle(document.body).fontFamily || 'sans-serif');
+        c.textBaseline = 'middle';
+        c.textAlign = neg ? 'right' : 'left';
+        const ex = x.getPixelForValue(tf(v));
+        c.fillText(fmtVal(v), ex + (neg ? -8 : 8), bar.y);
+      });
+      c.restore();
+    }
+  };
+
+  state.chartInstances[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: items.map(it => it.label), datasets: [{ data, backgroundColor: colors, borderRadius: 6, barThickness: 22 }] },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      layout: { padding: { right: 56, left: hasNeg ? 56 : 0 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (item) => {
+              const it = items[item.dataIndex];
+              const lines = ['Nilai: ' + fmtVal(it.value)];
+              lines.push(it.bench === null ? 'Acuan: tidak ada batas baku' : 'Acuan sehat: ≥ ' + fmtVal(it.bench));
+              return lines;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          min: hasNeg ? -lim : 0, max: lim,
+          grid: { color: grid }, border: { display: false },
+          afterBuildTicks(axis) {
+            const cands = [-1000, -100, -10, -1, 0, 1, 10, 100, 1000, 10000];
+            axis.ticks = cands.filter(v => tf(v) >= axis.min - 1e-9 && tf(v) <= axis.max + 1e-9).map(v => ({ value: tf(v), orig: v }));
+          },
+          ticks: { color: txt, callback: (val) => { const o = Math.sign(val) * (Math.pow(10, Math.abs(val)) - 1); return Math.round(o).toLocaleString('id-ID') + 'x'; } }
+        },
+        y: { grid: { display: false }, border: { display: false }, ticks: { color: txt, font: { weight: '600' } } }
+      }
+    },
+    plugins: [overlay]
   });
 }
 
