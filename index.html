@@ -819,6 +819,39 @@ tbody tr:hover{background:var(--surface-2);}
 .hero-sum-pct{font-weight:600;color:var(--slate);}
 .hero-sum-bar{height:4px;border-radius:2px;background:var(--surface-2);margin-top:3px;overflow:hidden;}
 .hero-sum-bar span{display:block;height:100%;background:#2F6FE4;}
+.fl-table td.fl-period{font-weight:600;color:var(--slate);white-space:nowrap;vertical-align:middle;}
+.fl-table td.num{vertical-align:middle;}
+.fl-cell{display:inline-block;border:1px solid transparent;background:transparent;border-radius:6px;padding:4px 8px;font:inherit;font-size:12.5px;font-weight:600;color:var(--text);cursor:pointer;text-align:right;line-height:1.25;}
+.fl-cell small{display:block;font-size:11px;font-weight:500;color:var(--slate-light);}
+.fl-cell:hover,.fl-cell.active{background:var(--surface-2);border-color:var(--border);}
+.fl-note-btn{padding:0 5px;font-size:12px;color:var(--slate-light);}
+.fl-up{color:var(--success);}
+.fl-down{color:var(--danger);}
+.fl-flat{color:var(--slate-light);}
+.fl-detail td{background:var(--surface-2);font-size:12.5px;line-height:1.6;white-space:normal !important;text-align:left !important;}
+.fl-d .hero-sum-note{margin-bottom:4px;}
+.npm-ring-click{cursor:pointer;border-radius:50%;transition:transform .15s ease;}
+.npm-ring-click:hover{transform:scale(1.03);}
+.npm-ring-click:focus-visible{outline:2px solid #2F6FE4;outline-offset:3px;}
+.npm-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;}
+.npm-sum-box{border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--surface-2);}
+.npm-sum-box span{display:block;font-size:11px;color:var(--slate-light);margin-bottom:2px;}
+.npm-sum-box b{font-size:15px;color:var(--text);}
+.npm-contrib{margin-bottom:14px;}
+.npm-contrib-title{font-size:12px;font-weight:600;color:var(--slate);margin-bottom:6px;}
+.npm-contrib-bar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--border);}
+.npm-contrib-bar span{display:block;height:100%;min-width:2px;}
+.npm-contrib-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px;}
+.npm-contrib-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--slate);min-width:0;}
+.npm-contrib-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;}
+.npm-contrib-item b{color:var(--text);font-weight:600;}
+.npm-contrib-note{margin-top:6px;font-size:11px;color:var(--slate-light);}
+.npm-table th+th,.npm-table td+td{border-left:1px solid var(--border);}
+.npm-table th.num,.npm-table td.num{text-align:center;}
+.npm-pct-btn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-left:4px;padding:0;border:1px solid var(--border);border-radius:50%;background:var(--surface-2);color:var(--slate);font:inherit;font-size:10px;font-weight:700;line-height:1;cursor:pointer;vertical-align:middle;}
+.npm-pct-btn:hover{border-color:#2F6FE4;color:#2F6FE4;}
+.npm-amt{display:inline-block;min-width:76px;text-align:right;}
+.npm-pct{display:inline-block;min-width:46px;margin-left:10px;text-align:right;font-weight:600;color:var(--slate);}
 .dash-hero-sub{font-size:12.5px;color:var(--slate);margin-top:2px;}
 .dash-hero-stats{display:flex;gap:26px;flex-wrap:wrap;}
 .dash-hero-stat-label{font-size:12px;color:var(--slate);}
@@ -833,14 +866,34 @@ tbody tr:hover{background:var(--surface-2);}
   box-shadow:0 14px 34px -20px rgba(47,111,228,.30),0 2px 8px rgba(22,33,58,.04);
 }
 [data-theme="dark"] .bento-card{box-shadow:0 14px 34px -20px rgba(0,0,0,.65);}
-.span-3{grid-column:span 3;}.span-6{grid-column:span 6;}.span-12{grid-column:span 12;}
+.span-3{grid-column:span 3;}.span-4{grid-column:span 4;}.span-6{grid-column:span 6;}.span-12{grid-column:span 12;}
 @media(max-width:1100px){.span-3{grid-column:span 6;}}
-@media(max-width:900px){.span-6{grid-column:span 12;}}
+@media(max-width:900px){.span-6,.span-4{grid-column:span 12;}}
 @media(max-width:600px){.span-3{grid-column:span 12;}.bento-card{padding:16px;border-radius:18px;}}
 .bento-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
 .bento-title{font-family:var(--font-display);font-weight:700;font-size:14px;color:var(--text);}
 .bento-pill{font-size:11px;font-weight:600;padding:3px 10px;border-radius:100px;background:var(--teal-light);color:var(--teal);white-space:nowrap;}
 .bento-chart{position:relative;height:230px;}
+.profit-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) minmax(0,2fr);gap:16px;}
+.profit-row .bento-head{flex-direction:column;align-items:flex-start;gap:6px;}
+.profit-compare-chart{height:165px;}
+.profit-compare-bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 12px;margin-bottom:6px;}
+.profit-compare-legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:11.5px;font-weight:600;color:var(--slate);}
+.pc-modes{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.pc-mode{border:0;background:transparent;font:inherit;font-size:11px;font-weight:600;color:var(--slate-light);padding:3px 9px;cursor:pointer;}
+.pc-mode+.pc-mode{border-left:1px solid var(--border);}
+.pc-mode:hover{color:var(--text);}
+.pc-mode.active{background:var(--surface-2);color:var(--text);}
+.pc-mode:focus-visible{outline:2px solid #2F6FE4;outline-offset:-2px;}
+.profit-compare-legend .dot{width:9px;height:9px;border-radius:50%;display:inline-block;box-sizing:border-box;}
+.profit-compare-legend .dot-gross{background:linear-gradient(180deg,#8FB6FF,#2F6FE4);}
+.profit-compare-legend .dot-op{background:var(--card);border:2px solid #2F6FE4;}
+.profit-compare-legend .dot-net{background:var(--card);border:2px solid #12306B;}
+[data-theme="dark"] .profit-compare-legend .dot-gross{background:linear-gradient(180deg,#8FB6FF,#5B93FF);}
+[data-theme="dark"] .profit-compare-legend .dot-op{border-color:#8FB6FF;}
+[data-theme="dark"] .profit-compare-legend .dot-net{border-color:#E4EEFF;}
+@media(max-width:1100px){.profit-row{grid-template-columns:repeat(3,minmax(0,1fr));}.profit-row>.bento-card:last-child{grid-column:1 / -1;}}
+@media(max-width:600px){.profit-row{grid-template-columns:minmax(0,1fr);}}
 .bento-empty{display:flex;align-items:center;justify-content:center;height:100%;min-height:80px;color:var(--slate-light);font-size:13px;}
 .ring-wrap{position:relative;flex-shrink:0;}
 .ring-wrap svg{display:block;}
@@ -850,9 +903,30 @@ tbody tr:hover{background:var(--surface-2);}
 .ring-caption{font-size:11px;color:var(--slate);margin-top:2px;}
 .gauge-body{display:flex;flex-direction:column;align-items:center;gap:12px;}
 .gauge-note{font-size:12px;color:var(--slate);text-align:center;line-height:1.45;}
-.gauge-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;}
-.gauge-chip{font-size:12px;color:var(--slate);background:var(--teal-light);border-radius:100px;padding:5px 12px;white-space:nowrap;}
-.gauge-chip b{color:var(--teal);font-family:var(--font-display);margin-left:3px;}
+.npm-legend{width:100%;display:flex;flex-direction:column;gap:7px;}
+.npm-legend-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--slate);}
+.npm-legend-row b{margin-left:auto;color:var(--text);font-weight:600;}
+.npm-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.npm-insight{width:100%;display:flex;flex-direction:column;gap:7px;border-top:1px solid var(--border);padding-top:12px;margin-top:2px;}
+.npm-insight-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:12px;color:var(--slate);}
+.npm-insight-row span{white-space:nowrap;}
+.npm-insight-row b{display:flex;gap:3px;min-width:0;color:var(--text);font-weight:600;white-space:nowrap;}
+.npm-ins-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+.ratio-tile{border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:var(--surface-2);transition:border-color .15s ease;}
+.ratio-tile-label{font-size:12px;color:var(--slate-light);}
+.ratio-tile-value{font-family:var(--font-display);font-size:26px;font-weight:700;line-height:1.2;color:var(--text);}
+.ratio-tile-cap{font-size:11.5px;color:var(--slate);}
+.liq-mini-grid{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.liq-mini{border:1px solid var(--border);border-radius:10px;padding:9px 10px;background:var(--surface-2);min-width:0;}
+.liq-mini .ratio-tile-label{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.liq-mini-value{font-family:var(--font-display);font-size:16px;font-weight:700;line-height:1.25;color:var(--text);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.liq-mini-cap{font-size:10px;line-height:1.3;color:var(--slate-light);margin-top:3px;}
+.liq-mini-verdict{font-size:10.5px;font-weight:600;margin-top:5px;}
+.liq-mini-verdict.liq-neutral{color:var(--slate-light);font-weight:500;}
+@media(max-width:600px){.liq-mini-grid{grid-template-columns:minmax(0,1fr);}}
+.ratio-tile.is-clickable{cursor:pointer;}
+.ratio-tile.is-clickable:hover{border-color:#2F6FE4;}
+.ratio-tile.is-clickable:focus-visible{outline:2px solid #2F6FE4;outline-offset:2px;}
 .mini-rings{display:flex;justify-content:space-around;align-items:flex-start;gap:12px;padding-top:6px;}
 .mini-ring{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;text-align:center;}
 .mini-ring-label{font-size:12px;color:var(--slate);}
@@ -3601,6 +3675,22 @@ function dashRingHtml({ pct, size = 120, stroke = 12, id, center = '', from = '#
   </div>`;
 }
 
+// Cincin konsentris (terluar -> terdalam). Tiap cincin: { pct, color }.
+function dashMultiRingHtml({ rings, size = 180, stroke = 11, gap = 4, center = '' }) {
+  const half = size / 2;
+  const svg = rings.map((rg, i) => {
+    const r = (size - stroke) / 2 - i * (stroke + gap);
+    const c = 2 * Math.PI * r;
+    const p = (rg.pct == null || isNaN(rg.pct)) ? 0 : Math.max(0, Math.min(100, rg.pct));
+    return `<circle cx="${half}" cy="${half}" r="${r}" fill="none" style="stroke:var(--border);" stroke-width="${stroke}"/>` +
+      (p > 0 ? `<circle cx="${half}" cy="${half}" r="${r}" fill="none" stroke="${rg.color}" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${(c * p / 100).toFixed(2)} ${c.toFixed(2)}" transform="rotate(-90 ${half} ${half})"/>` : '');
+  }).join('');
+  return `<div class="ring-wrap" style="width:${size}px;height:${size}px;">
+    <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">${svg}</svg>
+    <div class="ring-center">${center}</div>
+  </div>`;
+}
+
 // Nama level kepemilikan yang tampil di bawah judul tiap KPI card.
 // Penjelasan rumus & tujuan tiap metrik pada strip KPI Dashboard — tampil
 // di modal saat judul kolom (Asset, Revenue, dst.) diklik.
@@ -3967,7 +4057,7 @@ function openHeroSummaryModal(levelKey) {
   const pctTxt = (v) => v === null ? '' : ` (${v >= 0 ? '+' : ''}${v.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%)`;
   const dirTxt = (d) => d >= 0 ? 'naik' : 'turun';
   const ytdNote = (pt) => (pt.periodType && pt.periodType !== 'tahunan')
-    ? `<li class="hero-sum-note">${esc(pt.label)} adalah akumulasi 1 Januari s.d. akhir periode (bukan setahun penuh), sedangkan Total Aset adalah posisi di akhir periode. Karena itu perbandingan Pendapatan &amp; Laba dengan periode sebelumnya belum setara (panjang periodenya berbeda).</li>` : '';
+    ? `<div class="hero-sum-note">${esc(pt.label)} adalah akumulasi 1 Januari s.d. akhir periode (bukan setahun penuh), sedangkan Total Aset adalah posisi di akhir periode. Karena itu perbandingan Pendapatan &amp; Laba dengan periode sebelumnya belum setara (panjang periodenya berbeda).</div>` : '';
 
   let body = '';
   if (!trend.length) {
@@ -3977,18 +4067,71 @@ function openHeroSummaryModal(levelKey) {
     const prev = trend.length > 1 ? trend[trend.length - 2] : null;
     const peak = (key) => trend.reduce((m, t) => (t[key] > m[key] ? t : m), trend[0]);
 
-    // ---- 1. Kesimpulan ringkas ----
-    const marginLast = last.pend ? last.laba / last.pend * 100 : null;
-    const turnover = last.aset ? last.pend / last.aset : null;
-    const concl = [];
-    concl.push(`Total Aset tertinggi pada <b>${esc(peak('aset').label)}</b> (${fmt(peak('aset').aset)}); posisi terbaru ${esc(last.label)} sebesar ${fmt(last.aset)}.`);
+    // ---- 1. Kesimpulan ringkas (tabel; klik angka untuk penjelasan) ----
+    const arrow = (d) => d > 0 ? '<span class="fl-up">▲</span>' : (d < 0 ? '<span class="fl-down">▼</span>' : '<span class="fl-flat">▬</span>');
+    const cellAmt = (v) => fmt(Math.abs(v)).replace(/^Rp /, '').replace(' Juta', ' Jt');
+    const valAmt = (v) => fmt(v).replace(/^Rp /, '').replace(' Juta', ' Jt');
+    const pctShort = (v) => v === null ? '' : `${v >= 0 ? '+' : '−'}${Math.abs(v).toLocaleString('id-ID', { maximumFractionDigits: 1 })}%`;
+    const mkCell = (key, main, sub) => `<button type="button" class="fl-cell" data-fl="${key}">${main}<small>${sub}</small></button>`;
+    const marginOf = (t) => t.pend ? t.laba / t.pend * 100 : null;
+    const mTxtS = (m) => m === null ? '–' : m.toLocaleString('id-ID', { maximumFractionDigits: 1 }) + '%';
     const lastPartial = !!(last.periodType && last.periodType !== 'tahunan');
-    concl.push(`Pendapatan tertinggi pada <b>${esc(peak('pend').label)}</b> (${fmt(peak('pend').pend)}); ${prev ? (lastPartial && prev.periodType === 'tahunan' ? `${esc(last.label)} baru akumulasi ${last.endMonth} bulan (${fmt(last.pend)}) sedangkan ${esc(prev.label)} setahun penuh (${fmt(prev.pend)}), jadi belum setara untuk dibandingkan.` : `${esc(last.label)} ${dirTxt(last.pend - prev.pend)} ${fmt(Math.abs(last.pend - prev.pend))}${pctTxt(pctChange(last.pend, prev.pend))} dibanding ${esc(prev.label)}.`) : `periode terbaru ${fmt(last.pend)}.`}`);
-    concl.push(`Laba bersih tertinggi pada <b>${esc(peak('laba').label)}</b> (${fmt(peak('laba').laba)}); marjin laba bersih terbaru ${marginLast === null ? '–' : marginLast.toLocaleString('id-ID', { maximumFractionDigits: 1 }) + '%'}.`);
-    if (turnover !== null && turnover > 1) {
-      concl.push(`Pendapatan ${turnover.toLocaleString('id-ID', { maximumFractionDigits: 2 })}x Total Aset pada ${esc(last.label)}. Ini wajar: pendapatan adalah arus selama periode, sedangkan aset adalah posisi di satu tanggal (rasio ini disebut asset turnover).`);
+    const notComparable = !!(prev && lastPartial && prev.periodType === 'tahunan');
+    const marginLast = marginOf(last);
+    const turnover = last.aset ? last.pend / last.aset : null;
+    const NC_SUB = '<span class="fl-flat">≠</span> belum setara';
+    const star = (t) => t === last ? ' <span class="fl-up">★</span>' : '';
+    const deltaSub = (cur, prv, comparable) => !prv ? 'periode pertama' : (!comparable ? NC_SUB : `${arrow(cur - prv)} ${esc(pctShort(pctChange(cur, prv)))}`);
+
+    const pkA = peak('aset'), pkP = peak('pend'), pkL = peak('laba');
+    let pkM = null;
+    trend.forEach(t => { const m = marginOf(t); if (m !== null && (pkM === null || m > marginOf(pkM))) pkM = t; });
+    const prevMargin = prev ? marginOf(prev) : null;
+    const dMargin = (marginLast !== null && prevMargin !== null) ? marginLast - prevMargin : null;
+
+    const ncText = prev ? `${esc(last.label)} baru akumulasi ${last.endMonth} bulan (${fmt(last.pend)}) sedangkan ${esc(prev.label)} setahun penuh (${fmt(prev.pend)}), jadi belum setara untuk dibandingkan.` : '';
+    const lastDelta = (word, cur, prv) => prv === null || prv === undefined ? `periode terbaru ${fmt(cur)}.` : `${esc(last.label)} ${arrow(cur - prv)} ${fmt(Math.abs(cur - prv))}${pctTxt(pctChange(cur, prv))} dibanding ${esc(prev.label)}.`;
+
+    const sumRows = [];
+    const addRow = (name, peakCell, lastCell, details) => sumRows.push(`<tr class="fl-row"><td class="fl-period">${name}</td><td class="num">${peakCell}</td><td class="num">${lastCell}</td></tr>
+      <tr class="fl-detail" hidden><td colspan="3">${Object.entries(details).map(([k, v]) => `<div class="fl-d" data-fl-d="${k}" hidden>${v}</div>`).join('')}</td></tr>`);
+
+    addRow('Total Aset',
+      mkCell('peak', esc(valAmt(pkA.aset)) + star(pkA), esc(pkA.label)),
+      mkCell('last', esc(valAmt(last.aset)), deltaSub(last.aset, prev && prev.aset, true)),
+      { peak: `Total Aset tertinggi pada <b>${esc(pkA.label)}</b> (${fmt(pkA.aset)}).`,
+        last: `Posisi terbaru ${esc(last.label)} sebesar ${fmt(last.aset)}${prev ? `; ${arrow(last.aset - prev.aset)} ${fmt(Math.abs(last.aset - prev.aset))}${pctTxt(pctChange(last.aset, prev.aset))} dibanding ${esc(prev.label)}` : ''}.` });
+
+    addRow('Pendapatan',
+      mkCell('peak', esc(valAmt(pkP.pend)) + star(pkP), esc(pkP.label)),
+      mkCell('last', esc(valAmt(last.pend)), deltaSub(last.pend, prev && prev.pend, !notComparable)),
+      { peak: `Pendapatan tertinggi pada <b>${esc(pkP.label)}</b> (${fmt(pkP.pend)}).`,
+        last: prev ? (notComparable ? ncText : lastDelta('pend', last.pend, prev.pend)) : `Periode terbaru ${fmt(last.pend)}.` });
+
+    addRow('Laba Bersih',
+      mkCell('peak', esc(valAmt(pkL.laba)) + star(pkL), esc(pkL.label)),
+      mkCell('last', esc(valAmt(last.laba)), deltaSub(last.laba, prev && prev.laba, !notComparable)),
+      { peak: `Laba bersih tertinggi pada <b>${esc(pkL.label)}</b> (${fmt(pkL.laba)}).`,
+        last: prev ? (notComparable ? `${esc(last.label)} baru akumulasi ${last.endMonth} bulan (${fmt(last.laba)}) sedangkan ${esc(prev.label)} setahun penuh (${fmt(prev.laba)}), jadi belum setara untuk dibandingkan.` : lastDelta('laba', last.laba, prev.laba)) : `Periode terbaru ${fmt(last.laba)}.` });
+
+    if (pkM) {
+      addRow('Marjin Laba Bersih',
+        mkCell('peak', esc(mTxtS(marginOf(pkM))) + star(pkM), esc(pkM.label)),
+        mkCell('last', esc(mTxtS(marginLast)), dMargin === null ? 'periode pertama' : `${arrow(dMargin)} ${esc(Math.abs(dMargin).toLocaleString('id-ID', { maximumFractionDigits: 1 }))} poin`),
+        { peak: `Marjin laba bersih tertinggi pada <b>${esc(pkM.label)}</b> (${mTxtS(marginOf(pkM))}).`,
+          last: `Marjin laba bersih terbaru ${mTxtS(marginLast)} (laba bersih ÷ pendapatan)${dMargin === null ? '' : `; ${arrow(dMargin)} ${Math.abs(dMargin).toLocaleString('id-ID', { maximumFractionDigits: 1 })} poin persentase dibanding ${esc(prev.label)}`}.` });
     }
-    body += `<div class="kpi-info-block"><div class="kpi-info-label">Kesimpulan</div><ul class="hero-sum-list">${concl.map(t => `<li>${t}</li>`).join('')}</ul></div>`;
+    if (turnover !== null && turnover > 1) {
+      addRow('Perputaran Aset', '<span class="fl-flat">–</span>',
+        mkCell('last', esc(turnover.toLocaleString('id-ID', { maximumFractionDigits: 2 })) + 'x', 'pendapatan ÷ aset'),
+        { last: `Pendapatan ${turnover.toLocaleString('id-ID', { maximumFractionDigits: 2 })}x Total Aset pada ${esc(last.label)}. Ini wajar: pendapatan adalah arus selama periode, sedangkan aset adalah posisi di satu tanggal (rasio ini disebut asset turnover).` });
+    }
+    body += `<div class="kpi-info-block"><div class="kpi-info-label">Kesimpulan</div>
+      <div class="hero-sum-note" style="margin-bottom:8px;"><span class="fl-up">★</span> periode terbaru = tertinggi · <span class="fl-up">▲</span> naik · <span class="fl-down">▼</span> turun · <span class="fl-flat">≠</span> periode belum setara · ketuk angka untuk penjelasan</div>
+      <div class="hero-sum-table-wrap"><table class="hero-sum-table fl-table">
+        <thead><tr><th>Metrik</th><th class="num">Tertinggi</th><th class="num">Terbaru (${esc(last.label)})</th></tr></thead>
+        <tbody>${sumRows.join('')}</tbody>
+      </table></div></div>`;
 
     // ---- 2. Kontribusi per perusahaan (periode terbaru pada grafik) ----
     const shareCell = (v, total) => {
@@ -4000,14 +4143,11 @@ function openHeroSummaryModal(levelKey) {
       name: (state.companies.find(c => c.id === st.companyId) || {}).name || '?',
       aset: st.neraca.totalAset || 0, pend: st.labaRugi.pendapatan || 0, laba: st.labaRugi.labaBersih || 0
     })).sort((a, b) => b.aset - a.aset);
-    const missing = levelCompanies.filter(c => !last.stmts.some(st => st.companyId === c.id)).map(c => c.name);
     body += `<div class="kpi-info-block"><div class="kpi-info-label">Kontribusi perusahaan — ${esc(last.label)}</div>
       <div class="hero-sum-table-wrap"><table class="hero-sum-table">
         <thead><tr><th>Perusahaan</th><th class="num">Total Aset</th><th class="num">Pendapatan</th><th class="num">Laba Bersih</th></tr></thead>
         <tbody>${rows.map(r => `<tr><td>${esc(r.name)}</td>${shareCell(r.aset, last.aset)}${shareCell(r.pend, last.pend)}${shareCell(r.laba, last.laba)}</tr>`).join('')}</tbody>
       </table></div>
-      ${rows.length === 1 ? `<div class="kpi-info-text" style="margin-top:8px;">Seluruh angka ${esc(levelName)} pada grafik ini berasal dari satu perusahaan (kontribusi 100%).</div>` : ''}
-      ${missing.length ? `<div class="kpi-info-warn" style="color:var(--slate);">Belum ada data periode ini: ${esc(missing.join(', '))} (${missing.length} dari ${levelCompanies.length} perusahaan).</div>` : ''}
     </div>`;
 
     // ---- 3. Penyebab fluktuasi antar periode ----
@@ -4019,28 +4159,28 @@ function openHeroSummaryModal(levelKey) {
         ['Persediaan', st => st.neraca.persediaan], ['Aset Lancar Lainnya', st => st.neraca.asetLancarLainnya],
         ['Aset Tidak Lancar', st => st.neraca.totalAsetTidakLancar]
       ];
-      const blocks = [];
+      const cell = (key, d, pct) => `<button type="button" class="fl-cell ${d > 0 ? 'up' : d < 0 ? 'down' : 'flat'}" data-fl="${key}">${arrow(d)} ${esc(cellAmt(d))}<small>${esc(pctShort(pct))}</small></button>`;
+      const rowsHtml = [];
       for (let i = trend.length - 1; i >= 1; i--) {
         const a = trend[i - 1], b = trend[i];
-        const items = [];
         // Aset
         const dAset = b.aset - a.aset;
         const drivers = asetParts.map(([name, fn]) => ({ name, d: sumField(b, fn) - sumField(a, fn) }))
           .filter(x => Math.abs(x.d) > 0).sort((x, y) => Math.abs(y.d) - Math.abs(x.d)).slice(0, 2);
         const dKew = sumField(b, st => st.neraca.totalKewajiban) - sumField(a, st => st.neraca.totalKewajiban);
         const dEkuitas = dAset - dKew;
-        items.push(`<b>Total Aset ${dirTxt(dAset)} ${fmt(Math.abs(dAset))}${pctTxt(pctChange(b.aset, a.aset))}</b>${drivers.length ? ', terutama dari ' + drivers.map(x => `${x.name} ${dirTxt(x.d)} ${fmt(Math.abs(x.d))}`).join(' dan ') : ''}. Dari sisi pendanaan: kewajiban ${dirTxt(dKew)} ${fmt(Math.abs(dKew))}, ekuitas (termasuk laba ditahan) ${dirTxt(dEkuitas)} ${fmt(Math.abs(dEkuitas))}.`);
+        const asetDetail = `<b>Total Aset ${arrow(dAset)} ${fmt(Math.abs(dAset))}${pctTxt(pctChange(b.aset, a.aset))}</b>${drivers.length ? ', terutama dari ' + drivers.map(x => `${x.name} ${arrow(x.d)} ${fmt(Math.abs(x.d))}`).join(' dan ') : ''}. Dari sisi pendanaan: kewajiban ${arrow(dKew)} ${fmt(Math.abs(dKew))}, ekuitas (termasuk laba ditahan) ${arrow(dEkuitas)} ${fmt(Math.abs(dEkuitas))}.`;
         // Pendapatan
         const dPend = b.pend - a.pend;
-        let pendTxt = `<b>Pendapatan ${dirTxt(dPend)} ${fmt(Math.abs(dPend))}${pctTxt(pctChange(b.pend, a.pend))}</b>`;
+        let pendDetail = `<b>Pendapatan ${arrow(dPend)} ${fmt(Math.abs(dPend))}${pctTxt(pctChange(b.pend, a.pend))}</b>`;
         if (a.stmts.length > 1 || b.stmts.length > 1) {
           const cd = {};
           b.stmts.forEach(st => { cd[st.companyId] = (cd[st.companyId] || 0) + (st.labaRugi.pendapatan || 0); });
           a.stmts.forEach(st => { cd[st.companyId] = (cd[st.companyId] || 0) - (st.labaRugi.pendapatan || 0); });
           const top = Object.entries(cd).sort((x, y) => Math.abs(y[1]) - Math.abs(x[1]))[0];
-          if (top && Math.abs(top[1]) > 0) pendTxt += `, penggerak utama: ${esc((state.companies.find(c => c.id === top[0]) || {}).name || '?')} (${top[1] >= 0 ? '+' : '-'}${fmt(Math.abs(top[1]))})`;
+          if (top && Math.abs(top[1]) > 0) pendDetail += `, penggerak utama: ${esc((state.companies.find(c => c.id === top[0]) || {}).name || '?')} (${arrow(top[1])} ${fmt(Math.abs(top[1]))})`;
         }
-        items.push(pendTxt + '.');
+        pendDetail += '.';
         // Laba
         const dLaba = b.laba - a.laba;
         const g = (st, k) => (st.labaRugi[k] || 0);
@@ -4055,12 +4195,29 @@ function openHeroSummaryModal(levelKey) {
         ].filter(x => Math.abs(x.impact) > 0).sort((x, y) => Math.abs(y.impact) - Math.abs(x.impact)).slice(0, 2);
         const mA = a.pend ? a.laba / a.pend * 100 : null, mB = b.pend ? b.laba / b.pend * 100 : null;
         const mTxt = (m) => m === null ? '–' : m.toLocaleString('id-ID', { maximumFractionDigits: 1 }) + '%';
-        items.push(`<b>Laba bersih ${dirTxt(dLaba)} ${fmt(Math.abs(dLaba))}${pctTxt(pctChange(b.laba, a.laba))}</b> (marjin ${mTxt(mA)} → ${mTxt(mB)})${lImpacts.length ? ', terutama karena ' + lImpacts.map(x => `${x.name} ${dirTxt(x.d)} ${fmt(Math.abs(x.d))} (${x.impact >= 0 ? 'menambah' : 'menekan'} laba)`).join(' dan ') : ''}.`);
-        if (a.n !== b.n) items.push(`<span class="hero-sum-note">Jumlah perusahaan yang punya data berubah dari ${a.n} menjadi ${b.n}, sehingga perubahan angka juga dipengaruhi cakupan perusahaan.</span>`);
+        const labaDetail = `<b>Laba bersih ${arrow(dLaba)} ${fmt(Math.abs(dLaba))}${pctTxt(pctChange(b.laba, a.laba))}</b> (marjin ${mTxt(mA)} → ${mTxt(mB)})${lImpacts.length ? ', terutama karena ' + lImpacts.map(x => `${x.name} ${arrow(x.d)} ${fmt(Math.abs(x.d))} (${x.impact >= 0 ? 'menambah' : 'menekan'} laba)`).join(' dan ') : ''}.`;
+        // Catatan (cakupan perusahaan & periode akumulasi)
+        const notes = [];
+        if (a.n !== b.n) notes.push(`<div class="hero-sum-note">Jumlah perusahaan yang punya data berubah dari ${a.n} menjadi ${b.n}, sehingga perubahan angka juga dipengaruhi cakupan perusahaan.</div>`);
         const yt = ytdNote(b);
-        blocks.push(`<div class="hero-sum-trans"><div class="hero-sum-trans-title">${esc(a.label)} → ${esc(b.label)}</div><ul class="hero-sum-list">${items.map(t => `<li>${t}</li>`).join('')}${yt}</ul></div>`);
+        if (yt) notes.push(yt);
+        rowsHtml.push(`<tr class="fl-row"><td class="fl-period">${esc(a.label)} → ${esc(b.label)}${notes.length ? ` <button type="button" class="fl-cell fl-note-btn" data-fl="note" title="Catatan periode">ⓘ</button>` : ''}</td>
+          <td class="num">${cell('aset', dAset, pctChange(b.aset, a.aset))}</td>
+          <td class="num">${cell('pend', dPend, pctChange(b.pend, a.pend))}</td>
+          <td class="num">${cell('laba', dLaba, pctChange(b.laba, a.laba))}</td></tr>
+          <tr class="fl-detail" hidden><td colspan="4">
+            <div class="fl-d" data-fl-d="aset" hidden>${asetDetail}</div>
+            <div class="fl-d" data-fl-d="pend" hidden>${pendDetail}</div>
+            <div class="fl-d" data-fl-d="laba" hidden>${labaDetail}</div>
+            <div class="fl-d" data-fl-d="note" hidden>${notes.join('')}</div>
+          </td></tr>`);
       }
-      body += `<div class="kpi-info-block"><div class="kpi-info-label">Penyebab fluktuasi</div>${blocks.join('')}</div>`;
+      body += `<div class="kpi-info-block"><div class="kpi-info-label">Penyebab fluktuasi</div>
+        <div class="hero-sum-note" style="margin-bottom:8px;"><span class="fl-up">▲</span> naik · <span class="fl-down">▼</span> turun · ketuk angka untuk melihat penjelasan</div>
+        <div class="hero-sum-table-wrap"><table class="hero-sum-table fl-table">
+          <thead><tr><th>Periode</th><th class="num">Total Aset</th><th class="num">Pendapatan</th><th class="num">Laba Bersih</th></tr></thead>
+          <tbody>${rowsHtml.join('')}</tbody>
+        </table></div></div>`;
     }
   }
 
@@ -4075,6 +4232,178 @@ function openHeroSummaryModal(levelKey) {
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
   backdrop.querySelector('#close-hero-sum').addEventListener('click', close);
+  backdrop.querySelectorAll('.fl-cell').forEach(btn => btn.addEventListener('click', () => {
+    const tr = btn.closest('tr');
+    const detailRow = tr.nextElementSibling;
+    const target = detailRow.querySelector(`[data-fl-d="${btn.dataset.fl}"]`);
+    if (!target) return;
+    const wasOpen = !detailRow.hidden && !target.hidden;
+    tr.querySelectorAll('.fl-cell').forEach(x => x.classList.remove('active'));
+    detailRow.querySelectorAll('[data-fl-d]').forEach(x => { x.hidden = true; });
+    if (wasOpen) { detailRow.hidden = true; return; }
+    detailRow.hidden = false;
+    target.hidden = false;
+    btn.classList.add('active');
+  }));
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+}
+
+// ---------- Rincian Net Profit Margin per perusahaan (klik ring NPM) ----------
+let npmDetailSnapshot = { hasSubs: false, rows: [] };
+
+function openProfitMarginModal(kind) {
+  const { hasSubs, rows } = npmDetailSnapshot;
+  // field laba yang dianalisis + label sesuai jenis margin
+  const KIND = {
+    net: { vf: 'laba', labaName: 'Laba Bersih', profitName: 'Net Profit' },
+    op: { vf: 'operasional', labaName: 'Laba Operasional', profitName: 'Operational Profit' },
+    gross: { vf: 'kotor', labaName: 'Laba Kotor', profitName: 'Gross Profit' }
+  };
+  const { vf, labaName, profitName } = KIND[kind] || KIND.net;
+  const esc = (t) => escapeHTML(String(t));
+  const fmt = formatIDRKPI;
+  const pct1 = (v) => v === null ? '–' : v.toLocaleString('id-ID', { maximumFractionDigits: 1 }) + '%';
+  const totPend = rows.reduce((a, r) => a + r.pend, 0);
+  const totLaba = rows.reduce((a, r) => a + (r[vf] || 0), 0);
+  const withMargin = rows.map(r => ({ ...r, margin: r.pend ? (r[vf] || 0) / r.pend * 100 : null }))
+    .sort((a, b) => b.pend - a.pend);
+  const margins = withMargin.filter(r => r.margin !== null).map(r => r.margin);
+  const avgMargin = margins.length ? margins.reduce((a, v) => a + v, 0) / margins.length : null;
+  const consMargin = totPend ? totLaba / totPend * 100 : null;
+  const shareCell = (v, total) => {
+    const p = total ? v / total * 100 : null;
+    return `<td class="num"><span class="npm-amt">${esc(fmt(v))}</span><span class="npm-pct">${pct1(p)}</span></td>`;
+  };
+  const marginCls = (m) => m === null ? 'fl-flat' : (m < 0 ? 'fl-down' : 'fl-up');
+
+  // Bar kontribusi Net Profit: porsi laba bersih tiap perusahaan (hanya yang laba) terhadap total laba positif
+  const npmDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const contribPalette = npmDark ? ['#E4EEFF', '#8FB6FF', '#5B93FF', '#2F6FE4', '#C3DAFF', '#7A8699'] : ['#12306B', '#2F6FE4', '#5B93FF', '#8FB6FF', '#C3DAFF', '#7A8699'];
+  const profitRows = withMargin.filter(r => r[vf] > 0).sort((a, b) => b[vf] - a[vf]);
+  const lossRows = withMargin.filter(r => r[vf] < 0);
+  const posTotal = profitRows.reduce((a, r) => a + r[vf], 0);
+  // Singkatan dipakai hanya bila unik; kalau bentrok antar perusahaan, pakai nama lengkap
+  const shortCount = {};
+  withMargin.forEach(r => { const k = companyShortName(r.name); shortCount[k] = (shortCount[k] || 0) + 1; });
+  const shortOf = (n) => { const k = companyShortName(n); return shortCount[k] > 1 ? n : k; };
+  let contribSegs = profitRows.slice(0, 5).map(r => ({ name: shortOf(r.name), full: r.name, v: r[vf] }));
+  if (profitRows.length > 5) contribSegs.push({ name: 'Lainnya', full: 'Lainnya', v: profitRows.slice(5).reduce((a, r) => a + r[vf], 0) });
+  const contribHtml = posTotal > 0 ? `<div class="npm-contrib">
+      <div class="npm-contrib-title">Kontribusi ${profitName}</div>
+      <div class="npm-contrib-bar">${contribSegs.map((sg, i) => `<span style="width:${(sg.v / posTotal * 100).toFixed(2)}%;background:${contribPalette[i % contribPalette.length]};" title="${esc(sg.full)} · ${pct1(sg.v / posTotal * 100)}"></span>`).join('')}</div>
+      <div class="npm-contrib-legend">${contribSegs.map((sg, i) => `<div class="npm-contrib-item" title="${esc(sg.full)}"><span class="npm-dot" style="background:${contribPalette[i % contribPalette.length]};"></span><span class="npm-contrib-name">${esc(sg.name)}</span><b>${pct1(sg.v / posTotal * 100)}</b></div>`).join('')}</div>
+      ${lossRows.length ? `<div class="npm-contrib-note">Tidak termasuk perusahaan rugi: ${lossRows.map(r => esc(shortOf(r.name))).join(', ')}</div>` : ''}
+    </div>` : '';
+
+  const tableHtml = rows.length ? `    <div class="npm-sum">
+      <div class="npm-sum-box"><span>Jumlah Pendapatan</span><b>${esc(fmt(totPend))}</b></div>
+      <div class="npm-sum-box"><span>Jumlah ${labaName}</span><b>${esc(fmt(totLaba))}</b></div>
+      <div class="npm-sum-box"><span>Rasio Margin</span><b>${pct1(consMargin)}</b></div>
+      <div class="npm-sum-box"><span>Rata-rata Margin</span><b>${pct1(avgMargin)}</b></div>
+    </div>
+    ${contribHtml}
+    <div class="hero-sum-table-wrap"><table class="hero-sum-table npm-table">
+      <thead><tr><th>Perusahaan</th><th class="num">Pendapatan <button type="button" class="npm-pct-btn" data-npm-pct="pend" title="Arti persentase" aria-label="Arti persentase kontribusi pendapatan">%</button></th><th class="num">${labaName} <button type="button" class="npm-pct-btn" data-npm-pct="laba" title="Arti persentase" aria-label="Arti persentase kontribusi ${labaName.toLowerCase()}">%</button></th><th class="num">Margin</th></tr></thead>
+      <tbody>${withMargin.map(r => `<tr><td>${esc(r.name)}</td>${shareCell(r.pend, totPend)}${shareCell(r[vf] || 0, totLaba)}<td class="num"><b class="${marginCls(r.margin)}">${pct1(r.margin)}</b></td></tr>`).join('')}</tbody>
+    </table></div>`
+    : '<div class="kpi-info-text">Belum ada data periode untuk dianalisis.</div>';
+
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:620px;">
+    <h3 style="margin-bottom:4px;">Rincian ${profitName} Margin</h3>
+    <div class="kpi-info-text" style="margin-bottom:16px;color:var(--slate-light);">${hasSubs ? 'Konsolidasi Subsidiary &amp; Sub-Subsidiary' : 'Semua perusahaan'}</div>
+    ${tableHtml}
+    <div class="modal-actions"><button class="btn primary" id="close-npm-detail">Tutup</button></div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  backdrop.querySelector('#close-npm-detail').addEventListener('click', close);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  backdrop.querySelectorAll('[data-npm-pct]').forEach(btn => btn.addEventListener('click', () => openNpmPctInfo(btn.dataset.npmPct, labaName)));
+}
+
+function openNpmDetailModal() { openProfitMarginModal('net'); }
+function openOpmDetailModal() { openProfitMarginModal('op'); }
+function openGpmDetailModal() { openProfitMarginModal('gross'); }
+
+function openNpmPctInfo(kind, labaName = 'Laba Bersih') {
+  const isPend = kind === 'pend';
+  const nama = isPend ? 'Pendapatan' : labaName;
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:400px;">
+    <h3 style="margin-bottom:8px;">Persentase Kontribusi ${nama}</h3>
+    <div class="kpi-info-text">Porsi ${nama.toLowerCase()} satu perusahaan terhadap total ${nama.toLowerCase()} seluruh perusahaan dalam cakupan ini, yaitu seberapa besar perusahaan tersebut menyumbang ke angka konsolidasi.</div>
+    <div class="kpi-info-text" style="margin-top:10px;"><b>Rumus:</b> ${nama} perusahaan &divide; Jumlah ${nama} &times; 100%</div>
+    <div class="modal-actions"><button class="btn primary" id="close-npm-pct">Tutup</button></div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey, true); };
+  // Capture + stopPropagation: Esc hanya menutup pop-up kecil ini, bukan modal rincian di belakangnya.
+  const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  document.addEventListener('keydown', onKey, true);
+  backdrop.querySelector('#close-npm-pct').addEventListener('click', close);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+}
+
+// ---------- Penjelasan & kesimpulan Current Ratio (klik chip Current Ratio) ----------
+let crDetailSnapshot = { hasSubs: false, asetLancar: 0, kewLancar: 0, ratio: null, count: 0 };
+
+function openCurrentRatioModal() {
+  const { hasSubs, asetLancar, kewLancar, ratio, count } = crDetailSnapshot;
+  const esc = (t) => escapeHTML(String(t));
+  const fmt = formatIDRKPI;
+  const modalKerja = asetLancar - kewLancar;
+  const up = (t) => `<span class="fl-up">●</span> ${t}`;
+  const warn = (t) => `<span class="fl-down">●</span> ${t}`;
+  const mid = (t) => `<span class="fl-flat">●</span> ${t}`;
+
+  let status, detail, extra = '';
+  if (!count) {
+    status = mid('<b>Belum ada data</b>');
+    detail = 'Belum ada laporan neraca yang bisa dianalisis.';
+  } else if (ratio === null) {
+    status = mid('<b>Tidak dapat dihitung</b>');
+    detail = 'Tidak ada kewajiban lancar pada periode terbaru, sehingga rasio tidak bisa dihitung. Pastikan akun kewajiban lancar sudah ada di Buku Besar yang diimpor.';
+  } else if (ratio < 1) {
+    status = warn('<b>Likuiditas ketat</b>');
+    detail = `Aset lancar (${fmt(asetLancar)}) tidak cukup menutup kewajiban lancar (${fmt(kewLancar)}), kekurangannya sekitar ${fmt(Math.abs(modalKerja))}. Perusahaan berisiko kesulitan melunasi kewajiban jangka pendek tanpa tambahan dana, penagihan piutang, atau pendanaan baru.`;
+  } else if (ratio < 1.5) {
+    status = mid('<b>Cukup, namun margin pengaman tipis</b>');
+    detail = `Aset lancar masih menutup kewajiban lancar dengan kelebihan ${fmt(modalKerja)}. Kondisi aman untuk saat ini, tetapi penurunan kas atau piutang yang tertagih bisa cepat menekan likuiditas.`;
+  } else if (ratio <= 3) {
+    status = up('<b>Sehat</b>');
+    detail = `Aset lancar menutup kewajiban lancar ${ratio.toLocaleString('id-ID', { maximumFractionDigits: 2 })} kali, dengan kelebihan ${fmt(modalKerja)}. Kemampuan membayar kewajiban jangka pendek tergolong baik.`;
+  } else {
+    status = up('<b>Sangat likuid</b>');
+    detail = `Aset lancar jauh melampaui kewajiban lancar (kelebihan ${fmt(modalKerja)}). Likuiditas sangat aman, tetapi kas atau piutang yang terlalu besar bisa berarti dana belum dimanfaatkan secara produktif (misalnya untuk ekspansi, investasi, atau pelunasan utang berbunga).`;
+    if (ratio > 10) extra = 'Angka setinggi ini biasanya terjadi karena kewajiban lancar sangat kecil. Pastikan data hutang usaha, hutang pendanaan, dan kewajiban lancar lainnya sudah lengkap diimpor.';
+  }
+
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:560px;">
+    <h3 style="margin-bottom:4px;">Current Ratio</h3>
+    <div class="kpi-info-text" style="margin-bottom:16px;color:var(--slate-light);">${hasSubs ? 'Konsolidasi Subsidiary &amp; Sub-Subsidiary' : 'Semua perusahaan'}</div>
+    <div class="npm-sum">
+      <div class="npm-sum-box"><span>Aset Lancar</span><b>${esc(fmt(asetLancar))}</b></div>
+      <div class="npm-sum-box"><span>Kewajiban Lancar</span><b>${esc(fmt(kewLancar))}</b></div>
+      <div class="npm-sum-box"><span>Current Ratio</span><b>${esc(fmtXDash(ratio))}</b></div>
+      <div class="npm-sum-box"><span>Modal Kerja Bersih</span><b>${esc(fmt(modalKerja))}</b></div>
+    </div>
+    <div class="kpi-info-block"><div class="kpi-info-label">Penjelasan</div>
+      <div class="kpi-info-text">Current Ratio mengukur kemampuan melunasi kewajiban jangka pendek (jatuh tempo dalam 1 tahun) menggunakan aset lancar seperti kas, piutang, dan persediaan.</div>
+      <div class="kpi-info-text" style="margin-top:6px;"><b>Rumus:</b> Aset Lancar &divide; Kewajiban Lancar. Acuan umum 1,5x s.d. 3x (berbeda tiap industri).</div>
+    </div>
+    <div class="kpi-info-block"><div class="kpi-info-label">Kesimpulan</div>
+      <div class="kpi-info-text" style="margin-bottom:4px;">${status}</div>
+      <div class="kpi-info-text">${detail}</div>
+      ${extra ? `<div class="kpi-info-warn">${extra}</div>` : ''}
+    </div>
+    <div class="modal-actions"><button class="btn primary" id="close-cr-detail">Tutup</button></div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  backdrop.querySelector('#close-cr-detail').addEventListener('click', close);
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
 }
 
@@ -4148,10 +4477,47 @@ function paintDashboard(allStatements) {
   const cEkuitas = cAset - cKew;
   const pctOf = (a, b) => b ? a / b * 100 : null;
   const npm = pctOf(cLaba, cPendapatan);
+  npmDetailSnapshot = {
+    hasSubs,
+    rows: scopeList.map(st => ({
+      name: (state.companies.find(c => c.id === st.companyId) || {}).name || '?',
+      period: st.periodLabel || '',
+      pend: st.labaRugi.pendapatan || 0,
+      laba: st.labaRugi.labaBersih || 0,
+      kotor: st.labaRugi.labaKotor ?? ((st.labaRugi.pendapatan || 0) - (st.labaRugi.hpp || 0)),
+      operasional: st.labaRugi.labaOperasional ?? ((st.labaRugi.labaKotor ?? ((st.labaRugi.pendapatan || 0) - (st.labaRugi.hpp || 0))) - (st.labaRugi.bebanOperasional || 0))
+    }))
+  };
   const roa = pctOf(cLaba, cAset);
   const debtToAsset = pctOf(cKew, cAset);
   const equityRatio = pctOf(cEkuitas, cAset);
   const currentRatio = cKewLancar ? cAsetLancar / cKewLancar : null;
+  crDetailSnapshot = { hasSubs, asetLancar: cAsetLancar, kewLancar: cKewLancar, ratio: currentRatio, count: scopeList.length };
+  // Analisis likuiditas tambahan: Quick, Cash, Cash Turnover & Operating Cash Flow Ratio
+  const cKas = sumScope(st => st.neraca.kasSetaraKas);
+  const cPersediaan = sumScope(st => st.neraca.persediaan);
+  const cOpsCF = sumScope(st => (st.arusKas && st.arusKas.totalOperasi) || 0);
+  const hasOpsCF = scopeList.some(st => st.arusKas && st.arusKas.totalOperasi);
+  const quickRatioDash = cKewLancar ? (cAsetLancar - cPersediaan) / cKewLancar : null;
+  const cashRatioDash = cKewLancar ? cKas / cKewLancar : null;
+  const cashTurnoverDash = cKas ? cPendapatan / cKas : null;
+  const ocfRatioDash = (cKewLancar && hasOpsCF) ? cOpsCF / cKewLancar : null;
+  const liqVerdict = (ok, yes, no) => `<span class="${ok ? 'fl-up' : 'fl-down'}">${ok ? yes : no}</span>`;
+  const liqTilesHtml = `<div class="liq-mini-grid">
+    <div class="liq-mini"><div class="ratio-tile-label" title="Quick Ratio">Quick Ratio</div><div class="liq-mini-value">${fmtXDash(quickRatioDash)}</div><div class="liq-mini-cap">(Aset Lancar &minus; Persediaan) &divide; Kewajiban Lancar</div><div class="liq-mini-verdict">${quickRatioDash === null ? '–' : liqVerdict(quickRatioDash >= 1, 'Aman (≥ 1x)', 'Waspada (&lt; 1x)')}</div></div>
+    <div class="liq-mini"><div class="ratio-tile-label" title="Cash Ratio">Cash Ratio</div><div class="liq-mini-value">${fmtXDash(cashRatioDash)}</div><div class="liq-mini-cap">Kas &amp; Setara Kas &divide; Kewajiban Lancar</div><div class="liq-mini-verdict">${cashRatioDash === null ? '–' : liqVerdict(cashRatioDash >= 0.2, 'Aman (≥ 0,2x)', 'Rendah (&lt; 0,2x)')}</div></div>
+    <div class="liq-mini"><div class="ratio-tile-label" title="Cash Turnover Ratio">Cash Turnover Ratio</div><div class="liq-mini-value">${fmtXDash(cashTurnoverDash)}</div><div class="liq-mini-cap">Pendapatan &divide; Kas &amp; Setara Kas</div><div class="liq-mini-verdict liq-neutral">${cashTurnoverDash === null ? '–' : 'Makin tinggi, kas makin produktif'}</div></div>
+    <div class="liq-mini"><div class="ratio-tile-label" title="Operating Cash Flow Ratio">Operating Cash Flow Ratio</div><div class="liq-mini-value">${fmtXDash(ocfRatioDash)}</div><div class="liq-mini-cap">Arus Kas Operasi &divide; Kewajiban Lancar</div><div class="liq-mini-verdict">${ocfRatioDash === null ? '–' : liqVerdict(ocfRatioDash >= 1, 'Aman (≥ 1x)', 'Waspada (&lt; 1x)')}</div></div>
+  </div>`;
+
+  // ---- Kartu Net, Operational & Gross Profit Margin ----
+  // Tren laba per jenjang (kotor, operasional, bersih) untuk grafik perbandingan
+  const pcTrend = buildLevelTrend(allStatements, depthById, d => !hasSubs || d >= 1);
+  const pcSum = (pt, fn) => pt.stmts.reduce((a, st) => a + (fn(st) || 0), 0);
+  const pcKotor = (st) => st.labaRugi.labaKotor ?? ((st.labaRugi.pendapatan || 0) - (st.labaRugi.hpp || 0));
+  const pcOper = (st) => st.labaRugi.labaOperasional ?? (pcKotor(st) - (st.labaRugi.bebanOperasional || 0));
+  const gpm = pctOf(sumScope(st => st.labaRugi.labaKotor ?? ((st.labaRugi.pendapatan || 0) - (st.labaRugi.hpp || 0))), cPendapatan);
+  const opm = pctOf(sumScope(st => st.labaRugi.labaOperasional ?? ((st.labaRugi.labaKotor ?? ((st.labaRugi.pendapatan || 0) - (st.labaRugi.hpp || 0))) - (st.labaRugi.bebanOperasional || 0))), cPendapatan);
   const isDarkDash = document.documentElement.getAttribute('data-theme') === 'dark';
   const hasCashFlow = latestList.some(s => s.arusKas && (s.arusKas.totalOperasi || s.arusKas.totalInvestasi || s.arusKas.totalPendanaan));
   const capPalette = isDarkDash ? ['#2F6FE4', '#5B93FF', '#8FB6FF', '#C3DAFF', '#E4EEFF'] : ['#12306B', '#2F6FE4', '#5B93FF', '#8FB6FF', '#C3DAFF'];
@@ -4209,7 +4575,7 @@ function paintDashboard(allStatements) {
 
     ${hasSubs ? `<div class="dash-hero-pair">
       <div class="dash-hero-panel-head">
-        <div class="dash-hero-panel-title">Konsolidasi Aset &amp; Laba Bersih</div>
+        <div class="dash-hero-panel-title">Konsolidasi Aset, Pendapatan, &amp; Laba Bersih</div>
         <div class="dash-hero-legend">
           <span class="dash-hero-legend-item"><span class="dot dot-aset"></span>Total Aset</span>
           <span class="dash-hero-legend-item"><span class="dot dot-pend"></span>Pendapatan</span>
@@ -4224,23 +4590,75 @@ function paintDashboard(allStatements) {
     </div>`}
 
     <div class="dash-bento">
-      <div class="bento-card span-3">
+      <div class="span-12 profit-row">
+      <div class="bento-card">
         <div class="bento-head"><div class="bento-title">Net Profit Margin</div><span class="bento-pill">${hasSubs ? 'Konsolidasi' : 'Semua Perusahaan'}</span></div>
         <div class="gauge-body">
-          ${dashRingHtml({
-            pct: npm, size: 150, stroke: 13, id: 'npm',
-            from: (npm || 0) < 0 ? '#E2695D' : '#5B93FF', to: (npm || 0) < 0 ? '#B5453B' : '#2F6FE4',
-            center: `<div class="ring-value" style="color:${(npm || 0) < 0 ? 'var(--danger)' : 'inherit'};">${fmtPctDash(npm)}</div><div class="ring-caption">Laba &divide; Pendapatan</div>`
-          })}
-          <div class="gauge-note">Laba Bersih ${formatIDRKPI(cLaba)} dari Pendapatan ${formatIDRKPI(cPendapatan)}</div>
-          <div class="gauge-chips">
-            <span class="gauge-chip">Current Ratio<b>${fmtXDash(currentRatio)}</b></span>
-            <span class="gauge-chip">ROA<b>${fmtPctDash(roa)}</b></span>
-          </div>
+          <div class="npm-ring-click" data-npm-detail role="button" tabindex="0" title="Klik untuk rincian per perusahaan" aria-label="Rincian Net Profit Margin per perusahaan">${dashRingHtml({
+            pct: npm, size: 150, stroke: 12, id: 'npm',
+            center: `<div class="ring-value" style="color:${(npm || 0) < 0 ? 'var(--danger)' : 'inherit'};">${fmtPctDash(npm)}</div><div class="ring-caption">Net Profit Margin</div>`
+          })}</div>
         </div>
       </div>
 
-      <div class="bento-card span-3">
+      <div class="bento-card">
+        <div class="bento-head"><div class="bento-title">Operational Profit Margin</div><span class="bento-pill">${hasSubs ? 'Konsolidasi' : 'Semua Perusahaan'}</span></div>
+        <div class="gauge-body">
+          <div class="npm-ring-click" data-opm-detail role="button" tabindex="0" title="Klik untuk rincian per perusahaan" aria-label="Rincian Operational Profit Margin per perusahaan">${dashRingHtml({
+            pct: opm, size: 150, stroke: 12, id: 'opm',
+            center: `<div class="ring-value" style="color:${(opm || 0) < 0 ? 'var(--danger)' : 'inherit'};">${fmtPctDash(opm)}</div><div class="ring-caption">Operational Profit Margin</div>`
+          })}</div>
+        </div>
+      </div>
+
+      <div class="bento-card">
+        <div class="bento-head"><div class="bento-title">Gross Profit Margin</div><span class="bento-pill">${hasSubs ? 'Konsolidasi' : 'Semua Perusahaan'}</span></div>
+        <div class="gauge-body">
+          <div class="npm-ring-click" data-gpm-detail role="button" tabindex="0" title="Klik untuk rincian per perusahaan" aria-label="Rincian Gross Profit Margin per perusahaan">${dashRingHtml({
+            pct: gpm, size: 150, stroke: 12, id: 'gpm',
+            center: `<div class="ring-value" style="color:${(gpm || 0) < 0 ? 'var(--danger)' : 'inherit'};">${fmtPctDash(gpm)}</div><div class="ring-caption">Gross Profit Margin</div>`
+          })}</div>
+        </div>
+      </div>
+
+      <div class="bento-card">
+        <div class="bento-head"><div class="bento-title">Perbandingan Gross, Operational &amp; Net Profit</div></div>
+        ${pcTrend.length ? `<div class="profit-compare-bar">
+          <div class="profit-compare-legend">
+            <span class="dash-hero-legend-item"><span class="dot dot-gross"></span>Gross Profit</span>
+            <span class="dash-hero-legend-item"><span class="dot dot-op"></span>Operational Profit</span>
+            <span class="dash-hero-legend-item"><span class="dot dot-net"></span>Net Profit</span>
+          </div>
+          <div class="pc-modes" role="group" aria-label="Model grafik">${PROFIT_COMPARE_MODES.map(m => `<button type="button" class="pc-mode${m.key === profitCompareMode ? ' active' : ''}" data-pc-mode="${m.key}" aria-pressed="${m.key === profitCompareMode}">${m.label}</button>`).join('')}</div>
+        </div>` : ''}
+        <div class="bento-chart profit-compare-chart">${pcTrend.length ? '<canvas id="chart-profit-compare"></canvas>' : emptyBento}</div>
+      </div>
+      </div>
+
+      <div class="bento-card span-4">
+        <div class="bento-head"><div class="bento-title">Likuiditas</div><span class="bento-pill">${hasSubs ? 'Konsolidasi' : 'Semua Perusahaan'}</span></div>
+        <div class="gauge-body">
+          <div class="ratio-tile is-clickable" style="width:100%;" data-cr-detail role="button" tabindex="0" title="Klik untuk penjelasan &amp; kesimpulan">
+            <div class="ratio-tile-label">Current Ratio</div>
+            <div class="ratio-tile-value">${fmtXDash(currentRatio)}</div>
+            <div class="ratio-tile-cap">Aset Lancar &divide; Kewajiban Lancar</div>
+          </div>
+          ${liqTilesHtml}
+        </div>
+      </div>
+
+      <div class="bento-card span-4">
+        <div class="bento-head"><div class="bento-title">Return Aset</div><span class="bento-pill">${hasSubs ? 'Konsolidasi' : 'Semua Perusahaan'}</span></div>
+        <div class="gauge-body">
+          ${dashRingHtml({
+            pct: roa, size: 150, stroke: 13, id: 'roa',
+            from: (roa || 0) < 0 ? '#E2695D' : '#5B93FF', to: (roa || 0) < 0 ? '#B5453B' : '#2F6FE4',
+            center: `<div class="ring-value" style="color:${(roa || 0) < 0 ? 'var(--danger)' : 'inherit'};">${fmtPctDash(roa)}</div><div class="ring-caption">ROA &middot; Laba &divide; Aset</div>`
+          })}
+        </div>
+      </div>
+
+      <div class="bento-card span-4">
         <div class="bento-head"><div class="bento-title">Struktur Pendanaan</div><span class="bento-pill">Terhadap Aset</span></div>
         <div class="mini-rings">
           <div class="mini-ring">
@@ -4257,21 +4675,6 @@ function paintDashboard(allStatements) {
       </div>
 
       <div class="bento-card span-6">
-        <div class="bento-head"><div class="bento-title">Arus Kas per Perusahaan</div><span class="bento-pill">Periode terbaru</span></div>
-        <div class="bento-chart">${hasCashFlow ? '<canvas id="chart-arus-kas"></canvas>' : emptyBento}</div>
-      </div>
-
-      <div class="bento-card span-6">
-        <div class="bento-head"><div class="bento-title">Aset, Kewajiban &amp; Ekuitas per Perusahaan</div><span class="bento-pill">Periode terbaru</span></div>
-        <div class="bento-chart">${latestList.length ? '<canvas id="chart-neraca-grouped"></canvas>' : emptyBento}</div>
-      </div>
-
-      <div class="bento-card span-3">
-        <div class="bento-head"><div class="bento-title">Laba Bersih per Perusahaan</div></div>
-        <div class="bento-chart">${latestList.length ? '<canvas id="chart-laba"></canvas>' : emptyBento}</div>
-      </div>
-
-      <div class="bento-card span-3">
         <div class="bento-head"><div class="bento-title">Komposisi Total Aset</div></div>
         <div class="dash-donut-wrap">
           <div class="dash-donut-canvas">${compTop.length ? '<canvas id="dash-donut"></canvas>' : ''}</div>
@@ -4285,6 +4688,21 @@ function paintDashboard(allStatements) {
             `).join('') : '<div style="color:var(--slate-light);font-size:12.5px;">Belum ada data</div>'}
           </div>
         </div>
+      </div>
+
+      <div class="bento-card span-6">
+        <div class="bento-head"><div class="bento-title">Arus Kas per Perusahaan</div><span class="bento-pill">Periode terbaru</span></div>
+        <div class="bento-chart">${hasCashFlow ? '<canvas id="chart-arus-kas"></canvas>' : emptyBento}</div>
+      </div>
+
+      <div class="bento-card span-6">
+        <div class="bento-head"><div class="bento-title">Aset, Kewajiban &amp; Ekuitas per Perusahaan</div><span class="bento-pill">Periode terbaru</span></div>
+        <div class="bento-chart">${latestList.length ? '<canvas id="chart-neraca-grouped"></canvas>' : emptyBento}</div>
+      </div>
+
+      <div class="bento-card span-6">
+        <div class="bento-head"><div class="bento-title">Laba Bersih per Perusahaan</div></div>
+        <div class="bento-chart">${latestList.length ? '<canvas id="chart-laba"></canvas>' : emptyBento}</div>
       </div>
 
       <div class="bento-card span-12">
@@ -4334,6 +4752,8 @@ function paintDashboard(allStatements) {
 
   if (trendAnak.length) renderHeroChart('dash-hero-chart-anak', trendAnak.map(t => t.label), trendAnak.map(t => t.aset), trendAnak.map(t => t.laba), { legend: !hasSubs, pendData: trendAnak.map(t => t.pend), counts: trendAnak.map(t => t.n) });
   if (trendCucu.length) renderHeroChart('dash-hero-chart-cucu', trendCucu.map(t => t.label), trendCucu.map(t => t.aset), trendCucu.map(t => t.laba), { legend: false, pendData: trendCucu.map(t => t.pend), counts: trendCucu.map(t => t.n) });
+  if (pcTrend.length) renderProfitCompareChart('chart-profit-compare', pcTrend.map(t => t.label),
+    pcTrend.map(t => pcSum(t, pcKotor)), pcTrend.map(t => pcSum(t, pcOper)), pcTrend.map(t => t.laba), pcTrend.map(t => t.n), pcTrend.map(t => t.pend));
   renderMiniBarChart('chart-laba', labels, latestList.map(s => s.labaRugi.labaBersih || 0), '#C08A3E');
   const groupedColors = isDarkDash ? ['#2F6FE4', '#5B93FF', '#C3DAFF'] : ['#16213A', '#2F6FE4', '#8FB6FF'];
   if (latestList.length) renderBarsChart('chart-neraca-grouped', labels, [
@@ -4351,6 +4771,23 @@ function paintDashboard(allStatements) {
   // pencarian disimpan di state supaya tidak hilang saat data realtime
   // memicu render ulang.
   bindKpiStripInfo(root);
+  root.querySelectorAll('[data-cr-detail]').forEach(t => {
+    t.addEventListener('click', openCurrentRatioModal);
+    t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCurrentRatioModal(); } });
+  });
+  root.querySelectorAll('[data-npm-detail]').forEach(t => {
+    t.addEventListener('click', openNpmDetailModal);
+    t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNpmDetailModal(); } });
+  });
+  root.querySelectorAll('[data-opm-detail]').forEach(t => {
+    t.addEventListener('click', openOpmDetailModal);
+    t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openOpmDetailModal(); } });
+  });
+  root.querySelectorAll('[data-pc-mode]').forEach(btn => btn.addEventListener('click', () => setProfitCompareMode(btn.dataset.pcMode, root)));
+  root.querySelectorAll('[data-gpm-detail]').forEach(t => {
+    t.addEventListener('click', openGpmDetailModal);
+    t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openGpmDetailModal(); } });
+  });
   root.querySelectorAll('.dash-hero-title.is-clickable').forEach(t => {
     const open = () => openHeroSummaryModal(t.dataset.heroLevel);
     t.addEventListener('click', open);
@@ -5251,6 +5688,26 @@ function companyInitials(name) {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '?';
   return parts.slice(0, 2).map(p => p[0].toUpperCase()).join('');
+}
+
+// Singkatan nama perusahaan: awalan badan usaha (PT, CV, dst.) dipertahankan,
+// sisanya diringkas jadi inisial, mis. \"PT Sahabat Sejati Selamanya\" -> \"PT SSS\".
+// Nama dengan satu kata setelah awalan dibiarkan utuh.
+function companyShortName(name) {
+  const full = String(name || '').trim();
+  const parts = full.split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  const isPrefix = (w) => /^(PT|CV|UD|PD|PO|Firma|Yayasan)\.?$/i.test(w);
+  const isSuffix = (w) => /^Tbk\.?$/i.test(w);
+  const skip = (w) => /^(dan|&|of|the)$/i.test(w);
+  const pre = [], core = [], suf = [];
+  parts.forEach((w, i) => {
+    if (i === 0 && isPrefix(w)) pre.push(w.toUpperCase().replace('.', ''));
+    else if (isSuffix(w)) suf.push(w);
+    else if (!skip(w)) core.push(w);
+  });
+  if (core.length <= 1) return full;
+  return [...pre, core.map(w => w[0].toUpperCase()).join(''), ...suf].join(' ');
 }
 
 // Warna latar avatar fallback yang konsisten per perusahaan (berdasarkan
@@ -9976,6 +10433,97 @@ function renderHeroChart(canvasId, labels, asetData, labaData, opts = {}) {
       }
     }
   });
+}
+
+// Grafik perbandingan Gross / Operational / Net Profit dengan beberapa model
+// tampilan yang bisa dipilih lewat tombol di kartu:
+//   line  : garis dengan titik, tanpa isi (default)
+//   area  : area berlapis (lapisan terbesar di belakang)
+//   bar   : batang berkelompok per periode
+//   pct   : garis margin (% terhadap pendapatan) per periode
+let profitCompareMode = 'line';
+let profitCompareData = null;
+const PROFIT_COMPARE_MODES = [
+  { key: 'line', label: 'Garis' },
+  { key: 'area', label: 'Area' },
+  { key: 'bar', label: 'Batang' },
+  { key: 'pct', label: '% Margin' }
+];
+
+function renderProfitCompareChart(canvasId, labels, grossData, opData, netData, counts, pendData) {
+  destroyChart(canvasId);
+  profitCompareData = { canvasId, labels, gross: grossData, op: opData, net: netData, counts, pend: pendData };
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  const mode = profitCompareMode;
+  const isPct = mode === 'pct';
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(20,30,50,.06)';
+  const tickColor = isDark ? '#A9B2C7' : '#5B6472';
+  const fontFamily = "system-ui, 'Segoe UI', Roboto, sans-serif";
+  const C = isDark
+    ? { gross: ['#5B93FF', 'rgba(91,147,255,.28)'], op: ['#8FB6FF', 'rgba(143,182,255,.30)'], net: ['#E4EEFF', 'rgba(228,238,255,.34)'] }
+    : { gross: ['#8FB6FF', 'rgba(143,182,255,.38)'], op: ['#2F6FE4', 'rgba(47,111,228,.34)'], net: ['#12306B', 'rgba(18,48,107,.46)'] };
+  const toPct = (arr) => arr.map((v, i) => (pendData && pendData[i]) ? v / pendData[i] * 100 : null);
+  const series = [
+    { key: 'gross', label: isPct ? 'Gross Margin' : 'Gross Profit', data: isPct ? toPct(grossData) : grossData, col: C.gross },
+    { key: 'op', label: isPct ? 'Operational Margin' : 'Operational Profit', data: isPct ? toPct(opData) : opData, col: C.op },
+    { key: 'net', label: isPct ? 'Net Margin' : 'Net Profit', data: isPct ? toPct(netData) : netData, col: C.net }
+  ];
+  // Mode area: seri dengan total terbesar digambar paling belakang, supaya tidak
+  // ada lapisan yang tertutup (mis. laba bersih bisa lebih besar dari operasional).
+  const rankByTotal = [...series].sort((x, y) => y.data.reduce((q, v) => q + (v || 0), 0) - x.data.reduce((q, v) => q + (v || 0), 0));
+  rankByTotal.forEach((sr, i) => { sr.order = rankByTotal.length - i; });
+  const pointBg = isDark ? '#161D2E' : '#FFFFFF';
+  const datasets = series.map(sr => {
+    if (mode === 'bar') {
+      return { type: 'bar', label: sr.label, data: sr.data, backgroundColor: sr.col[0], borderRadius: 6, borderSkipped: false, maxBarThickness: 20, order: 1 };
+    }
+    const isArea = mode === 'area';
+    return {
+      type: 'line', label: sr.label, data: sr.data, order: isArea ? sr.order : 1,
+      fill: isArea ? 'origin' : false,
+      borderColor: sr.col[0], backgroundColor: isArea ? sr.col[1] : sr.col[0],
+      borderWidth: isArea ? 2.2 : 2.5, tension: isArea ? 0.4 : 0.35,
+      pointRadius: isArea ? 3 : 4, pointHoverRadius: 5,
+      pointBackgroundColor: pointBg, pointBorderColor: sr.col[0], pointBorderWidth: 2
+    };
+  });
+  const fmtP = (v) => v.toLocaleString('id-ID', { maximumFractionDigits: 1 }) + '%';
+  state.chartInstances[canvasId] = new Chart(ctx, {
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (item) => `${item.dataset.label}: ${isPct ? (item.raw === null ? '–' : fmtP(item.raw)) : formatIDR(item.raw)}`,
+            afterBody: (items) => (counts && items.length && counts[items[0].dataIndex]) ? `Perusahaan terhitung: ${counts[items[0].dataIndex]}` : ''
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 10.5 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 7 } },
+        y: { grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 10.5 }, maxTicksLimit: 5, callback: v => isPct ? fmtP(v) : formatIDRShort(v) } }
+      }
+    }
+  });
+}
+
+// Ganti model grafik perbandingan profit (dipanggil dari tombol pilihan model).
+function setProfitCompareMode(mode, root) {
+  if (!PROFIT_COMPARE_MODES.some(m => m.key === mode)) return;
+  profitCompareMode = mode;
+  root.querySelectorAll('[data-pc-mode]').forEach(btn => {
+    const on = btn.dataset.pcMode === mode;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const d = profitCompareData;
+  if (d) renderProfitCompareChart(d.canvasId, d.labels, d.gross, d.op, d.net, d.counts, d.pend);
 }
 
 // Grafik batang serbaguna untuk widget bento (berkelompok, atau bertumpuk
