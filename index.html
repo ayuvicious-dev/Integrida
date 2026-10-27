@@ -828,6 +828,16 @@ tbody tr:hover{background:var(--surface-2);}
 
 .chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
 .chart-box canvas{max-height:280px;}
+.chart-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+.chart-head .section-title{margin:0;}
+.chart-head .seg-item{padding:5px 11px;font-size:12px;}
+.cmp-scope-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;font-size:12.5px;color:var(--slate);}
+.cmp-scope-select{padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);color:var(--text);font-size:12.5px;max-width:100%;}
+.cmp-year-nav{display:inline-flex;align-items:center;gap:6px;}
+.cmp-year-label{font-size:13px;font-weight:600;color:var(--text);min-width:78px;text-align:center;}
+.cmp-year-btn{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:18px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
+.cmp-year-btn:disabled{opacity:.35;cursor:default;}
+.cmp-margin-note{margin-top:10px;font-size:12px;color:var(--slate);line-height:1.5;}
 
 /* ---------- Dashboard: kartu "melayang" & widget ringkas ---------- */
 .dash-hero{
@@ -8225,11 +8235,11 @@ function subscribeCompareData() {
     const statements = allStatements
       .filter(s => s.periodType === state.comparePeriodType)
       .sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex);
-    paintCompare(statements);
+    paintCompare(statements, allStatements);
   }, (err) => toast('Gagal memuat data laporan: ' + err.message, 'error'));
 }
 
-function paintCompare(statements) {
+function paintCompare(statements, allStatements) {
   const resultEl = document.getElementById('compare-result');
   if (!resultEl) return;
   if (statements.length === 0) {
@@ -8244,6 +8254,14 @@ function paintCompare(statements) {
     <div class="section-block grid grid-2">
       <div class="chart-box"><div class="section-title">Total Aset per Periode</div><canvas id="cmp-aset"></canvas></div>
       <div class="chart-box"><div class="section-title">Laba Bersih per Periode</div><canvas id="cmp-laba"></canvas></div>
+    </div>
+    <div class="section-block">
+      <div class="chart-box">
+        <div class="chart-head"><div class="section-title">Profitabilitas: GPM & NPM Bulanan</div></div>
+        <div id="cmp-margin-controls"></div>
+        <canvas id="cmp-margin"></canvas>
+        <div class="cmp-margin-note" id="cmp-margin-note"></div>
+      </div>
     </div>
     <div class="section-block">
       <div class="section-title">Tabel Perbandingan</div>
@@ -8282,6 +8300,182 @@ function paintCompare(statements) {
   const labels = periodKeys.map(k => k.split('-').slice(2).join('-'));
   renderLineChart('cmp-aset', labels, datasetsAset);
   renderLineChart('cmp-laba', labels, datasetsLaba);
+  cmpMarginCtx = { allStatements: allStatements || statements };
+  paintCmpMargin();
+}
+
+// ---------- Profitabilitas (GPM & NPM) bulanan, kartu terpisah dari Laba Bersih ----------
+let cmpMarginScope = 'all';    // 'all' = gabungan perusahaan terpilih, atau id perusahaan
+let cmpMarginYear = null;     // tahun yang sedang tampil pada grafik margin bulanan
+let cmpMarginCtx = null;
+
+function paintCmpMargin() {
+  const c = cmpMarginCtx;
+  if (!c || !document.getElementById('cmp-margin')) return;
+  const scopeEl = document.getElementById('cmp-margin-controls');
+  const noteEl = document.getElementById('cmp-margin-note');
+
+  const ids = state.compareCompanyIds;
+  if (cmpMarginScope !== 'all' && !ids.includes(cmpMarginScope)) cmpMarginScope = 'all';
+
+  // Data bulanan (selalu periode "Bulanan", terlepas dari Jenis Periode di atas)
+  const monthly = (c.allStatements || []).filter(s => s.periodType === 'bulanan' && ids.includes(s.companyId)
+    && (cmpMarginScope === 'all' || s.companyId === cmpMarginScope));
+  // Rentang tahun yang bisa dinavigasi: dari tahun data paling awal (periode apa pun)
+  // sampai tahun terakhir/tahun berjalan — tahun tanpa data bulanan tetap bisa dibuka.
+  const anyYears = (c.allStatements || []).filter(s => ids.includes(s.companyId)
+    && (cmpMarginScope === 'all' || s.companyId === cmpMarginScope)).map(s => s.year);
+  if (!anyYears.length) {
+    cmpMarginYear = null;
+    if (scopeEl) scopeEl.innerHTML = '';
+    destroyChart('cmp-margin');
+    if (noteEl) noteEl.textContent = 'Belum ada data untuk perusahaan terpilih. Impor Buku Besar dengan jenis periode Bulanan untuk melihat grafik ini.';
+    return;
+  }
+  const minY = Math.min(...anyYears);
+  const maxY = Math.max(...anyYears, new Date().getFullYear());
+  const years = [];
+  for (let y = minY; y <= maxY; y++) years.push(y);
+  if (cmpMarginYear === null || !years.includes(cmpMarginYear)) {
+    const monthlyYears = monthly.map(s => s.year);
+    cmpMarginYear = monthlyYears.length ? Math.max(...monthlyYears) : maxY;
+  }
+  const yi = years.indexOf(cmpMarginYear);
+
+  if (scopeEl) {
+    scopeEl.innerHTML = `<div class="cmp-scope-row" style="justify-content:space-between;">
+      <div class="cmp-year-nav">
+        <button type="button" class="cmp-year-btn" id="cmp-year-prev" aria-label="Tahun sebelumnya" ${yi <= 0 ? 'disabled' : ''}>‹</button>
+        <span class="cmp-year-label">Tahun ${cmpMarginYear}</span>
+        <button type="button" class="cmp-year-btn" id="cmp-year-next" aria-label="Tahun berikutnya" ${yi >= years.length - 1 ? 'disabled' : ''}>›</button>
+      </div>
+      ${ids.length > 1 ? `<select class="cmp-scope-select" id="cmp-margin-scope">
+        <option value="all" ${cmpMarginScope === 'all' ? 'selected' : ''}>Gabungan (${ids.length} perusahaan)</option>
+        ${ids.map(id => `<option value="${id}" ${cmpMarginScope === id ? 'selected' : ''}>${escapeHTML(state.companies.find(x => x.id === id)?.name || id)}</option>`).join('')}
+      </select>` : ''}
+    </div>`;
+    const sel = document.getElementById('cmp-margin-scope');
+    if (sel) sel.addEventListener('change', () => { cmpMarginScope = sel.value; paintCmpMargin(); });
+    const go = (d) => { const n = yi + d; if (n >= 0 && n < years.length) { cmpMarginYear = years[n]; paintCmpMargin(); } };
+    document.getElementById('cmp-year-prev').addEventListener('click', () => go(-1));
+    document.getElementById('cmp-year-next').addEventListener('click', () => go(1));
+    // Geser kiri/kanan pada grafik untuk pindah tahun (geser ke kanan = tahun sebelumnya)
+    const cv = document.getElementById('cmp-margin');
+    cv.style.touchAction = 'pan-y';
+    let sx = null, sy = null;
+    cv.ontouchstart = (e) => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; };
+    cv.ontouchend = (e) => {
+      if (sx === null) return;
+      const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+      sx = null;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) go(dx > 0 ? -1 : 1);
+    };
+  }
+
+  const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const gpm = [], npm = [], extra = [];
+  for (let m = 1; m <= 12; m++) {
+    let pend = 0, kotor = 0, bersih = 0, n = 0;
+    monthly.filter(s => s.year === cmpMarginYear && s.periodIndex === m).forEach(s => {
+      const l = s.labaRugi || {};
+      const p = l.pendapatan || 0;
+      pend += p;
+      kotor += (l.labaKotor ?? (p - (l.hpp || 0))) || 0;
+      bersih += l.labaBersih || 0;
+      n++;
+    });
+    if (!n || !pend) { gpm.push(null); npm.push(null); extra.push(null); continue; }
+    gpm.push(kotor / pend * 100);
+    npm.push(bersih / pend * 100);
+    extra.push({ pend, kotor, bersih });
+  }
+  renderMarginChart('cmp-margin', MONTHS_SHORT, gpm, npm, extra);
+
+  if (noteEl) {
+    const avg = (a) => { const v = a.filter(x => x !== null); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : null; };
+    const f = (v) => v === null ? '–' : v.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+    noteEl.innerHTML = `GPM = Laba Kotor ÷ Pendapatan, NPM = Laba Bersih ÷ Pendapatan. ${avg(gpm) === null ? `Belum ada data bulanan pada tahun ${cmpMarginYear}.` : `Rata-rata ${cmpMarginYear}: <strong>GPM ${f(avg(gpm))}</strong> · <strong>NPM ${f(avg(npm))}</strong>.`} Geser grafik atau tekan ‹ › untuk pindah tahun.`;
+  }
+}
+
+// Batang berkelompok GPM (biru muda) & NPM (biru tua) dengan label % di atas tiap batang;
+// nilai negatif berwarna merah dan labelnya turun ke bawah batang.
+function renderMarginChart(canvasId, labels, gpm, npm, extra) {
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const gridColor = isDark ? 'rgba(255,255,255,.08)' : 'rgba(20,30,50,.08)';
+  const tickColor = isDark ? '#A9B2C7' : '#5B6472';
+  const NEG = '#E5484D';
+  const cGpm = isDark ? '#4DA3E8' : '#2F8FD8';
+  const cNpm = isDark ? '#7A93F0' : '#1B2F7A';
+  const fmt = (v) => v.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+  const fontFamily = "system-ui, 'Segoe UI', Roboto, sans-serif";
+
+  const labelPlugin = {
+    id: 'marginValueLabels',
+    afterDatasetsDraw(chart) {
+      const g = chart.ctx;
+      chart.data.datasets.forEach((ds, i) => {
+        const meta = chart.getDatasetMeta(i);
+        if (meta.hidden) return;
+        meta.data.forEach((bar, j) => {
+          const v = ds.data[j];
+          if (v === null || v === undefined || isNaN(v)) return;
+          const neg = v < 0;
+          const rotate = bar.width < 30;
+          g.save();
+          g.font = `600 ${rotate ? 9.5 : 10.5}px ${fontFamily}`;
+          g.fillStyle = neg ? NEG : tickColor;
+          if (rotate) {
+            g.translate(bar.x, neg ? bar.y + 4 : bar.y - 4);
+            g.rotate(-Math.PI / 2);
+            g.textAlign = neg ? 'right' : 'left';
+            g.textBaseline = 'middle';
+            g.fillText(fmt(v), 0, 0);
+          } else {
+            g.textAlign = 'center';
+            g.textBaseline = neg ? 'top' : 'bottom';
+            g.fillText(fmt(v), bar.x, neg ? bar.y + 4 : bar.y - 4);
+          }
+          g.restore();
+        });
+      });
+    }
+  };
+
+  const mk = (label, data, color) => ({
+    label, data,
+    backgroundColor: (c) => (c.raw !== null && c.raw < 0) ? NEG : color,
+    borderRadius: 4, borderSkipped: false, categoryPercentage: 0.8, barPercentage: 0.9
+  });
+
+  state.chartInstances[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [mk('GPM', gpm, cGpm), mk('NPM', npm, cNpm)] },
+    plugins: [labelPlugin],
+    options: {
+      responsive: true,
+      layout: { padding: { top: 34, bottom: 4 } },
+      plugins: {
+        legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'rect', boxWidth: 10, color: tickColor, font: { family: fontFamily, size: 11.5 } } },
+        tooltip: {
+          callbacks: {
+            label: (it) => `${it.dataset.label}: ${it.raw === null ? '–' : fmt(it.raw)}`,
+            afterBody: (items) => {
+              const e = items.length ? extra[items[0].dataIndex] : null;
+              return e ? [`Pendapatan: ${formatIDR(e.pend)}`, `Laba Kotor: ${formatIDR(e.kotor)}`, `Laba Bersih: ${formatIDR(e.bersih)}`] : '';
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 10.5 }, maxRotation: 45, autoSkip: false } },
+        y: { grace: '12%', grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 10.5 }, callback: v => v.toLocaleString('id-ID', { maximumFractionDigits: 2 }) + '%' } }
+      }
+    }
+  });
 }
 
 function palette(i) {
