@@ -4546,12 +4546,27 @@ function statementPeriodEndMonth(s) {
   return idx;
 }
 
-function buildLevelTrend(allStatements, depthById, includeDepth) {
+function buildLevelTrend(allStatements, depthById, includeDepth, perYear = false) {
   const rank = { bulanan: 0, triwulan: 1, semester: 2, tahunan: 3 };
   const map = {};
-  allStatements.forEach(s => {
+  // perYear = true: satu titik per tahun. Untuk tiap perusahaan dipilih laporan terakhir pada
+  // tahun tsb (periode Tahunan bila ada, jika belum ada = posisi/akumulasi terbaru tahun itu),
+  // sehingga grafik tidak menampilkan bulan/triwulan/semester terpisah.
+  let source = allStatements;
+  if (perYear) {
+    const best = {};
+    allStatements.forEach(s => {
+      if (!includeDepth(depthById[s.companyId] || 0)) return;
+      const k = `${s.companyId}|${s.year}`;
+      const cur = best[k];
+      const sEnd = statementPeriodEndMonth(s), cEnd = cur ? statementPeriodEndMonth(cur) : -1;
+      if (!cur || sEnd > cEnd || (sEnd === cEnd && (rank[s.periodType] ?? 0) > (rank[cur.periodType] ?? 0))) best[k] = s;
+    });
+    source = Object.values(best);
+  }
+  source.forEach(s => {
     if (!includeDepth(depthById[s.companyId] || 0)) return;
-    const key = `${s.year}-${s.periodType || ''}-${String(s.periodIndex).padStart(3, '0')}`;
+    const key = perYear ? `${s.year}-year` : `${s.year}-${s.periodType || ''}-${String(s.periodIndex).padStart(3, '0')}`;
     if (!map[key]) map[key] = { label: s.periodLabel, year: s.year, periodType: s.periodType, endMonth: statementPeriodEndMonth(s), typeRank: rank[s.periodType] ?? 0, aset: 0, laba: 0, pend: 0, n: 0, stmts: [] };
     map[key].aset += (s.neraca.totalAset || 0);
     map[key].laba += (s.labaRugi.labaBersih || 0);
@@ -4559,6 +4574,15 @@ function buildLevelTrend(allStatements, depthById, includeDepth) {
     map[key].n += 1;
     map[key].stmts.push(s);
   });
+  if (perYear) {
+    Object.values(map).forEach(pt => {
+      pt.label = `Tahun ${pt.year}`;
+      pt.endMonth = Math.max(...pt.stmts.map(st => statementPeriodEndMonth(st)));
+      // 'tahunan' hanya bila semua perusahaan sudah punya laporan setahun penuh; selain itu dianggap akumulasi parsial.
+      pt.periodType = pt.stmts.every(st => st.periodType === 'tahunan') ? 'tahunan' : 'bulanan';
+      pt.typeRank = pt.periodType === 'tahunan' ? 3 : 0;
+    });
+  }
   return Object.values(map).sort((a, b) => a.year - b.year || a.endMonth - b.endMonth || a.typeRank - b.typeRank).slice(-8);
 }
 
@@ -4566,7 +4590,7 @@ function openHeroSummaryModal(levelKey) {
   const { allStatements, depthById, hasSubs } = heroTrendSnapshot;
   const include = levelKey === 'cucu' ? (d => d >= 2) : (d => hasSubs ? d === 1 : true);
   const levelName = levelKey === 'cucu' ? 'Sub-Subsidiary' : (hasSubs ? 'Subsidiary' : 'Seluruh Perusahaan');
-  const trend = buildLevelTrend(allStatements, depthById, include);
+  const trend = buildLevelTrend(allStatements, depthById, include, true);
   const levelCompanies = state.companies.filter(c => include(depthById[c.id] || 0));
   const esc = (t) => escapeHTML(String(t));
   const fmt = formatIDRKPI;
@@ -5158,7 +5182,7 @@ function paintDashboard(allStatements) {
   const anakCount = state.companies.filter(c => depthOf(c) === 1).length;
   const cucuCount = state.companies.filter(c => depthOf(c) >= 2).length;
   heroTrendSnapshot = { allStatements, depthById, hasSubs };
-  const buildTrend = (includeDepth) => buildLevelTrend(allStatements, depthById, includeDepth);
+  const buildTrend = (includeDepth) => buildLevelTrend(allStatements, depthById, includeDepth, true);
   kpiPeriodSnapshot = { latestByCompany, hasSubs };
   const trendAnak = buildTrend(d => hasSubs ? d === 1 : true);
   const trendCucu = hasSubs ? buildTrend(d => d >= 2) : [];
@@ -5237,7 +5261,7 @@ function paintDashboard(allStatements) {
 
   // ---- Kartu Net, Operational & Gross Profit Margin ----
   // Tren laba per jenjang (kotor, operasional, bersih) untuk grafik perbandingan
-  const pcTrend = buildLevelTrend(allStatements, depthById, d => !hasSubs || d >= 1);
+  const pcTrend = buildLevelTrend(allStatements, depthById, d => !hasSubs || d >= 1, true);
   const pcSum = (pt, fn) => pt.stmts.reduce((a, st) => a + (fn(st) || 0), 0);
   const pcKotor = (st) => st.labaRugi.labaKotor ?? ((st.labaRugi.pendapatan || 0) - (st.labaRugi.hpp || 0));
   const pcOper = (st) => st.labaRugi.labaOperasional ?? (pcKotor(st) - (st.labaRugi.bebanOperasional || 0));
