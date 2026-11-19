@@ -837,7 +837,13 @@ tbody tr:hover{background:var(--surface-2);}
 .cmp-year-label{font-size:13px;font-weight:600;color:var(--text);min-width:78px;text-align:center;}
 .cmp-year-btn{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:18px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
 .cmp-year-btn:disabled{opacity:.35;cursor:default;}
+.cmp-scope-row .seg-item{padding:5px 11px;font-size:12px;}
 .cmp-margin-note{margin-top:10px;font-size:12px;color:var(--slate);line-height:1.5;}
+.cmp-target-year{font-size:13px;color:var(--slate);}
+.cmp-target-year b{color:var(--text);}
+.cmp-target-chart-wrap{position:relative;height:320px;width:100%;margin-top:4px;}
+.cmp-target-chart-wrap canvas{display:block;max-height:none !important;}
+#cmp-target-summary .npm-sum{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));}
 
 /* ---------- Dashboard: kartu "melayang" & widget ringkas ---------- */
 .dash-hero{
@@ -1390,6 +1396,32 @@ const DB = {
   // Dokumen berid = UID pemilik data, jadi akun utama, Maker, dan semua
   // Reviewer di bawahnya membaca konfigurasi yang sama. Kartu yang
   // tercantum di hiddenCards disembunyikan HANYA utk Reviewer.
+  // ---- Target Omset Tahunan (Report > Perbandingan) ----
+  // Disimpan di dokumen yang sama (dashboardConfig/{ownerUid}) pada field
+  // revenueTargets: { "<tahun>": { "<companyId>": <nominal Rp> } }. Memakai
+  // dokumen yang sudah ada sehingga tidak perlu mengubah Firestore Rules.
+  watchRevenueTargets(ownerUid, onData, onError) {
+    return db.collection('dashboardConfig').doc(ownerUid).onSnapshot((doc) => {
+      const d = doc.exists ? doc.data() : null;
+      onData((d && d.revenueTargets && typeof d.revenueTargets === 'object') ? d.revenueTargets : {});
+    }, (err) => { if (onError) onError(err); else console.error('watchRevenueTargets error', err); });
+  },
+
+  // values: { companyId: number | null } — null/kosong menghapus target perusahaan tsb pada tahun itu.
+  async setRevenueTargets(ownerUid, year, values) {
+    const yearMap = {};
+    Object.keys(values).forEach(cid => {
+      const v = values[cid];
+      yearMap[cid] = (v === null || v === undefined || !(v > 0)) ? firebase.firestore.FieldValue.delete() : Math.round(v);
+    });
+    await db.collection('dashboardConfig').doc(ownerUid).set({
+      ownerUid,
+      revenueTargets: { [String(year)]: yearMap },
+      updatedBy: (auth.currentUser && auth.currentUser.uid) || null,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  },
+
   async getDashboardHiddenCards(ownerUid) {
     const doc = await db.collection('dashboardConfig').doc(ownerUid).get();
     const d = doc.exists ? doc.data() : null;
@@ -2192,7 +2224,10 @@ function parseLedgerAccountLabel(raw) {
 // v11: EBITDA kini = Laba Bersih + beban bunga pendanaan + pajak + penyusutan
 // + amortisasi (dikenali dari nama akun) dan disimpan sebagai `ebitdaDetail`
 // pada statement. Snapshot lama dihitung ulang otomatis dari Buku Besar.
-const DERIVATION_VERSION = 11;
+// v12: tiap statement kini menyimpan `monthlyLabaRugi` (Pendapatan, HPP, Laba
+// Kotor, Laba Bersih per bulan, dipecah dari tanggal transaksi Buku Besar)
+// untuk grafik GPM & NPM Bulanan. Angka statement lain tidak berubah.
+const DERIVATION_VERSION = 12;
 
 function classifyLedgerAccount(code, name) {
   const n = normalizeKey(name);
@@ -2735,6 +2770,116 @@ function contributionsFromLedger(accounts) {
   return deriveStatementsFromLedgerAccounts(accounts).contributions;
 }
 
+// ---------- Rincian Laba Rugi per bulan dari satu Buku Besar multi-bulan ----------
+// Satu file Buku Besar sering mencakup beberapa bulan sekaligus (mis. 01/01
+// - 31/08, akumulasi tahun berjalan) dan disimpan sebagai SATU statement
+// (mis. "Agustus 2026"). Supaya grafik GPM & NPM Bulanan tetap bisa
+// menampilkan tiap bulan, Laba Rugi dipecah per bulan memakai tanggal tiap
+// transaksi, lalu disimpan sebagai `monthlyLabaRugi` pada statement yang
+// sama. Angka statement itu sendiri (Neraca, Laba Rugi akumulasi, KPI
+// Dashboard) TIDAK berubah.
+
+// Mengambil {year, month} dari teks tanggal transaksi: yyyy-mm-dd,
+// dd/mm/yyyy, dd-mm-yyyy, serial tanggal Excel, atau "15 Agustus 2026".
+function txYearMonth(tanggal) {
+  const str = String(tanggal === null || tanggal === undefined ? '' : tanggal).trim();
+  const okMonth = (mo) => mo >= 1 && mo <= 12;
+  let m = str.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
+  if (m) { const mo = parseInt(m[2], 10); return okMonth(mo) ? { year: parseInt(m[1], 10), month: mo } : null; }
+  m = str.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+  if (m) {
+    let y = parseInt(m[3], 10); if (y < 100) y += 2000;
+    const mo = parseInt(m[2], 10);
+    return okMonth(mo) ? { year: y, month: mo } : null;
+  }
+  if (/^\d{5}(\.\d+)?$/.test(str)) {
+    const d = new Date(Math.round((parseFloat(str) - 25569) * 86400000));
+    if (!isNaN(d.getTime())) return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
+  }
+  m = str.match(/^(\d{1,2})\s+([A-Za-z]+)\.?\s+(\d{4})/);
+  if (m) {
+    const names = ['jan', 'feb', 'mar', 'apr', 'mei', 'jun', 'jul', 'agu', 'sep', 'okt', 'nov', 'des'];
+    const alt = { may: 'mei', aug: 'agu', agt: 'agu', oct: 'okt', dec: 'des' };
+    let k = m[2].toLowerCase().slice(0, 3); k = alt[k] || k;
+    const idx = names.indexOf(k);
+    if (idx >= 0) return { year: parseInt(m[3], 10), month: idx + 1 };
+  }
+  return null;
+}
+
+// Mengembalikan { entries, reason }.
+//  entries = [{ year, month, pendapatan, hpp, labaKotor, labaBersih }, ...]
+//            atau null bila tidak perlu/tidak bisa dipecah.
+//  reason  = teks alasan HANYA bila pemecahan gagal (null bila memang tidak
+//            perlu, mis. Buku Besar hanya mencakup satu bulan).
+// Saldo awal/akhir tiap bulan dibangun dari saldo awal akun + mutasi
+// transaksi bulan-bulan sebelumnya. Arah (debit/kredit normal) ditentukan per
+// akun dengan mencocokkan hasilnya ke Saldo Akhir yang diekspor; kalau ada
+// akun yang tidak cocok, pemecahan dibatalkan (lebih baik kosong daripada salah).
+function computeMonthlyLabaRugi(accounts, endYear, endMonth) {
+  try {
+    const seq = (y, mo) => y * 12 + (mo - 1);
+    const pl = (accounts || []).filter(a => {
+      const c = classifyLedgerAccount(a.code, a.name);
+      return c.group === 'pendapatan' || c.group === 'beban';
+    });
+    let minSeq = Infinity;
+    pl.forEach(a => (a.transaksi || []).forEach(t => {
+      const ym = txYearMonth(t.tanggal);
+      if (ym) minSeq = Math.min(minSeq, seq(ym.year, ym.month));
+    }));
+    if (!isFinite(minSeq)) return { entries: null, reason: null };
+    const endSeq = seq(endYear, endMonth);
+    const n = endSeq - minSeq + 1;
+    if (n <= 1) return { entries: null, reason: null };
+    if (n > 60) return { entries: null, reason: 'rentang Buku Besar lebih dari 60 bulan' };
+
+    const perAcc = [];
+    for (const a of pl) {
+      const net = new Array(n).fill(0);
+      let totalNet = 0;
+      for (const t of (a.transaksi || [])) {
+        const ym = txYearMonth(t.tanggal);
+        if (!ym) continue;
+        const k = seq(ym.year, ym.month) - minSeq;
+        if (k < 0 || k >= n) continue;
+        const d = (t.debit || 0) - (t.kredit || 0);
+        net[k] += d; totalNet += d;
+      }
+      const awal = a.saldoAwal || 0, akhir = a.saldoAkhir || 0;
+      let sign = null;
+      if (Math.abs(awal + totalNet - akhir) <= 1) sign = 1;
+      else if (Math.abs(awal - totalNet - akhir) <= 1) sign = -1;
+      if (sign === null) {
+        return { entries: null, reason: `saldo akun ${a.code ? '(' + a.code + ') ' : ''}${a.name} tidak cocok dengan jumlah transaksinya atau ada transaksi dengan tanggal tidak terbaca` };
+      }
+      perAcc.push({ a, net, sign });
+    }
+
+    const r2 = (v) => Math.round((v || 0) * 100) / 100;
+    const running = perAcc.map(p => p.a.saldoAwal || 0);
+    const entries = [];
+    for (let k = 0; k < n; k++) {
+      const accK = perAcc.map((p, i) => {
+        const awal = running[i];
+        const akhir = awal + p.sign * p.net[k];
+        running[i] = akhir;
+        return { code: p.a.code, name: p.a.name, saldoAwal: awal, saldoAkhir: akhir, transaksi: [] };
+      });
+      const lr = deriveStatementsFromLedgerAccounts(accK).labaRugi;
+      const q = minSeq + k;
+      entries.push({
+        year: Math.floor(q / 12), month: (q % 12) + 1,
+        pendapatan: r2(lr.pendapatan), hpp: r2(lr.hpp), labaKotor: r2(lr.labaKotor), labaBersih: r2(lr.labaBersih)
+      });
+    }
+    return { entries, reason: null };
+  } catch (err) {
+    console.error('Gagal memecah Laba Rugi per bulan:', err);
+    return { entries: null, reason: 'terjadi kesalahan saat menghitung' };
+  }
+}
+
 /**
  * Membaca satu sheet Buku Besar hasil export software akuntansi (format
  * per akun: baris nama akun, baris "Saldo Awal", baris-baris transaksi,
@@ -2809,6 +2954,15 @@ function parseBukuBesarSheet(sheet) {
   const arusKas = deriveArusKasLangsungFromLedger(accounts);
   const perubahanModal = derivePerubahanModalFromLedger(accounts, arusKas, derived.labaRugi.labaBersih, derived.neraca.penyesuaianSaldoAwalLabaRugi);
 
+  // Rincian Laba Rugi per bulan (untuk grafik GPM & NPM Bulanan) bila Buku
+  // Besar mencakup lebih dari satu bulan.
+  const dateParts = String(dateText).split(/\s*-\s*/).filter(Boolean);
+  const endDate = parseIndoDate(dateParts.length > 1 ? dateParts[1] : dateParts[0]);
+  const monthly = endDate ? computeMonthlyLabaRugi(accounts, endDate.year, endDate.month) : { entries: null, reason: null };
+  const monthlyWarnings = monthly.reason
+    ? [`Rincian per bulan untuk grafik GPM & NPM tidak dapat dibuat otomatis (${monthly.reason}). Data periode tetap tersimpan seperti biasa.`]
+    : [];
+
   return {
     companyName,
     period,
@@ -2817,7 +2971,8 @@ function parseBukuBesarSheet(sheet) {
     labaRugi: derived.labaRugi,
     arusKas,
     perubahanModal,
-    warnings: derived.warnings.concat(arusKas.warnings, perubahanModal.warnings),
+    monthlyLabaRugi: monthly.entries,
+    warnings: derived.warnings.concat(arusKas.warnings, perubahanModal.warnings, monthlyWarnings),
     contributions: derived.contributions
   };
 }
@@ -2990,6 +3145,7 @@ function parseSingleTypeExcel(arrayBuffer, typeKey) {
           statementKey: type.statementKey,
           companyName: parsed.companyName,
           period: parsed.period,
+          monthlyLabaRugi: parsed.monthlyLabaRugi || null,
           data: { ledger: parsed.accounts, neraca: parsed.neraca, labaRugi: parsed.labaRugi, arusKas: parsed.arusKas, perubahanModal: parsed.perubahanModal, contributions: parsed.contributions },
           warnings: parsed.warnings
         };
@@ -3095,20 +3251,6 @@ function computeRatios(statement) {
   };
 }
 
-const RATIO_LABELS = {
-  currentRatio: { label: 'Current Ratio', fmt: 'x', desc: 'Aset lancar dibagi kewajiban lancar. Idealnya > 1.5–2x.' },
-  quickRatio: { label: 'Quick Ratio', fmt: 'x', desc: '(Aset lancar - persediaan) dibagi kewajiban lancar.' },
-  cashRatio: { label: 'Cash Ratio', fmt: 'x', desc: 'Kas & setara kas dibagi kewajiban lancar.' },
-  debtToAssetRatio: { label: 'Debt to Asset Ratio', fmt: '%', desc: 'Proporsi aset yang dibiayai utang. Makin rendah makin aman.' },
-  debtToEquityRatio: { label: 'Debt to Equity Ratio', fmt: 'x', desc: 'Total kewajiban dibagi ekuitas.' },
-  equityMultiplier: { label: 'Equity Multiplier', fmt: 'x', desc: 'Total aset dibagi ekuitas (tingkat leverage).' },
-  grossProfitMargin: { label: 'Gross Profit Margin', fmt: '%', desc: 'Laba kotor dibagi pendapatan.' },
-  operatingMargin: { label: 'Operating Margin', fmt: '%', desc: 'Laba operasional dibagi pendapatan.' },
-  netProfitMargin: { label: 'Net Profit Margin', fmt: '%', desc: 'Laba bersih dibagi pendapatan.' },
-  roa: { label: 'Return on Assets (ROA)', fmt: '%', desc: 'Laba bersih dibagi total aset.' },
-  roe: { label: 'Return on Equity (ROE)', fmt: '%', desc: 'Laba bersih dibagi total ekuitas.' }
-};
-
 function formatRatio(value, fmt) {
   if (value === null || value === undefined || isNaN(value)) return '–';
   if (fmt === '%') return (value * 100).toFixed(1) + '%';
@@ -3135,9 +3277,6 @@ const state = {
   view: 'dashboard',
   compareCompanyIds: [],
   comparePeriodType: 'tahunan',
-  reportView: 'compare', // tab aktif di menu Report: 'compare' atau 'ratios'
-  ratioCompanyId: null,
-  ratioStatementId: null,
   chartInstances: {},
   unsubCompanies: null,   // listener realtime daftar perusahaan (aktif sepanjang sesi)
   unsubData: null,        // listener realtime data view yang sedang aktif (dashboard/compare/ratios)
@@ -4377,6 +4516,7 @@ async function healOutdatedSnapshots(allStatements) {
           arusKas,
           perubahanModal,
           ebitdaDetail: deriveEbitdaDetail(derived.labaRugi, derived.contributions),
+          monthlyLabaRugi: computeMonthlyLabaRugi(accounts, s.year, statementPeriodEndMonth(s)).entries || [],
           bukuBesarCount: s.bukuBesarCount,
           derivationVersion: DERIVATION_VERSION
         });
@@ -6574,7 +6714,7 @@ function businessInfoHTML(company, periodCount) {
         <div class="grid grid-4" style="gap:14px;margin-bottom:16px;">
           <div>
             <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px;">Kode</div>
-            <a href="#" id="edit-company-code" style="font-size:13.5px;color:var(--text);text-decoration:none;" title="Klik untuk mengubah kode">${company.code ? escapeHTML(company.code) : '<span style="color:var(--slate-light);font-style:italic;">+ kode</span>'}</a>
+            <a href="#" id="edit-company-code" style="font-size:13.5px;color:var(--text);text-decoration:none;" title="Klik 2x untuk mengubah kode">${company.code ? escapeHTML(company.code) : '<span style="color:var(--slate-light);font-style:italic;">+ kode</span>'}</a>
           </div>
           <div>
             <div style="font-size:12px;color:var(--slate);font-weight:600;margin-bottom:4px;">Klasifikasi</div>
@@ -7497,15 +7637,46 @@ function paintCompanyDetail(statements) {
 
     const codeLink = document.getElementById('edit-company-code');
     if (codeLink) {
-      codeLink.addEventListener('click', async (e) => {
+      // Klik 2x pada kode -> berubah jadi kolom isian (inline). Enter / klik di luar = simpan, Esc = batal.
+      codeLink.style.cursor = 'text';
+      codeLink.addEventListener('click', (e) => e.preventDefault());
+      codeLink.addEventListener('dblclick', (e) => {
         e.preventDefault();
-        const next = prompt('Kode perusahaan:', company ? (company.code || '') : '');
-        if (next === null) return;
-        const trimmed = next.trim();
-        await DB.updateCompanyCode(state.companyDetailId, trimmed);
-        if (company) company.code = trimmed;
-        toast('Kode perusahaan diperbarui', 'success');
-        paintCompanyDetail(statements);
+        if (codeLink.dataset.editing === '1') return;
+        codeLink.dataset.editing = '1';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = company ? (company.code || '') : '';
+        input.maxLength = 30;
+        input.setAttribute('aria-label', 'Kode perusahaan');
+        input.style.cssText = 'font:inherit;font-size:13.5px;width:100%;max-width:160px;padding:4px 8px;border:1px solid var(--teal);border-radius:6px;background:var(--surface-2);color:var(--text);outline:none;';
+        codeLink.style.display = 'none';
+        codeLink.parentNode.appendChild(input);
+        input.focus();
+        input.select();
+        let done = false;
+        const finish = async (save) => {
+          if (done) return;
+          done = true;
+          const trimmed = input.value.trim();
+          input.remove();
+          codeLink.style.display = '';
+          codeLink.dataset.editing = '';
+          if (!save || trimmed === ((company && company.code) || '')) return;
+          try {
+            await DB.updateCompanyCode(state.companyDetailId, trimmed);
+            if (company) company.code = trimmed;
+            toast('Kode perusahaan diperbarui', 'success');
+            paintCompanyDetail(statements);
+          } catch (err) {
+            toast('Gagal memperbarui kode: ' + (err && err.message ? err.message : err), 'error');
+          }
+        };
+        input.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+          else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); finish(false); }
+        });
+        input.addEventListener('blur', () => finish(true));
       });
     }
 
@@ -7644,6 +7815,7 @@ function paintCompanyDetail(statements) {
           arusKas: arusKasLive,
           perubahanModal: perubahanModalLive,
           ebitdaDetail: deriveEbitdaDetail(labaRugiBase, bbContribs),
+          monthlyLabaRugi: computeMonthlyLabaRugi(ledgerAccounts, selected.year, statementPeriodEndMonth(selected)).entries || [],
           bukuBesarCount: selected.bukuBesarCount,
           derivationVersion: DERIVATION_VERSION
         }).catch((err) => console.error('Gagal memperbarui otomatis snapshot Neraca/Laba Rugi/Arus Kas/Perubahan Modal:', err));
@@ -8030,6 +8202,28 @@ async function loadImportStatus() {
 
 let pendingImport = null;
 
+// Tabel rincian Laba Rugi per bulan pada pratinjau impor (hanya muncul bila
+// Buku Besar mencakup lebih dari satu bulan dan berhasil dipecah).
+function monthlyPreviewHTML(entries) {
+  if (!Array.isArray(entries) || entries.length < 2) return '';
+  const pct = (a, b) => b ? (a / b * 100).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%' : '–';
+  const rows = entries.map(e => `<tr>
+    <td>${cap(BULAN_ID[e.month - 1])} ${e.year}</td>
+    <td class="num">${formatIDR(e.pendapatan)}</td>
+    <td class="num">${formatIDR(e.labaKotor)}</td>
+    <td class="num">${formatIDR(e.labaBersih)}</td>
+    <td class="num">${pct(e.labaKotor, e.pendapatan)}</td>
+    <td class="num">${pct(e.labaBersih, e.pendapatan)}</td>
+  </tr>`).join('');
+  return `
+    <div class="section-title" style="margin-top:16px;font-size:14px;">Rincian per bulan (untuk grafik GPM &amp; NPM Bulanan)</div>
+    <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Buku Besar ini mencakup ${entries.length} bulan. Angka periode di bawah tetap akumulasi seperti biasa; rincian ini hanya memperkaya grafik bulanan.</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Bulan</th><th class="num">Pendapatan</th><th class="num">Laba Kotor</th><th class="num">Laba Bersih</th><th class="num">GPM</th><th class="num">NPM</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
 async function handleImportFile(file) {
   if (!state.importCompanyId) {
     toast('Pilih perusahaan terlebih dahulu sebelum mengunggah file', 'error');
@@ -8051,6 +8245,7 @@ async function handleImportFile(file) {
       </div>
       <div class="badge ${result.badge}">${result.typeLabel}</div>
       ${result.warnings.length ? `<div class="ratio-note" style="margin-top:8px;">${result.warnings.join('<br>')}</div>` : ''}
+      ${monthlyPreviewHTML(result.monthlyLabaRugi)}
       <div class="section-title" style="margin-top:16px;font-size:14px;">Neraca (diturunkan otomatis — saldo akhir periode)</div>
       <div style="font-size:11.5px;color:var(--slate);margin:-6px 0 4px 0;">Klik salah satu baris untuk melihat akun buku besar yang menyusun angka tersebut.</div>
       <div class="card" style="padding:2px 12px;">${derivedNeracaGrouped(result.data.neraca, result.data.contributions)}</div>
@@ -8097,6 +8292,7 @@ async function confirmImport() {
       arusKas: pendingImport.data.arusKas,
       perubahanModal: pendingImport.data.perubahanModal,
       ebitdaDetail: deriveEbitdaDetail(pendingImport.data.labaRugi, pendingImport.data.contributions),
+      monthlyLabaRugi: pendingImport.monthlyLabaRugi || [],
       bukuBesarCount: accounts.length,
       derivationVersion: DERIVATION_VERSION
     });
@@ -8110,43 +8306,17 @@ async function confirmImport() {
   }
 }
 
-// ---------- Report (gabungan Perbandingan & Analisis Rasio) ----------
+// ---------- Report (Perbandingan) ----------
 function renderReport() {
   const root = document.getElementById('view-root');
-  const active = state.reportView === 'ratios' ? 'ratios' : 'compare';
-  root.innerHTML = `
-    <div class="section-block" style="margin-bottom:16px;">
-      <div class="pill-row" id="report-view-tabs" style="margin-bottom:0;">
-        <div class="pill ${active === 'compare' ? 'active' : ''}" data-tab="compare">Perbandingan</div>
-        <div class="pill ${active === 'ratios' ? 'active' : ''}" data-tab="ratios">Analisis Rasio</div>
-      </div>
-    </div>
-    <div id="report-body"></div>
-  `;
-  document.querySelectorAll('#report-view-tabs .pill[data-tab]').forEach(p => {
-    p.addEventListener('click', () => {
-      if (state.reportView === p.dataset.tab) return;
-      state.reportView = p.dataset.tab;
-      renderReportBody();
-    });
-  });
-  renderReportBody();
-}
-
-function renderReportBody() {
-  document.querySelectorAll('#report-view-tabs .pill[data-tab]').forEach(p => {
-    p.classList.toggle('active', p.dataset.tab === state.reportView);
-  });
-  if (state.reportView === 'ratios') {
-    renderRatios('report-body');
-  } else {
-    renderCompare('report-body');
-  }
+  root.innerHTML = `<div id="report-body"></div>`;
+  renderCompare('report-body');
 }
 
 // ---------- Perbandingan ----------
 function renderCompare(rootId = 'view-root') {
   teardownActiveDataListener();
+  state.comparePeriodType = 'tahunan'; // Report > Perbandingan selalu memakai periode Tahunan (pemilih Jenis Periode dihapus)
   const root = document.getElementById(rootId);
   if (state.companies.length === 0) {
     root.innerHTML = emptyState('Belum ada perusahaan', 'Tambahkan perusahaan dan data untuk mulai membandingkan.', 'companies', 'Tambah Perusahaan');
@@ -8162,20 +8332,12 @@ function renderCompare(rootId = 'view-root') {
           <button type="button" class="compare-filter-action" id="cmp-clear-all">Hapus semua</button>
         </div>
       </div>
-      <div class="compare-search-wrap">
-        <span class="compare-search-icon">${icon('search')}</span>
-        <input type="text" id="cmp-search" class="compare-search-input" placeholder="Cari nama perusahaan…">
-      </div>
       <div class="chip-row" id="company-pills">
         ${state.companies.map(c => `
-          <div class="chip ${state.compareCompanyIds.includes(c.id) ? 'active' : ''}" data-id="${c.id}" data-name="${escapeHTML(c.name.toLowerCase())}">
-            <span class="chip-check">${icon('check')}</span>${c.name}
+          <div class="chip ${state.compareCompanyIds.includes(c.id) ? 'active' : ''}" data-id="${c.id}" data-name="${escapeHTML((c.name + ' ' + (c.code || '')).toLowerCase())}" title="${escapeHTML(c.name)}">
+            <span class="chip-check">${icon('check')}</span>${escapeHTML(c.code || c.name)}
           </div>
         `).join('')}
-      </div>
-      <div class="compare-filter-label" style="margin-top:20px;margin-bottom:9px;">Jenis Periode</div>
-      <div class="segmented" id="period-pills">
-        ${Object.entries(PERIOD_LABELS).map(([k, v]) => `<div class="seg-item ${state.comparePeriodType === k ? 'active' : ''}" data-period="${k}">${v}</div>`).join('')}
       </div>
     </div>
     <div id="compare-result"></div>
@@ -8192,13 +8354,6 @@ function renderCompare(rootId = 'view-root') {
       subscribeCompareData();
     });
   });
-  document.querySelectorAll('#period-pills .seg-item').forEach(seg => {
-    seg.addEventListener('click', () => {
-      state.comparePeriodType = seg.dataset.period;
-      document.querySelectorAll('#period-pills .seg-item').forEach(s => s.classList.toggle('active', s === seg));
-      subscribeCompareData();
-    });
-  });
   document.getElementById('cmp-select-all').addEventListener('click', () => {
     state.compareCompanyIds = state.companies.map(c => c.id);
     renderCompare(rootId);
@@ -8207,13 +8362,6 @@ function renderCompare(rootId = 'view-root') {
     state.compareCompanyIds = [];
     renderCompare(rootId);
   });
-  document.getElementById('cmp-search').addEventListener('input', (e) => {
-    const q = e.target.value.trim().toLowerCase();
-    document.querySelectorAll('#company-pills .chip').forEach(chip => {
-      chip.classList.toggle('hidden', !!q && !chip.dataset.name.includes(q));
-    });
-  });
-
   subscribeCompareData();
 }
 
@@ -8231,7 +8379,7 @@ function subscribeCompareData() {
   // Listener realtime untuk kombinasi perusahaan yang dipilih.
   state.unsubData = DB.watchAllStatements(state.compareCompanyIds, (allStatements, meta) => {
     Sync.report('statements', meta);
-    if (state.view !== 'report' || state.reportView !== 'compare') return;
+    if (state.view !== 'report') return;
     const statements = allStatements
       .filter(s => s.periodType === state.comparePeriodType)
       .sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex);
@@ -8261,6 +8409,16 @@ function paintCompare(statements, allStatements) {
         <div id="cmp-margin-controls"></div>
         <canvas id="cmp-margin"></canvas>
         <div class="cmp-margin-note" id="cmp-margin-note"></div>
+      </div>
+    </div>
+    <div class="section-block">
+      <div class="chart-box">
+        <div class="chart-head"><div class="section-title">Target vs Ketercapaian Omset</div></div>
+        <div id="cmp-target-controls"></div>
+        <div id="cmp-target-summary"></div>
+        <div class="cmp-target-chart-wrap"><canvas id="cmp-target-chart"></canvas></div>
+        <div id="cmp-target-table"></div>
+        <div class="cmp-margin-note" id="cmp-target-note"></div>
       </div>
     </div>
     <div class="section-block">
@@ -8307,6 +8465,7 @@ function paintCompare(statements, allStatements) {
 // ---------- Profitabilitas (GPM & NPM) bulanan, kartu terpisah dari Laba Bersih ----------
 let cmpMarginScope = 'all';    // 'all' = gabungan perusahaan terpilih, atau id perusahaan
 let cmpMarginYear = null;     // tahun yang sedang tampil pada grafik margin bulanan
+let cmpMarginMode = 'nominal'; // default 'nominal' = angka rupiah (Laba Kotor & Laba Bersih); 'pct' = persentase (GPM & NPM)
 let cmpMarginCtx = null;
 
 function paintCmpMargin() {
@@ -8318,18 +8477,28 @@ function paintCmpMargin() {
   const ids = state.compareCompanyIds;
   if (cmpMarginScope !== 'all' && !ids.includes(cmpMarginScope)) cmpMarginScope = 'all';
 
-  // Data bulanan (selalu periode "Bulanan", terlepas dari Jenis Periode di atas)
-  const monthly = (c.allStatements || []).filter(s => s.periodType === 'bulanan' && ids.includes(s.companyId)
-    && (cmpMarginScope === 'all' || s.companyId === cmpMarginScope));
+  const inScope = (s) => ids.includes(s.companyId) && (cmpMarginScope === 'all' || s.companyId === cmpMarginScope);
+  // Data bulanan langsung: statement berjenis "Bulanan" (terlepas dari Jenis Periode di atas)
+  const monthly = (c.allStatements || []).filter(s => s.periodType === 'bulanan' && inScope(s));
+  // Rincian bulanan hasil pemecahan Buku Besar multi-bulan (monthlyLabaRugi).
+  // Diprioritaskan karena memberi angka tiap bulan yang sebenarnya; statement
+  // yang lebih baru menimpa yang lebih lama untuk bulan yang sama.
+  const detail = new Map();
+  (c.allStatements || [])
+    .filter(s => inScope(s) && Array.isArray(s.monthlyLabaRugi) && s.monthlyLabaRugi.length)
+    .sort((a, b) => (a.year * 12 + statementPeriodEndMonth(a)) - (b.year * 12 + statementPeriodEndMonth(b)))
+    .forEach(s => s.monthlyLabaRugi.forEach(e => detail.set(`${s.companyId}|${e.year}|${e.month}`, e)));
+  const detailYears = [...detail.values()].map(e => e.year);
   // Rentang tahun yang bisa dinavigasi: dari tahun data paling awal (periode apa pun)
   // sampai tahun terakhir/tahun berjalan — tahun tanpa data bulanan tetap bisa dibuka.
-  const anyYears = (c.allStatements || []).filter(s => ids.includes(s.companyId)
-    && (cmpMarginScope === 'all' || s.companyId === cmpMarginScope)).map(s => s.year);
+  const anyYears = (c.allStatements || []).filter(inScope).map(s => s.year).concat(detailYears);
   if (!anyYears.length) {
     cmpMarginYear = null;
     if (scopeEl) scopeEl.innerHTML = '';
     destroyChart('cmp-margin');
-    if (noteEl) noteEl.textContent = 'Belum ada data untuk perusahaan terpilih. Impor Buku Besar dengan jenis periode Bulanan untuk melihat grafik ini.';
+    if (noteEl) noteEl.textContent = 'Belum ada data untuk perusahaan terpilih. Impor Buku Besar untuk melihat grafik ini.';
+    cmpTargetCtx = null;
+    paintCmpTarget();
     return;
   }
   const minY = Math.min(...anyYears);
@@ -8337,7 +8506,7 @@ function paintCmpMargin() {
   const years = [];
   for (let y = minY; y <= maxY; y++) years.push(y);
   if (cmpMarginYear === null || !years.includes(cmpMarginYear)) {
-    const monthlyYears = monthly.map(s => s.year);
+    const monthlyYears = monthly.map(s => s.year).concat(detailYears);
     cmpMarginYear = monthlyYears.length ? Math.max(...monthlyYears) : maxY;
   }
   const yi = years.indexOf(cmpMarginYear);
@@ -8349,6 +8518,10 @@ function paintCmpMargin() {
         <span class="cmp-year-label">Tahun ${cmpMarginYear}</span>
         <button type="button" class="cmp-year-btn" id="cmp-year-next" aria-label="Tahun berikutnya" ${yi >= years.length - 1 ? 'disabled' : ''}>›</button>
       </div>
+      <div class="segmented" id="cmp-margin-mode">
+        <div class="seg-item ${cmpMarginMode === 'pct' ? 'active' : ''}" data-mode="pct">Persentase</div>
+        <div class="seg-item ${cmpMarginMode === 'nominal' ? 'active' : ''}" data-mode="nominal">Nominal (Rp)</div>
+      </div>
       ${ids.length > 1 ? `<select class="cmp-scope-select" id="cmp-margin-scope">
         <option value="all" ${cmpMarginScope === 'all' ? 'selected' : ''}>Gabungan (${ids.length} perusahaan)</option>
         ${ids.map(id => `<option value="${id}" ${cmpMarginScope === id ? 'selected' : ''}>${escapeHTML(state.companies.find(x => x.id === id)?.name || id)}</option>`).join('')}
@@ -8356,6 +8529,13 @@ function paintCmpMargin() {
     </div>`;
     const sel = document.getElementById('cmp-margin-scope');
     if (sel) sel.addEventListener('change', () => { cmpMarginScope = sel.value; paintCmpMargin(); });
+    document.querySelectorAll('#cmp-margin-mode .seg-item').forEach(b => {
+      b.addEventListener('click', () => {
+        if (cmpMarginMode === b.dataset.mode) return;
+        cmpMarginMode = b.dataset.mode;
+        paintCmpMargin();
+      });
+    });
     const go = (d) => { const n = yi + d; if (n >= 0 && n < years.length) { cmpMarginYear = years[n]; paintCmpMargin(); } };
     document.getElementById('cmp-year-prev').addEventListener('click', () => go(-1));
     document.getElementById('cmp-year-next').addEventListener('click', () => go(1));
@@ -8376,31 +8556,290 @@ function paintCmpMargin() {
   const gpm = [], npm = [], extra = [];
   for (let m = 1; m <= 12; m++) {
     let pend = 0, kotor = 0, bersih = 0, n = 0;
-    monthly.filter(s => s.year === cmpMarginYear && s.periodIndex === m).forEach(s => {
-      const l = s.labaRugi || {};
+    const scopeIds = ids.filter(id => cmpMarginScope === 'all' || id === cmpMarginScope);
+    scopeIds.forEach(cid => {
+      const e = detail.get(`${cid}|${cmpMarginYear}|${m}`);
+      if (e) {
+        const p = e.pendapatan || 0;
+        pend += p;
+        kotor += (e.labaKotor ?? (p - (e.hpp || 0))) || 0;
+        bersih += e.labaBersih || 0;
+        n++;
+        return;
+      }
+      const st = monthly.find(x => x.companyId === cid && x.year === cmpMarginYear && x.periodIndex === m);
+      if (!st) return;
+      const l = st.labaRugi || {};
       const p = l.pendapatan || 0;
       pend += p;
       kotor += (l.labaKotor ?? (p - (l.hpp || 0))) || 0;
       bersih += l.labaBersih || 0;
       n++;
     });
-    if (!n || !pend) { gpm.push(null); npm.push(null); extra.push(null); continue; }
-    gpm.push(kotor / pend * 100);
-    npm.push(bersih / pend * 100);
+    if (!n) { gpm.push(null); npm.push(null); extra.push(null); continue; }
+    // Persentase hanya bermakna bila ada pendapatan; angka nominal tetap tampil.
+    gpm.push(pend ? kotor / pend * 100 : null);
+    npm.push(pend ? bersih / pend * 100 : null);
     extra.push({ pend, kotor, bersih });
   }
-  renderMarginChart('cmp-margin', MONTHS_SHORT, gpm, npm, extra);
+  renderMarginChart('cmp-margin', MONTHS_SHORT, gpm, npm, extra, cmpMarginMode);
+  // Kartu Target vs Ketercapaian Omset mengikuti tahun & cakupan perusahaan yang sama.
+  cmpTargetCtx = { year: cmpMarginYear, scopeIds: ids.filter(id => cmpMarginScope === 'all' || id === cmpMarginScope), extra };
+  paintCmpTarget();
 
   if (noteEl) {
     const avg = (a) => { const v = a.filter(x => x !== null); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : null; };
     const f = (v) => v === null ? '–' : v.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
-    noteEl.innerHTML = `GPM = Laba Kotor ÷ Pendapatan, NPM = Laba Bersih ÷ Pendapatan. ${avg(gpm) === null ? `Belum ada data bulanan pada tahun ${cmpMarginYear}.` : `Rata-rata ${cmpMarginYear}: <strong>GPM ${f(avg(gpm))}</strong> · <strong>NPM ${f(avg(npm))}</strong>.`} Geser grafik atau tekan ‹ › untuk pindah tahun.`;
+    const hasData = extra.some(e => e);
+    if (cmpMarginMode === 'nominal') {
+      // Mode Nominal: tanpa catatan rumus/total; hanya pesan bila belum ada data.
+      noteEl.innerHTML = hasData ? '' : `Belum ada data bulanan pada tahun ${cmpMarginYear}. Geser grafik atau tekan ‹ › untuk pindah tahun.`;
+    } else {
+      noteEl.innerHTML = `GPM = Laba Kotor ÷ Pendapatan, NPM = Laba Bersih ÷ Pendapatan. ${avg(gpm) === null ? `Belum ada data bulanan pada tahun ${cmpMarginYear}.` : `Rata-rata ${cmpMarginYear}: <strong>GPM ${f(avg(gpm))}</strong> · <strong>NPM ${f(avg(npm))}</strong>.`} Geser grafik atau tekan ‹ › untuk pindah tahun.`;
+    }
   }
 }
 
-// Batang berkelompok GPM (biru muda) & NPM (biru tua) dengan label % di atas tiap batang;
-// nilai negatif berwarna merah dan labelnya turun ke bawah batang.
-function renderMarginChart(canvasId, labels, gpm, npm, extra) {
+// ---------- Target vs Ketercapaian Omset (di bawah Profitabilitas: GPM & NPM Bulanan) ----------
+// Target omset diisi manual per tahun per perusahaan (disimpan di Firestore,
+// dashboardConfig/{ownerUid}.revenueTargets). Cakupan "Gabungan" = jumlah target
+// perusahaan terpilih. Realisasi omset = Pendapatan bulanan dari laba rugi (sumber
+// yang sama dengan grafik GPM & NPM). Target bulanan dihitung merata (target ÷ 12).
+let cmpRevenueTargets = {};      // { "2026": { companyId: nominal } }
+let cmpTargetCtx = null;         // { year, scopeIds, extra }
+let cmpTargetMode = 'cum';       // 'cum' = kumulatif, 'month' = per bulan
+let cmpTargetUnsub = null;
+let cmpTargetOwner = null;
+
+function ensureCmpTargetWatch() {
+  const owner = state.dataOwnerUid;
+  if (!owner) return;
+  if (cmpTargetUnsub && cmpTargetOwner === owner) return;
+  if (cmpTargetUnsub) { try { cmpTargetUnsub(); } catch (e) { /* abaikan */ } }
+  cmpTargetOwner = owner;
+  cmpTargetUnsub = DB.watchRevenueTargets(owner, (t) => {
+    cmpRevenueTargets = t || {};
+    if (document.getElementById('cmp-target-chart')) paintCmpTarget();
+  }, (err) => console.error('Target omset gagal dimuat', err));
+}
+
+function cmpTargetFor(year, ids) {
+  const y = cmpRevenueTargets[String(year)] || {};
+  let total = 0, filled = 0;
+  ids.forEach(id => { const v = Number(y[id]); if (v > 0) { total += v; filled++; } });
+  return filled ? { total, filled } : null;
+}
+
+function paintCmpTarget() {
+  const chartEl = document.getElementById('cmp-target-chart');
+  if (!chartEl) return;
+  ensureCmpTargetWatch();
+  const ctrlEl = document.getElementById('cmp-target-controls');
+  const sumEl = document.getElementById('cmp-target-summary');
+  const tblEl = document.getElementById('cmp-target-table');
+  const noteEl = document.getElementById('cmp-target-note');
+  const wrap = chartEl.parentElement;
+  const c = cmpTargetCtx;
+  if (!c) {
+    destroyChart('cmp-target-chart');
+    if (ctrlEl) ctrlEl.innerHTML = '';
+    if (sumEl) sumEl.innerHTML = '';
+    if (tblEl) tblEl.innerHTML = '';
+    if (wrap) wrap.style.display = 'none';
+    if (noteEl) noteEl.textContent = 'Belum ada data untuk perusahaan terpilih. Impor Buku Besar untuk melihat target dan ketercapaian omset.';
+    return;
+  }
+  if (wrap) wrap.style.display = '';
+
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const tgt = cmpTargetFor(c.year, c.scopeIds);
+  const target = tgt ? tgt.total : null;
+  const real = c.extra.map(e => e ? (e.pend || 0) : null);
+  let last = -1;
+  real.forEach((v, i) => { if (v !== null) last = i; });
+  const monthlyTarget = target ? target / 12 : null;
+  const cumTarget = MONTHS.map((_, i) => target ? target / 12 * (i + 1) : null);
+  const cumReal = [];
+  let run = 0;
+  real.forEach((v, i) => { run += v || 0; cumReal.push(i <= last ? run : null); });
+  const ytd = last >= 0 ? cumReal[last] : 0;
+  const pctOf = (a, b) => (b && b > 0 && a !== null) ? a / b * 100 : null;
+  const f1 = (v) => v === null ? '–' : v.toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+  const pctYear = pctOf(ytd, target);
+  const pctToDate = (last >= 0 && target) ? pctOf(ytd, cumTarget[last]) : null;
+  const sisa = target ? target - ytd : null;
+  const canEdit = !isReviewer();
+  const multi = c.scopeIds.length > 1;
+
+  if (ctrlEl) {
+    ctrlEl.innerHTML = `<div class="cmp-scope-row" style="justify-content:space-between;">
+      <span class="cmp-target-year">Tahun <b>${c.year}</b>${multi ? ` · Gabungan ${c.scopeIds.length} perusahaan` : ''}</span>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <div class="segmented" id="cmp-target-mode">
+          <div class="seg-item ${cmpTargetMode === 'cum' ? 'active' : ''}" data-mode="cum">Kumulatif</div>
+          <div class="seg-item ${cmpTargetMode === 'month' ? 'active' : ''}" data-mode="month">Per Bulan</div>
+        </div>
+        ${canEdit ? `<button type="button" class="btn ghost" id="cmp-target-edit" style="font-size:12px;padding:6px 12px;">${tgt ? 'Ubah Target' : 'Isi Target'}</button>` : ''}
+      </div>
+    </div>`;
+    document.querySelectorAll('#cmp-target-mode .seg-item').forEach(b => b.addEventListener('click', () => {
+      if (cmpTargetMode === b.dataset.mode) return;
+      cmpTargetMode = b.dataset.mode;
+      paintCmpTarget();
+    }));
+    const eb = document.getElementById('cmp-target-edit');
+    if (eb) eb.addEventListener('click', openCmpTargetModal);
+  }
+
+  const lastLabel = last >= 0 ? MONTHS[last] : '–';
+  const tone = (p) => p === null ? '' : (p >= 100 ? 'teal' : (p >= 80 ? 'gold' : 'danger'));
+  if (sumEl) {
+    sumEl.innerHTML = `<div class="npm-sum">
+      <div class="npm-sum-box"><span>Target Omset ${c.year}</span><b>${target ? escapeHTML(formatIDR(target)) : 'Belum diisi'}</b></div>
+      <div class="npm-sum-box"><span>Realisasi s.d. ${lastLabel}</span><b>${last >= 0 ? escapeHTML(formatIDR(ytd)) : '–'}</b></div>
+      <div class="npm-sum-box"><span>Ketercapaian vs Target Tahunan</span><b>${f1(pctYear)}</b></div>
+      <div class="npm-sum-box"><span>Ketercapaian vs Target s.d. ${lastLabel}</span><b>${f1(pctToDate)}</b></div>
+      <div class="npm-sum-box"><span>${sisa !== null && sisa < 0 ? 'Melampaui Target' : 'Sisa Target'}</span><b>${sisa === null ? '–' : escapeHTML(formatIDR(Math.abs(sisa)))}</b></div>
+    </div>`;
+  }
+
+  // Grafik: batang = realisasi, garis putus-putus = target
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const gridColor = isDark ? 'rgba(255,255,255,.08)' : 'rgba(20,30,50,.08)';
+  const tickColor = isDark ? '#A9B2C7' : '#5B6472';
+  const cBar = isDark ? '#4DA3E8' : '#2F8FD8';
+  const cLine = '#E8913A';
+  const fontFamily = "system-ui, 'Segoe UI', Roboto, sans-serif";
+  const isCum = cmpTargetMode === 'cum';
+  const barData = isCum ? cumReal : real;
+  const lineData = isCum ? cumTarget : MONTHS.map(() => monthlyTarget);
+  const datasets = [{
+    type: 'bar', label: isCum ? 'Realisasi Omset Kumulatif' : 'Realisasi Omset',
+    data: barData, backgroundColor: cBar, borderRadius: 4, borderSkipped: false, categoryPercentage: 0.8, barPercentage: 0.9, order: 2
+  }];
+  if (target) datasets.push({
+    type: 'line', label: isCum ? 'Target Omset Kumulatif' : 'Target Omset Bulanan (target ÷ 12)',
+    data: lineData, borderColor: cLine, backgroundColor: cLine, borderWidth: 2, borderDash: [6, 4], pointRadius: 3, tension: 0, order: 1
+  });
+  destroyChart('cmp-target-chart');
+  state.chartInstances['cmp-target-chart'] = new Chart(chartEl, {
+    data: { labels: MONTHS, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 10, color: tickColor, font: { family: fontFamily, size: 11.5 } } },
+        tooltip: {
+          callbacks: {
+            label: (it) => `${it.dataset.label}: ${it.raw === null || it.raw === undefined ? '–' : formatIDR(it.raw)}`,
+            afterBody: (items) => {
+              const i = items.length ? items[0].dataIndex : -1;
+              if (i < 0 || !target) return '';
+              const p = isCum ? pctOf(cumReal[i], cumTarget[i]) : pctOf(real[i], monthlyTarget);
+              return p === null ? '' : `Ketercapaian: ${f1(p)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 10.5 }, autoSkip: false } },
+        y: { beginAtZero: true, grace: '8%', grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 10.5 }, callback: v => formatIDRShort(v) } }
+      }
+    }
+  });
+
+  // Tabel rincian per bulan
+  if (tblEl) {
+    const rows = MONTHS.map((m, i) => {
+      const r = real[i];
+      const pm = pctOf(r, monthlyTarget);
+      const pc = (i <= last) ? pctOf(cumReal[i], cumTarget[i]) : null;
+      const badge = (p) => p === null ? '–' : `<span class="badge ${tone(p)}">${f1(p)}</span>`;
+      return `<tr>
+        <td>${m}</td>
+        <td class="num">${monthlyTarget ? escapeHTML(formatIDR(monthlyTarget)) : '–'}</td>
+        <td class="num">${r === null ? '–' : escapeHTML(formatIDR(r))}</td>
+        <td class="num">${badge(pm)}</td>
+        <td class="num">${cumTarget[i] ? escapeHTML(formatIDR(cumTarget[i])) : '–'}</td>
+        <td class="num">${cumReal[i] === null ? '–' : escapeHTML(formatIDR(cumReal[i]))}</td>
+        <td class="num">${badge(pc)}</td>
+      </tr>`;
+    }).join('');
+    tblEl.innerHTML = `<div class="table-wrap" style="margin-top:14px;"><table>
+      <thead><tr><th>Bulan</th><th class="num">Target Bulanan</th><th class="num">Realisasi</th><th class="num">Ketercapaian</th><th class="num">Target Kumulatif</th><th class="num">Realisasi Kumulatif</th><th class="num">% Kumulatif</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  }
+
+  if (noteEl) {
+    noteEl.innerHTML = target
+      ? (tgt.filled < c.scopeIds.length ? `Target baru terisi untuk ${tgt.filled} dari ${c.scopeIds.length} perusahaan.` : '')
+      : `Target omset tahun ${c.year} belum diisi.${canEdit ? ' Tekan <b>Isi Target</b> untuk memasukkan target omset tahunan.' : ' Hubungi pemilik/Maker untuk mengisi target.'} Realisasi omset tetap ditampilkan.`;
+  }
+}
+
+function openCmpTargetModal() {
+  const c = cmpTargetCtx;
+  if (!c || isReviewer()) return;
+  const year = c.year;
+  const cur = cmpRevenueTargets[String(year)] || {};
+  const fmtNum = (n) => (n > 0 ? Math.round(n).toLocaleString('id-ID') : '');
+  const rows = c.scopeIds.map(id => {
+    const name = state.companies.find(x => x.id === id)?.name || id;
+    return `<div class="field"><label>${escapeHTML(name)}</label>
+      <input type="text" inputmode="numeric" autocomplete="off" data-target-company="${escapeHTML(id)}" value="${fmtNum(Number(cur[id]))}" placeholder="Contoh: 1.200.000.000" /></div>`;
+  }).join('');
+  const backdrop = el(`<div class="modal-backdrop"><div class="modal" style="width:440px;max-height:86vh;overflow:auto;">
+    <h3 style="margin-bottom:4px;">Target Omset Tahun ${year}</h3>
+    <div class="kpi-info-text" style="margin-bottom:12px;">Isi target omset setahun penuh (Rp) per perusahaan. Kosongkan untuk menghapus target. Target bulanan dihitung otomatis (target ÷ 12).</div>
+    ${rows}
+    <div class="kpi-info-text" style="margin-top:4px;">Total target: <b id="cmp-target-total">–</b></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="cmp-target-cancel">Batal</button>
+      <button class="btn primary" id="cmp-target-save">Simpan</button>
+    </div>
+  </div></div>`);
+  document.body.appendChild(backdrop);
+  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey, true); };
+  const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  document.addEventListener('keydown', onKey, true);
+  const inputs = [...backdrop.querySelectorAll('[data-target-company]')];
+  const parse = (v) => { const d = String(v || '').replace(/\D/g, ''); return d ? parseInt(d, 10) : null; };
+  const refreshTotal = () => {
+    const t = inputs.reduce((a, i) => a + (parse(i.value) || 0), 0);
+    backdrop.querySelector('#cmp-target-total').textContent = t > 0 ? formatIDR(t) : '–';
+  };
+  inputs.forEach(i => i.addEventListener('input', () => {
+    const n = parse(i.value);
+    i.value = n === null ? '' : n.toLocaleString('id-ID');
+    refreshTotal();
+  }));
+  refreshTotal();
+  backdrop.querySelector('#cmp-target-cancel').addEventListener('click', close);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  const saveBtn = backdrop.querySelector('#cmp-target-save');
+  saveBtn.addEventListener('click', async () => {
+    const values = {};
+    inputs.forEach(i => { values[i.dataset.targetCompany] = parse(i.value); });
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Menyimpan…';
+    try {
+      await DB.setRevenueTargets(state.dataOwnerUid, year, values);
+      close();
+      toast('Target omset tersimpan', 'success');
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Simpan';
+      toast('Gagal menyimpan target omset: ' + (err && err.message ? err.message : err), 'error');
+    }
+  });
+}
+
+// Batang berkelompok dengan label nilai di atas tiap batang; nilai negatif
+// berwarna merah dan labelnya turun ke bawah batang.
+//  mode 'pct'     : GPM (biru muda) & NPM (biru tua) dalam persen.
+//  mode 'nominal' : Laba Kotor (biru muda) & Laba Bersih (biru tua) dalam rupiah.
+function renderMarginChart(canvasId, labels, gpm, npm, extra, mode = 'pct') {
   destroyChart(canvasId);
   const ctx = document.getElementById(canvasId);
   if (!ctx) return;
@@ -8410,69 +8849,86 @@ function renderMarginChart(canvasId, labels, gpm, npm, extra) {
   const NEG = '#E5484D';
   const cGpm = isDark ? '#4DA3E8' : '#2F8FD8';
   const cNpm = isDark ? '#7A93F0' : '#1B2F7A';
-  const fmt = (v) => v.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+  const isNominal = mode === 'nominal';
+  const pctFmt = (v) => v.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+  const fmt = isNominal ? (v) => formatIDRShort(v) : pctFmt;
   const fontFamily = "system-ui, 'Segoe UI', Roboto, sans-serif";
+  const pick = (k) => extra.map(e => e ? e[k] : null);
+  const datasets = isNominal
+    ? [mkBar('Laba Kotor', pick('kotor'), cGpm), mkBar('Laba Bersih', pick('bersih'), cNpm)]
+    : [mkBar('GPM', gpm, cGpm), mkBar('NPM', npm, cNpm)];
 
+  function mkBar(label, data, color) {
+    return {
+      label, data,
+      backgroundColor: (c) => (c.raw !== null && c.raw < 0) ? NEG : color,
+      borderRadius: 4, borderSkipped: false, categoryPercentage: 0.8, barPercentage: 0.9
+    };
+  }
+
+  // Label nilai selalu horizontal (tidak dimiringkan). Bila label batang-batang
+  // bersebelahan (dalam satu bulan maupun antar bulan) saling bertabrakan
+  // (batang sempit / tinggi mirip), label disusun bertingkat ke atas (nilai positif) atau ke bawah
+  // (nilai negatif) supaya tetap terbaca.
   const labelPlugin = {
     id: 'marginValueLabels',
     afterDatasetsDraw(chart) {
       const g = chart.ctx;
-      chart.data.datasets.forEach((ds, i) => {
-        const meta = chart.getDatasetMeta(i);
-        if (meta.hidden) return;
-        meta.data.forEach((bar, j) => {
+      const LH = 12;
+      const count = chart.data.labels.length;
+      g.save();
+      g.font = `600 10px ${fontFamily}`;
+      g.textAlign = 'center';
+      const placed = []; // dipakai bersama antar bulan: label batang terluar bulan bersebelahan juga bisa bertabrakan
+      for (let j = 0; j < count; j++) {
+        chart.data.datasets.forEach((ds, i) => {
+          const meta = chart.getDatasetMeta(i);
+          if (meta.hidden) return;
+          const bar = meta.data[j];
           const v = ds.data[j];
-          if (v === null || v === undefined || isNaN(v)) return;
+          if (!bar || v === null || v === undefined || isNaN(v)) return;
           const neg = v < 0;
-          const rotate = bar.width < 30;
-          g.save();
-          g.font = `600 ${rotate ? 9.5 : 10.5}px ${fontFamily}`;
+          const text = fmt(v);
+          const w = g.measureText(text).width;
+          let y = neg ? bar.y + 4 : bar.y - 4;
+          const hit = () => placed.some(r => Math.abs(r.x - bar.x) < (r.w + w) / 2 + 1 && (neg ? (y < r.y + LH && y + LH > r.y) : (y - LH < r.y && y > r.y - LH)));
+          for (let guard = 0; guard < 8 && hit(); guard++) y += neg ? LH : -LH;
+          placed.push({ x: bar.x, w, y });
           g.fillStyle = neg ? NEG : tickColor;
-          if (rotate) {
-            g.translate(bar.x, neg ? bar.y + 4 : bar.y - 4);
-            g.rotate(-Math.PI / 2);
-            g.textAlign = neg ? 'right' : 'left';
-            g.textBaseline = 'middle';
-            g.fillText(fmt(v), 0, 0);
-          } else {
-            g.textAlign = 'center';
-            g.textBaseline = neg ? 'top' : 'bottom';
-            g.fillText(fmt(v), bar.x, neg ? bar.y + 4 : bar.y - 4);
-          }
-          g.restore();
+          g.textBaseline = neg ? 'top' : 'bottom';
+          g.fillText(text, bar.x, y);
         });
-      });
+      }
+      g.restore();
     }
   };
 
-  const mk = (label, data, color) => ({
-    label, data,
-    backgroundColor: (c) => (c.raw !== null && c.raw < 0) ? NEG : color,
-    borderRadius: 4, borderSkipped: false, categoryPercentage: 0.8, barPercentage: 0.9
-  });
-
   state.chartInstances[canvasId] = new Chart(ctx, {
     type: 'bar',
-    data: { labels, datasets: [mk('GPM', gpm, cGpm), mk('NPM', npm, cNpm)] },
+    data: { labels, datasets },
     plugins: [labelPlugin],
     options: {
       responsive: true,
-      layout: { padding: { top: 34, bottom: 4 } },
+      layout: { padding: { top: 44, bottom: 14 } },
       plugins: {
         legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'rect', boxWidth: 10, color: tickColor, font: { family: fontFamily, size: 11.5 } } },
         tooltip: {
           callbacks: {
-            label: (it) => `${it.dataset.label}: ${it.raw === null ? '–' : fmt(it.raw)}`,
+            label: (it) => `${it.dataset.label}: ${it.raw === null ? '–' : (isNominal ? formatIDR(it.raw) : pctFmt(it.raw))}`,
             afterBody: (items) => {
               const e = items.length ? extra[items[0].dataIndex] : null;
-              return e ? [`Pendapatan: ${formatIDR(e.pend)}`, `Laba Kotor: ${formatIDR(e.kotor)}`, `Laba Bersih: ${formatIDR(e.bersih)}`] : '';
+              if (!e) return '';
+              if (isNominal) {
+                return e.pend ? [`GPM: ${pctFmt(e.kotor / e.pend * 100)}`, `NPM: ${pctFmt(e.bersih / e.pend * 100)}`] : '';
+              }
+              return [`Pendapatan: ${formatIDR(e.pend)}`, `Laba Kotor: ${formatIDR(e.kotor)}`, `Laba Bersih: ${formatIDR(e.bersih)}`];
             }
           }
         }
       },
       scales: {
         x: { grid: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 10.5 }, maxRotation: 45, autoSkip: false } },
-        y: { grace: '12%', grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 10.5 }, callback: v => v.toLocaleString('id-ID', { maximumFractionDigits: 2 }) + '%' } }
+        y: { grace: '16%', grid: { color: gridColor }, border: { display: false }, ticks: { color: tickColor, font: { family: fontFamily, size: 10.5 }, callback: v => isNominal ? formatIDRShort(v) : v.toLocaleString('id-ID', { maximumFractionDigits: 2 }) + '%' } }
       }
     }
   });
@@ -8481,88 +8937,6 @@ function renderMarginChart(canvasId, labels, gpm, npm, extra) {
 function palette(i) {
   const colors = ['#1B7A6B', '#C08A3E', '#B5453B', '#3B5BA5', '#7A5CC0', '#2D9CDB'];
   return colors[i % colors.length];
-}
-
-// ---------- Rasio ----------
-function renderRatios(rootId = 'view-root') {
-  teardownActiveDataListener();
-  const root = document.getElementById(rootId);
-  if (state.companies.length === 0) {
-    root.innerHTML = emptyState('Belum ada perusahaan', 'Tambahkan perusahaan dan data untuk melihat analisis rasio.', 'companies', 'Tambah Perusahaan');
-    bindEmptyStateNav(root);
-    return;
-  }
-  if (!state.ratioCompanyId) state.ratioCompanyId = state.companies[0].id;
-
-  root.innerHTML = `
-    <div class="section-block" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
-      <div class="field" style="margin:0;min-width:220px;">
-        <label>Perusahaan</label>
-        <select id="ratio-company">
-          ${state.companies.map(c => `<option value="${c.id}" ${c.id === state.ratioCompanyId ? 'selected' : ''}>${c.name}</option>`).join('')}
-        </select>
-      </div>
-    </div>
-    <div id="ratio-content"></div>
-  `;
-  document.getElementById('ratio-company').addEventListener('change', (e) => {
-    state.ratioCompanyId = e.target.value;
-    renderRatios(rootId);
-  });
-
-  // Listener realtime: analisis rasio otomatis diperbarui saat ada
-  // periode baru yang diimpor dari perangkat manapun.
-  state.unsubData = DB.watchStatements(state.ratioCompanyId, (rawStatements, meta) => {
-    Sync.report('statements', meta);
-    if (state.view !== 'report' || state.reportView !== 'ratios') return;
-    const statements = rawStatements.sort((a, b) => a.year - b.year || a.periodIndex - b.periodIndex);
-    paintRatios(statements);
-  }, (err) => toast('Gagal memuat data laporan: ' + err.message, 'error'));
-}
-
-function paintRatios(statements) {
-  const content = document.getElementById('ratio-content');
-  if (!content) return;
-  if (statements.length === 0) {
-    content.innerHTML = `<div class="card" style="color:var(--slate);margin-top:16px;">Belum ada data laporan keuangan untuk perusahaan ini.</div>`;
-    return;
-  }
-  const latest = statements[statements.length - 1];
-  const ratios = computeRatios(latest);
-
-  function ratioGroup(title, groupKey, badgeClass) {
-    return `<div class="section-block">
-      <div class="section-title"><span class="badge ${badgeClass}">${title}</span></div>
-      <div class="grid grid-3">
-        ${Object.entries(ratios[groupKey]).map(([key, val]) => `
-          <div class="card kpi-card">
-            <div class="kpi-label">${RATIO_LABELS[key].label}</div>
-            <div class="kpi-value">${formatRatio(val, RATIO_LABELS[key].fmt)}</div>
-            <div class="ratio-note" style="margin-top:2px;">${RATIO_LABELS[key].desc}</div>
-          </div>
-        `).join('')}
-      </div>
-    </div>`;
-  }
-
-  content.innerHTML = `
-    <div style="margin:14px 0;color:var(--slate);font-size:13px;">Data periode terbaru: <strong>${latest.periodLabel}</strong></div>
-    ${ratioGroup('Likuiditas', 'likuiditas', 'teal')}
-    ${ratioGroup('Solvabilitas', 'solvabilitas', 'gold')}
-    ${ratioGroup('Profitabilitas', 'profitabilitas', 'danger')}
-    <div class="section-block">
-      <div class="section-title">Tren Rasio Utama Antar Periode</div>
-      <div class="chart-box"><canvas id="ratio-trend"></canvas></div>
-    </div>
-  `;
-
-  const trendLabels = statements.map(s => s.periodLabel);
-  const trendData = statements.map(s => computeRatios(s));
-  renderLineChart('ratio-trend', trendLabels, [
-    { label: 'Current Ratio', data: trendData.map(r => r.likuiditas.currentRatio), color: '#2F6FE4' },
-    { label: 'Debt to Equity', data: trendData.map(r => r.solvabilitas.debtToEquityRatio), color: '#C08A3E' },
-    { label: 'Net Profit Margin', data: trendData.map(r => r.profitabilitas.netProfitMargin), color: '#B5453B' }
-  ]);
 }
 
 // ---------- Setting ----------
@@ -8715,13 +9089,19 @@ async function buildBackupObject(onProgress) {
   say('Membaca pengingat & hari libur…');
   const rSnap = await db.collection('reminders').where('ownerUid', '==', ownerUid).get();
   const dSnap = await db.collection('dayOff').where('ownerUid', '==', ownerUid).get();
+  let revenueTargets = {};
+  try {
+    const cfg = await db.collection('dashboardConfig').doc(ownerUid).get();
+    if (cfg.exists && cfg.data().revenueTargets && typeof cfg.data().revenueTargets === 'object') revenueTargets = cfg.data().revenueTargets;
+  } catch (e) { console.warn('Target omset tidak ikut dibackup', e); }
   return {
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
     companies,
     reminders: rSnap.docs.map(d => ({ id: d.id, data: backupEncode(d.data()) })),
-    dayOff: dSnap.docs.map(d => ({ id: d.id, data: backupEncode(d.data()) }))
+    dayOff: dSnap.docs.map(d => ({ id: d.id, data: backupEncode(d.data()) })),
+    revenueTargets
   };
 }
 
@@ -8799,6 +9179,10 @@ async function runRestore(backup, setStatus) {
     if (!list.length) continue;
     setStatus(`Memulihkan ${label} (${list.length})…`);
     await backupCommitWrites(list, (done, total) => setStatus(`Memulihkan ${label}: ${done}/${total}…`));
+  }
+  if (backup.revenueTargets && typeof backup.revenueTargets === 'object' && Object.keys(backup.revenueTargets).length) {
+    setStatus('Memulihkan target omset…');
+    await db.collection('dashboardConfig').doc(ownerUid).set({ ownerUid, revenueTargets: backup.revenueTargets }, { merge: true });
   }
 }
 
